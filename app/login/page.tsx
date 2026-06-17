@@ -36,7 +36,7 @@ export default function LoginPage() {
         return;
       }
       // Жёсткий переход (а не router.push) — надёжнее обновляет сессию.
-      window.location.assign("/admin");
+      window.location.assign("/account");
     } catch {
       clearTimeout(safety);
       setError(

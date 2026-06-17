@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getProductsByIds } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/data";
 
@@ -65,6 +65,18 @@ export async function POST(request: Request) {
     });
   }
 
+  // Если покупатель залогинен — привяжем заказ к его аккаунту (для истории).
+  let userId: string | null = null;
+  try {
+    const authed = createClient();
+    const {
+      data: { user },
+    } = await authed.auth.getUser();
+    userId = user?.id ?? null;
+  } catch {
+    userId = null;
+  }
+
   const supabase = createServiceClient();
   const { data: order, error: orderError } = await supabase
     .from("orders")
@@ -76,6 +88,7 @@ export async function POST(request: Request) {
       comment: comment?.trim() || null,
       total,
       status: "new",
+      user_id: userId,
     })
     .select("id")
     .single();

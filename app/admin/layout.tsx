@@ -33,11 +33,17 @@ export default async function AdminLayout({
         <div className="card mx-auto max-w-lg p-8 text-center">
           <h1 className="text-xl font-bold text-brand-800">Доступ запрещён</h1>
           <p className="mt-2 text-brand-600">
-            Раздел доступен только администраторам.
+            Раздел доступен только администраторам. Если вы администратор, но
+            видите это сообщение — выполните <code className="rounded bg-brand-100 px-1">supabase/make-admin.sql</code> для своего email.
           </p>
-          <Link href="/login" className="btn-primary mt-5">
-            Войти как администратор
-          </Link>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Link href="/account" className="btn-primary">
+              В личный кабинет
+            </Link>
+            <Link href="/login" className="btn-outline">
+              Сменить аккаунт
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -50,6 +56,7 @@ export default async function AdminLayout({
         <Link href="/admin" className="btn-outline !py-1.5">Дашборд</Link>
         <Link href="/admin/products" className="btn-outline !py-1.5">Товары</Link>
         <Link href="/admin/orders" className="btn-outline !py-1.5">Заказы</Link>
+        <Link href="/account" className="btn-outline !py-1.5">Личный кабинет</Link>
         <span className="ml-auto text-sm text-brand-500">{session.email}</span>
       </div>
       {children}

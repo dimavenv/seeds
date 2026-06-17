@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,8 +30,7 @@ export default function RegisterPage() {
         return;
       }
       if (data.session) {
-        router.push("/");
-        router.refresh();
+        window.location.assign("/account");
       } else {
         setMessage("Проверьте почту для подтверждения регистрации.");
         setLoading(false);

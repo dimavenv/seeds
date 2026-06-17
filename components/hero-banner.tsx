@@ -4,17 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LeafIcon } from "@/components/icons";
 
-// Кандидаты на баннеры: положите файлы public/banners/1.jpg … 5.jpg
-// (можно .jpg или .png — поменяйте расширение ниже). Несуществующие
-// картинки автоматически пропускаются. Если файлов нет — показывается
-// запасной зелёный баннер с текстом.
-const CANDIDATES = [
-  "/banners/1.jpg",
-  "/banners/2.jpg",
-  "/banners/3.jpg",
-  "/banners/4.jpg",
-  "/banners/5.jpg",
-];
+// Кандидаты на баннеры: положите файлы public/banners/1.jpg … 12.jpg
+// Несуществующие картинки автоматически пропускаются. Если файлов нет —
+// показывается запасной зелёный баннер с текстом.
+const CANDIDATES = Array.from(
+  { length: 12 },
+  (_, i) => `/banners/${i + 1}.jpg`
+);
 
 export default function HeroBanner() {
   const [available, setAvailable] = useState<string[]>([]);

@@ -38,7 +38,7 @@ export default function Header() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Поиск семян: томат, базилик, петуния…"
+            placeholder="Поиск: томат, перец, баклажан…"
             className="input pl-10"
             aria-label="Поиск"
           />
@@ -61,27 +61,27 @@ export default function Header() {
               </span>
             )}
           </Link>
-          <Link href="/login" className="rounded-full p-2 text-brand-700 hover:bg-brand-50" aria-label="Вход">
+          <Link href="/account" className="rounded-full p-2 text-brand-700 hover:bg-brand-50" aria-label="Личный кабинет">
             <UserIcon />
           </Link>
         </nav>
       </div>
 
       <div className="border-t border-brand-100 bg-brand-50">
-        <div className="container-page flex items-center gap-1 overflow-x-auto py-2 text-sm">
-          <Link href="/catalog" className="whitespace-nowrap rounded-full px-3 py-1.5 font-semibold text-brand-700 hover:bg-white">
+        <div className="container-page flex items-center justify-between gap-1 overflow-x-auto py-2 text-sm">
+          <Link href="/catalog" className="whitespace-nowrap rounded-full px-4 py-1.5 font-semibold text-brand-700 hover:bg-white">
             Каталог
           </Link>
-          <Link href="/about" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/about" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
             О нас
           </Link>
-          <Link href="/delivery" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/delivery" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
             Доставка
           </Link>
-          <Link href="/payment" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/payment" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
             Оплата
           </Link>
-          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
             Как заказать
           </Link>
         </div>
