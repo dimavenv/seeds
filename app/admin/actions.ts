@@ -1,0 +1,94 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSession } from "@/lib/auth";
+import type { OrderStatus } from "@/lib/types";
+
+function slugify(input: string): string {
+  const map: Record<string, string> = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh",
+    з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o",
+    п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts",
+    ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu",
+    я: "ya",
+  };
+  return input
+    .toLowerCase()
+    .split("")
+    .map((ch) => map[ch] ?? ch)
+    .join("")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+export type ProductFormState = { error?: string; ok?: boolean };
+
+export async function saveProduct(
+  _prev: ProductFormState,
+  formData: FormData
+): Promise<ProductFormState> {
+  const session = await getSession();
+  if (!session.isAdmin) return { error: "Нет доступа" };
+
+  const id = formData.get("id") ? Number(formData.get("id")) : null;
+  const name = String(formData.get("name") ?? "").trim();
+  const price = Number(formData.get("price") ?? 0);
+  const categoryId = formData.get("category_id")
+    ? Number(formData.get("category_id"))
+    : null;
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const imageUrl = String(formData.get("image_url") ?? "").trim() || null;
+  const stock = Number(formData.get("stock") ?? 0);
+  const isNew = formData.get("is_new") === "on";
+  const isFeatured = formData.get("is_featured") === "on";
+  let slug = String(formData.get("slug") ?? "").trim();
+
+  if (!name) return { error: "Укажите название" };
+  if (!slug) slug = slugify(name) || `tovar-${Date.now()}`;
+
+  const supabase = createClient();
+  const payload = {
+    name,
+    slug,
+    price,
+    category_id: categoryId,
+    description,
+    image_url: imageUrl,
+    stock,
+    is_new: isNew,
+    is_featured: isFeatured,
+  };
+
+  const { error } = id
+    ? await supabase.from("products").update(payload).eq("id", id)
+    : await supabase.from("products").insert(payload);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/products");
+  revalidatePath("/catalog");
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function deleteProduct(id: number): Promise<void> {
+  const session = await getSession();
+  if (!session.isAdmin) return;
+  const supabase = createClient();
+  await supabase.from("products").delete().eq("id", id);
+  revalidatePath("/admin/products");
+  revalidatePath("/catalog");
+}
+
+export async function updateOrderStatus(
+  id: number,
+  status: OrderStatus
+): Promise<void> {
+  const session = await getSession();
+  if (!session.isAdmin) return;
+  const supabase = createClient();
+  await supabase.from("orders").update({ status }).eq("id", id);
+  revalidatePath("/admin/orders");
+}
