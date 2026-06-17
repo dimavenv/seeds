@@ -1,9 +1,25 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getProductsByIds } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/data";
+import type { Product } from "@/lib/types";
 
 type IncomingItem = { id: number; qty: number };
+
+// Привязка заказа к аккаунту — «по возможности»: если getUser долго не отвечает,
+// не блокируем оформление (заказ просто будет без user_id).
+async function bestEffortUserId(): Promise<string | null> {
+  try {
+    const authed = createClient();
+    const result = await Promise.race([
+      authed.auth.getUser(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
+    if (!result) return null;
+    return result.data?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(request: Request) {
   let body: {
@@ -35,81 +51,103 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Корзина пуста" }, { status: 400 });
   }
 
-  // Авторитетные цены берём с сервера, не доверяя клиенту.
-  const products = await getProductsByIds(items.map((i) => i.id));
-  const lines = items
-    .map((i) => {
-      const p = products.find((x) => x.id === i.id);
-      if (!p) return null;
-      return { product_id: p.id, name: p.name, price: p.price, qty: i.qty };
-    })
-    .filter(Boolean) as {
-    product_id: number;
-    name: string;
-    price: number;
-    qty: number;
-  }[];
-
-  if (lines.length === 0) {
-    return NextResponse.json({ error: "Товары не найдены" }, { status: 400 });
-  }
-
-  const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
-
-  // Демо-режим без Supabase: возвращаем псевдо-номер заказа.
+  // Демо-режим без Supabase: считаем по присланным данным недоступно (цены не
+  // проверить), поэтому отдаём псевдо-номер по количеству позиций.
   if (!isSupabaseConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({
       id: Math.floor(Date.now() / 1000) % 1000000,
-      total,
+      total: 0,
       demo: true,
     });
   }
 
-  // Если покупатель залогинен — привяжем заказ к его аккаунту (для истории).
-  let userId: string | null = null;
+  const isTimeout = (e: unknown) => {
+    const t = `${(e as Error)?.name ?? ""} ${(e as Error)?.message ?? ""}`.toLowerCase();
+    return t.includes("abort") || t.includes("timeout") || t.includes("fetch failed");
+  };
+
   try {
-    const authed = createClient();
-    const {
-      data: { user },
-    } = await authed.auth.getUser();
-    userId = user?.id ?? null;
-  } catch {
-    userId = null;
-  }
+    const supabase = createServiceClient();
 
-  const supabase = createServiceClient();
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .insert({
-      customer_name: customer_name.trim(),
-      phone: phone.trim(),
-      email: email?.trim() || null,
-      address: address.trim(),
-      comment: comment?.trim() || null,
-      total,
-      status: "new",
-      user_id: userId,
-    })
-    .select("id")
-    .single();
+    // Параллельно: авторитетные цены (сервисным ключом, в обход RLS) и
+    // best-effort привязка к аккаунту.
+    const [{ data: products, error: productsError }, userId] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, price")
+        .in("id", items.map((i) => i.id)),
+      bestEffortUserId(),
+    ]);
 
-  if (orderError || !order) {
+    if (productsError) {
+      return NextResponse.json(
+        { error: "База долго отвечает, попробуйте ещё раз" },
+        { status: 503 }
+      );
+    }
+
+    const priceList = (products ?? []) as Pick<Product, "id" | "name" | "price">[];
+    const lines = items
+      .map((i) => {
+        const p = priceList.find((x) => x.id === i.id);
+        if (!p) return null;
+        return { product_id: p.id, name: p.name, price: p.price, qty: i.qty };
+      })
+      .filter(Boolean) as {
+      product_id: number;
+      name: string;
+      price: number;
+      qty: number;
+    }[];
+
+    if (lines.length === 0) {
+      return NextResponse.json({ error: "Товары не найдены" }, { status: 400 });
+    }
+
+    const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        customer_name: customer_name.trim(),
+        phone: phone.trim(),
+        email: email?.trim() || null,
+        address: address.trim(),
+        comment: comment?.trim() || null,
+        total,
+        status: "new",
+        user_id: userId,
+      })
+      .select("id")
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json(
+        { error: "Не удалось создать заказ" },
+        { status: 500 }
+      );
+    }
+
+    const { error: itemsError } = await supabase
+      .from("order_items")
+      .insert(lines.map((l) => ({ ...l, order_id: order.id })));
+
+    if (itemsError) {
+      return NextResponse.json(
+        { error: "Не удалось сохранить состав заказа" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ id: order.id, total });
+  } catch (e) {
     return NextResponse.json(
-      { error: "Не удалось создать заказ" },
-      { status: 500 }
+      {
+        error: isTimeout(e)
+          ? "База долго отвечает, попробуйте ещё раз"
+          : "Не удалось создать заказ",
+      },
+      { status: 503 }
     );
   }
-
-  const { error: itemsError } = await supabase.from("order_items").insert(
-    lines.map((l) => ({ ...l, order_id: order.id }))
-  );
-
-  if (itemsError) {
-    return NextResponse.json(
-      { error: "Не удалось сохранить состав заказа" },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({ id: order.id, total });
 }
