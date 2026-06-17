@@ -26,6 +26,16 @@ export default function Header({ categories }: { categories: Category[] }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-brand-100 bg-white/95 backdrop-blur">
+      {/* Верхняя строка-утилита: инфо-страницы */}
+      <div className="border-b border-brand-100 bg-white">
+        <div className="container-page flex items-center justify-end gap-4 py-1.5 text-xs text-brand-600">
+          <Link href="/about" className="hover:text-brand-800">О нас</Link>
+          <Link href="/delivery" className="hover:text-brand-800">Доставка</Link>
+          <Link href="/payment" className="hover:text-brand-800">Оплата</Link>
+          <Link href="/how-to-order" className="hover:text-brand-800">Как заказать</Link>
+        </div>
+      </div>
+
       <div className="container-page flex items-center gap-4 py-3">
         <Link href="/" className="flex items-center gap-2 text-brand-600">
           <LeafIcon className="h-7 w-7" />
