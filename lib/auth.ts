@@ -42,14 +42,14 @@ export async function getSession(): Promise<SessionInfo> {
   // 1) Текущий пользователь. Повторяем только при временной ошибке;
   //    «нет сессии» — штатный случай, ретраить не нужно.
   let user: { id: string; email?: string } | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     const { data, error } = await supabase.auth.getUser();
     if (data?.user) {
       user = data.user;
       break;
     }
     if (!isTransient(error)) break;
-    if (attempt < 2) await sleep(400 * (attempt + 1));
+    if (attempt < 1) await sleep(500);
   }
 
   if (!user) {
@@ -59,7 +59,7 @@ export async function getSession(): Promise<SessionInfo> {
   // 2) Роль из profiles. Один сорванный по таймауту запрос НЕ должен молча
   //    превращать админа в покупателя — повторяем чтение при временной ошибке.
   let role: string | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("role")
@@ -74,7 +74,7 @@ export async function getSession(): Promise<SessionInfo> {
       console.error("getSession: ошибка чтения profiles", error);
       break;
     }
-    if (attempt < 2) await sleep(400 * (attempt + 1));
+    if (attempt < 1) await sleep(500);
   }
 
   return {

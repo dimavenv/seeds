@@ -1,6 +1,6 @@
 // fetch с таймаутом — чтобы вызовы Supabase не висели вечно
 // при недоступном проекте или неверных ключах.
-export function fetchWithTimeout(timeoutMs = 5000): typeof fetch {
+export function fetchWithTimeout(timeoutMs = 10000): typeof fetch {
   return (input, init) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);

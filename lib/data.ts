@@ -1,4 +1,7 @@
+import { unstable_cache } from "next/cache";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { fetchWithTimeout } from "@/lib/supabase/fetch";
 import { demoCategories, demoProducts } from "@/lib/demo-data";
 import type { Category, Product } from "@/lib/types";
 
@@ -9,18 +12,46 @@ export function isSupabaseConfigured(): boolean {
   );
 }
 
+// Клиент без cookie — для публичного кэшируемого чтения (категории/каталог).
+// Можно использовать внутри unstable_cache (там недоступны cookies()).
+function createPublicClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: { persistSession: false },
+      global: { fetch: fetchWithTimeout(10000) },
+    }
+  );
+}
+
+// Категории почти не меняются, но запрашиваются в футере на КАЖДОЙ странице.
+// Кэшируем на 10 минут, чтобы медленная сеть не тормозила каждую загрузку.
+const getCategoriesCached = unstable_cache(
+  async (): Promise<Category[]> => {
+    const supabase = createPublicClient();
+    const { data, error } = await supabase
+      .from("categories")
+      .select("*")
+      .order("sort_order");
+    if (error || !data) throw new Error("categories unavailable");
+    return data as Category[];
+  },
+  ["categories-v1"],
+  { revalidate: 600, tags: ["categories"] }
+);
+
 const PRODUCT_SELECT =
   "id, slug, name, description, price, category_id, image_url, stock, is_new, is_featured, created_at, category:categories(slug, name)";
 
 export async function getCategories(): Promise<Category[]> {
   if (!isSupabaseConfigured()) return demoCategories;
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("categories")
-    .select("*")
-    .order("sort_order");
-  if (error || !data) return demoCategories;
-  return data as Category[];
+  try {
+    return await getCategoriesCached();
+  } catch {
+    // Таймаут/ошибка сети — не валим страницу, показываем демо-категории.
+    return demoCategories;
+  }
 }
 
 type ProductQuery = {
