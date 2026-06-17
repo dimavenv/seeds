@@ -11,9 +11,8 @@ import {
   SearchIcon,
   UserIcon,
 } from "@/components/icons";
-import type { Category } from "@/lib/types";
 
-export default function Header({ categories }: { categories: Category[] }) {
+export default function Header() {
   const { cartCount, wishlist, ready } = useStore();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -26,16 +25,6 @@ export default function Header({ categories }: { categories: Category[] }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-brand-100 bg-white/95 backdrop-blur">
-      {/* Верхняя строка-утилита: инфо-страницы */}
-      <div className="border-b border-brand-100 bg-white">
-        <div className="container-page flex items-center justify-end gap-4 py-1.5 text-xs text-brand-600">
-          <Link href="/about" className="hover:text-brand-800">О нас</Link>
-          <Link href="/delivery" className="hover:text-brand-800">Доставка</Link>
-          <Link href="/payment" className="hover:text-brand-800">Оплата</Link>
-          <Link href="/how-to-order" className="hover:text-brand-800">Как заказать</Link>
-        </div>
-      </div>
-
       <div className="container-page flex items-center gap-4 py-3">
         <Link href="/" className="flex items-center gap-2 text-brand-600">
           <LeafIcon className="h-7 w-7" />
@@ -81,17 +70,20 @@ export default function Header({ categories }: { categories: Category[] }) {
       <div className="border-t border-brand-100 bg-brand-50">
         <div className="container-page flex items-center gap-1 overflow-x-auto py-2 text-sm">
           <Link href="/catalog" className="whitespace-nowrap rounded-full px-3 py-1.5 font-semibold text-brand-700 hover:bg-white">
-            Все семена
+            Каталог
           </Link>
-          {categories.map((c) => (
-            <Link
-              key={c.id}
-              href={`/catalog/${c.slug}`}
-              className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white"
-            >
-              {c.name}
-            </Link>
-          ))}
+          <Link href="/about" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+            О нас
+          </Link>
+          <Link href="/delivery" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+            Доставка
+          </Link>
+          <Link href="/payment" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+            Оплата
+          </Link>
+          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-3 py-1.5 text-brand-700 hover:bg-white">
+            Как заказать
+          </Link>
         </div>
       </div>
     </header>

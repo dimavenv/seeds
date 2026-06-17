@@ -8,7 +8,7 @@ import { getCategories } from "@/lib/data";
 export const metadata: Metadata = {
   title: "Semena Collection — интернет-магазин семян",
   description:
-    "Семена овощей, зелени, ягод, цветов, бахчевых и грибной мицелий с доставкой по России.",
+    "Семена томатов, перцев, баклажанов, кукурузы, картофеля, дынь и арбузов с доставкой по России.",
 };
 
 export default async function RootLayout({
@@ -22,7 +22,7 @@ export default async function RootLayout({
     <html lang="ru">
       <body className="flex min-h-screen flex-col">
         <StoreProvider>
-          <Header categories={categories} />
+          <Header />
           <main className="flex-1">{children}</main>
           <Footer categories={categories} />
         </StoreProvider>

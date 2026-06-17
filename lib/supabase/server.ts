@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { fetchWithTimeout } from "@/lib/supabase/fetch";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -10,6 +11,7 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: fetchWithTimeout(8000) },
       cookies: {
         getAll() {
           return cookieStore.getAll();
@@ -35,6 +37,9 @@ export function createServiceClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
+    {
+      auth: { persistSession: false },
+      global: { fetch: fetchWithTimeout(8000) },
+    }
   );
 }

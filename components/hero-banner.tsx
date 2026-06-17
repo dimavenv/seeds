@@ -110,18 +110,11 @@ function FallbackHero({ subtle }: { subtle?: boolean }) {
           Семена для богатого урожая
         </h1>
         <p className="mt-4 text-base text-brand-50/90 sm:text-lg">
-          Томаты, перцы, баклажаны, кукуруза, картофель, дыни и арбузы —
-          проверенные сорта с доставкой почтой по всей России.
+          Проверенные сорта с доставкой почтой по всей России.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/catalog" className="btn-accent">
             Перейти в каталог
-          </Link>
-          <Link
-            href="/catalog/tomaty"
-            className="btn border border-white/40 bg-white/10 text-white hover:bg-white/20"
-          >
-            Семена томатов
           </Link>
         </div>
       </div>

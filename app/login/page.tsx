@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -16,21 +14,34 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Защита от вечного спиннера: если за 12с ничего не произошло — сброс.
+    const safety = setTimeout(() => {
+      setError(
+        "Сервер Supabase не отвечает. Проверьте NEXT_PUBLIC_SUPABASE_URL и ключи в .env.local."
+      );
+      setLoading(false);
+    }, 12000);
+
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+      clearTimeout(safety);
       if (error) {
         setError("Неверный email или пароль");
         setLoading(false);
         return;
       }
-      router.push("/admin");
-      router.refresh();
+      // Жёсткий переход (а не router.push) — надёжнее обновляет сессию.
+      window.location.assign("/admin");
     } catch {
-      setError("Supabase не настроен. Укажите ключи в .env.local");
+      clearTimeout(safety);
+      setError(
+        "Не удалось подключиться к Supabase. Проверьте ключи в .env.local."
+      );
       setLoading(false);
     }
   }

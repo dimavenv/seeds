@@ -35,7 +35,16 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getUser();
+  // Таймаут: если Supabase недоступен/ключи неверные — НЕ блокируем запрос.
+  // Без этого каждый запрос (включая /login и /admin) висел бы до таймаута сети.
+  try {
+    await Promise.race([
+      supabase.auth.getUser(),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch {
+    // игнорируем — продолжаем без обновления сессии
+  }
   return response;
 }
 
