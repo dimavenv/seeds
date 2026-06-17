@@ -57,7 +57,7 @@ export default function HeroBanner() {
 
   return (
     <section className="relative overflow-hidden rounded-3xl bg-brand-100">
-      <div className="relative aspect-[16/6] w-full">
+      <div className="relative aspect-[16/9] w-full">
         {images.map((src, i) => (
           <Link
             key={src}
