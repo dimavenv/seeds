@@ -41,11 +41,17 @@ export async function getSession(): Promise<SessionInfo> {
 
   // 1) Текущий пользователь. Повторяем только при временной ошибке;
   //    «нет сессии» — штатный случай, ретраить не нужно.
-  let user: { id: string; email?: string } | null = null;
+  type AuthUser = {
+    id: string;
+    email?: string;
+    app_metadata?: { role?: string };
+    user_metadata?: { role?: string };
+  };
+  let user: AuthUser | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data, error } = await supabase.auth.getUser();
     if (data?.user) {
-      user = data.user;
+      user = data.user as AuthUser;
       break;
     }
     if (!isTransient(error)) break;
@@ -56,8 +62,22 @@ export async function getSession(): Promise<SessionInfo> {
     return { configured: true, userId: null, email: null, isAdmin: false };
   }
 
-  // 2) Роль из profiles. Один сорванный по таймауту запрос НЕ должен молча
-  //    превращать админа в покупателя — повторяем чтение при временной ошибке.
+  // 2) Роль из JWT (app_metadata) — приходит вместе с getUser(), без отдельного
+  //    запроса к БД. Это убирает лишний параллельный запрос на /admin и делает
+  //    проверку прав надёжной даже на медленном канале.
+  const claimRole = user.app_metadata?.role ?? user.user_metadata?.role;
+  if (claimRole === "admin") {
+    return {
+      configured: true,
+      userId: user.id,
+      email: user.email ?? null,
+      isAdmin: true,
+    };
+  }
+
+  // 3) Фолбэк: если claim ещё не проставлен (пользователь не перелогинился после
+  //    make-admin.sql) — читаем роль из profiles. Повторяем при временной ошибке,
+  //    чтобы один таймаут не понижал админа до покупателя.
   let role: string | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data: profile, error } = await supabase
