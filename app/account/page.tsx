@@ -27,7 +27,9 @@ export default async function AccountPage() {
   }
 
   if (!session.userId) {
-    redirect("/login");
+    // Сессию не удалось подтвердить (не вошёл или БД не ответила) —
+    // покажем на /login понятное пояснение вместо немого цикла.
+    redirect("/login?reason=session");
   }
 
   // Заказы покупателя (RLS вернёт только его собственные).

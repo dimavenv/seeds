@@ -1,27 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+
+type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [sessionReason, setSessionReason] = useState(false);
+
+  // Сообщение, если сюда вернул /account (сессия не подтвердилась),
+  // и проверка доступности базы при загрузке страницы.
+  useEffect(() => {
+    setSessionReason(
+      new URLSearchParams(window.location.search).get("reason") === "session"
+    );
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then(setHealth)
+      .catch(() =>
+        setHealth({ ok: false, configured: true, error: "нет ответа" })
+      );
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    // Защита от вечного спиннера: если за 12с ничего не произошло — сброс.
+    // Защита от вечного спиннера.
     const safety = setTimeout(() => {
       setError(
-        "Сервер Supabase не отвечает. Проверьте NEXT_PUBLIC_SUPABASE_URL и ключи в .env.local."
+        "Сервер Supabase не отвечает. Скорее всего проект на паузе — откройте дашборд Supabase и нажмите Restore."
       );
       setLoading(false);
-    }, 12000);
+    }, 10000);
 
     try {
       const supabase = createClient();
@@ -35,16 +53,18 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      // Жёсткий переход (а не router.push) — надёжнее обновляет сессию.
+      // Жёсткий переход — надёжнее обновляет сессию.
       window.location.assign("/account");
     } catch {
       clearTimeout(safety);
       setError(
-        "Не удалось подключиться к Supabase. Проверьте ключи в .env.local."
+        "Не удалось подключиться к базе. Проверьте, не на паузе ли проект Supabase, и ключи в .env.local."
       );
       setLoading(false);
     }
   }
+
+  const dbDown = health && !health.ok;
 
   return (
     <div className="container-page py-16">
@@ -53,6 +73,24 @@ export default function LoginPage() {
         <p className="mt-1 text-sm text-brand-500">
           Войдите в личный кабинет или панель администратора.
         </p>
+
+        {dbDown && (
+          <div className="mt-4 rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-700">
+            <strong>База данных недоступна.</strong>
+            <div className="mt-1">
+              {!health?.configured
+                ? "Не заданы ключи Supabase в .env.local."
+                : "Запрос к Supabase не прошёл. Чаще всего это значит, что проект на бесплатном тарифе поставлен на паузу — откройте дашборд Supabase и нажмите Restore. Также сверьте URL и ключи в .env.local."}
+            </div>
+          </div>
+        )}
+
+        {sessionReason && !dbDown && (
+          <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
+            Не удалось подтвердить сессию. Попробуйте войти ещё раз.
+          </div>
+        )}
+
         <form onSubmit={submit} className="mt-6 space-y-4">
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">Email</span>

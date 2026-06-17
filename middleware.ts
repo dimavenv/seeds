@@ -40,7 +40,7 @@ export async function middleware(request: NextRequest) {
   try {
     await Promise.race([
       supabase.auth.getUser(),
-      new Promise((resolve) => setTimeout(resolve, 3000)),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
     ]);
   } catch {
     // игнорируем — продолжаем без обновления сессии

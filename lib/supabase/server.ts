@@ -11,7 +11,7 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      global: { fetch: fetchWithTimeout(8000) },
+      global: { fetch: fetchWithTimeout(5000) },
       cookies: {
         getAll() {
           return cookieStore.getAll();
@@ -39,7 +39,7 @@ export function createServiceClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: { persistSession: false },
-      global: { fetch: fetchWithTimeout(8000) },
+      global: { fetch: fetchWithTimeout(5000) },
     }
   );
 }
