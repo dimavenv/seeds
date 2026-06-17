@@ -1,5 +1,29 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/data";
+
+function hasServiceKey(): boolean {
+  return Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+// Надёжное чтение роли пользователя: сервисным ключом (в обход RLS), с откатом
+// на обычный cookie-клиент, если сервисного ключа нет. Ретраим временные сбои.
+export async function readRole(userId: string): Promise<string | null> {
+  const client = hasServiceKey() ? createServiceClient() : createClient();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data, error } = await client
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!error) return data?.role ?? null;
+    if (!isTransient(error)) {
+      console.error("readRole: ошибка чтения profiles", error);
+      return null;
+    }
+    if (attempt < 1) await sleep(500);
+  }
+  return null;
+}
 
 export type SessionInfo = {
   configured: boolean;
@@ -75,27 +99,9 @@ export async function getSession(): Promise<SessionInfo> {
     };
   }
 
-  // 3) Фолбэк: если claim ещё не проставлен (пользователь не перелогинился после
-  //    make-admin.sql) — читаем роль из profiles. Повторяем при временной ошибке,
-  //    чтобы один таймаут не понижал админа до покупателя.
-  let role: string | null = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!error) {
-      role = profile?.role ?? null;
-      break;
-    }
-    if (!isTransient(error)) {
-      console.error("getSession: ошибка чтения profiles", error);
-      break;
-    }
-    if (attempt < 1) await sleep(500);
-  }
+  // 3) Фолбэк: читаем роль из profiles сервисным ключом (в обход RLS) — не
+  //    зависит от cookie/сессии/контекста auth.uid(), поэтому надёжно и на /admin.
+  const role = await readRole(user.id);
 
   return {
     configured: true,
