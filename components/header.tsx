@@ -68,21 +68,24 @@ export default function Header() {
       </div>
 
       <div className="bg-brand-600 shadow-sm">
-        <div className="container-page flex items-center justify-between gap-1 overflow-x-auto py-2 text-sm">
-          <Link href="/catalog" className="whitespace-nowrap rounded-full px-4 py-1.5 font-bold text-white hover:bg-white/15">
+        <div className="container-page flex items-center justify-between gap-1 overflow-x-auto py-2 text-base">
+          <Link href="/catalog" className="whitespace-nowrap rounded-full px-4 py-2 font-bold text-white hover:bg-white/15">
             Каталог
           </Link>
-          <Link href="/about" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
+          <Link href="/about" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             О нас
           </Link>
-          <Link href="/delivery" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
+          <Link href="/delivery" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Доставка
           </Link>
-          <Link href="/payment" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
+          <Link href="/payment" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Оплата
           </Link>
-          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
+          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Как заказать
+          </Link>
+          <Link href="/support" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
+            Поддержка
           </Link>
         </div>
       </div>

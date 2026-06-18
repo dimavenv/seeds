@@ -38,6 +38,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
             <li><Link href="/delivery" className="hover:text-brand-800">Доставка</Link></li>
             <li><Link href="/payment" className="hover:text-brand-800">Оплата</Link></li>
             <li><Link href="/how-to-order" className="hover:text-brand-800">Как заказать</Link></li>
+            <li><Link href="/support" className="hover:text-brand-800">Поддержка</Link></li>
             <li><Link href="/favorites" className="hover:text-brand-800">Избранное</Link></li>
           </ul>
         </div>
@@ -47,7 +48,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
           <ul className="space-y-1.5 text-sm text-brand-600">
             <li>Доставка почтой по всей России</li>
             <li>Пн–Вс: 9:00–20:00</li>
-            <li>info@semena-collection.ru</li>
+            <li>info@tomatsemena.ru</li>
           </ul>
         </div>
       </div>
