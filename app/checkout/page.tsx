@@ -5,6 +5,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
+import DadataAddress, {
+  emptyAddress,
+  type AddressValue,
+} from "@/components/dadata-address";
 
 export default function CheckoutPage() {
   const { cart, cartTotal, clearCart, ready } = useStore();
@@ -12,12 +16,14 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    customer_name: "",
+    last_name: "",
+    first_name: "",
+    middle_name: "",
     phone: "",
     email: "",
-    address: "",
     comment: "",
   });
+  const [address, setAddress] = useState<AddressValue>(emptyAddress);
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -27,13 +33,45 @@ export default function CheckoutPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Собираем ФИО и адрес из раздельных полей.
+    const customer_name = [form.last_name, form.first_name, form.middle_name]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(" ");
+
+    const missingAddress =
+      !address.postal_code.trim() ||
+      !address.city.trim() ||
+      !address.street.trim() ||
+      !address.house.trim();
+    if (missingAddress) {
+      setError("Заполните индекс, город, улицу и дом");
+      return;
+    }
+
+    const addressStr = [
+      address.postal_code.trim(),
+      address.region.trim(),
+      address.city.trim(),
+      address.street.trim() && `ул. ${address.street.trim()}`,
+      address.house.trim() && `д. ${address.house.trim()}`,
+      address.flat.trim() && `кв. ${address.flat.trim()}`,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          customer_name,
+          phone: form.phone,
+          email: form.email,
+          address: addressStr,
+          comment: form.comment,
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
         }),
       });
@@ -46,7 +84,7 @@ export default function CheckoutPage() {
       clearCart();
       const qs = new URLSearchParams({
         total: String(data.total),
-        name: form.customer_name,
+        name: form.first_name || customer_name,
       });
       router.push(`/order/${data.id}?${qs.toString()}`);
     } catch {
@@ -71,33 +109,59 @@ export default function CheckoutPage() {
     <div className="container-page py-6">
       <h1 className="mb-6 text-2xl font-bold text-brand-800">Оформление заказа</h1>
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
-        <div className="card space-y-4 p-5 lg:col-span-2">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-brand-700">
-                Имя и фамилия *
-              </span>
-              <input required value={form.customer_name} onChange={update("customer_name")} className="input" />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-brand-700">
-                Телефон *
-              </span>
-              <input required type="tel" value={form.phone} onChange={update("phone")} className="input" placeholder="+7 ___ ___-__-__" />
-            </label>
-          </div>
-          <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-brand-700">
-              Email
-            </span>
-            <input type="email" value={form.email} onChange={update("email")} className="input" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-brand-700">
-              Адрес доставки *
-            </span>
-            <input required value={form.address} onChange={update("address")} className="input" placeholder="Индекс, город, улица, дом, квартира" />
-          </label>
+        <div className="card space-y-6 p-5 lg:col-span-2">
+          {/* ФИО */}
+          <fieldset className="space-y-3">
+            <legend className="text-base font-bold text-brand-800">
+              Получатель
+            </legend>
+            <p className="text-xs text-brand-500">
+              Укажите ФИО полностью, без сокращений.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-brand-700">
+                  Фамилия *
+                </span>
+                <input required value={form.last_name} onChange={update("last_name")} className="input" placeholder="Иванов" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-brand-700">
+                  Имя *
+                </span>
+                <input required value={form.first_name} onChange={update("first_name")} className="input" placeholder="Иван" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-brand-700">
+                  Отчество
+                </span>
+                <input value={form.middle_name} onChange={update("middle_name")} className="input" placeholder="Иванович" />
+              </label>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-brand-700">
+                  Телефон *
+                </span>
+                <input required type="tel" value={form.phone} onChange={update("phone")} className="input" placeholder="+7 ___ ___-__-__" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-brand-700">
+                  Email
+                </span>
+                <input type="email" value={form.email} onChange={update("email")} className="input" />
+              </label>
+            </div>
+          </fieldset>
+
+          {/* Адрес доставки */}
+          <fieldset className="space-y-3">
+            <legend className="text-base font-bold text-brand-800">
+              Адрес доставки
+            </legend>
+            <DadataAddress value={address} onChange={setAddress} />
+          </fieldset>
+
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">
               Комментарий к заказу
