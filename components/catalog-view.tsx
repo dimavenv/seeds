@@ -1,6 +1,7 @@
 import CatalogFilters from "@/components/catalog-filters";
+import CategoryNav from "@/components/category-nav";
 import ProductGrid from "@/components/product-grid";
-import { getProducts } from "@/lib/data";
+import { getCategories, getProducts } from "@/lib/data";
 
 export type CatalogSearchParams = {
   q?: string;
@@ -24,16 +25,20 @@ export default async function CatalogView({
     ? (searchParams.sort as (typeof SORT_VALUES)[number])
     : "new";
 
-  const products = await getProducts({
-    categorySlug,
-    q: searchParams.q?.trim() || undefined,
-    sort,
-    minPrice: searchParams.min ? Number(searchParams.min) : undefined,
-    maxPrice: searchParams.max ? Number(searchParams.max) : undefined,
-  });
+  const [products, categories] = await Promise.all([
+    getProducts({
+      categorySlug,
+      q: searchParams.q?.trim() || undefined,
+      sort,
+      minPrice: searchParams.min ? Number(searchParams.min) : undefined,
+      maxPrice: searchParams.max ? Number(searchParams.max) : undefined,
+    }),
+    getCategories(),
+  ]);
 
   return (
     <div className="container-page py-6">
+      <CategoryNav categories={categories} activeSlug={categorySlug} />
       <h1 className="mb-1 text-2xl font-bold text-brand-800">{title}</h1>
       <p className="mb-5 text-sm text-brand-500">
         Найдено товаров: {products.length}

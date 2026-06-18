@@ -6,7 +6,7 @@ import Footer from "@/components/footer";
 import { getCategories } from "@/lib/data";
 
 export const metadata: Metadata = {
-  title: "Semena Collection — интернет-магазин семян",
+  title: "Tomat Semena — интернет-магазин семян",
   description:
     "Семена томатов, перцев, баклажанов, кукурузы, картофеля, дынь и арбузов с доставкой по России.",
 };

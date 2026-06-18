@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Оплата — Semena Collection" };
+export const metadata: Metadata = { title: "Оплата — Tomat Semena" };
 
 export default function PaymentPage() {
   return (

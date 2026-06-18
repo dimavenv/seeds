@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "О нас — Semena Collection" };
+export const metadata: Metadata = { title: "О нас — Tomat Semena" };
 
 export default function AboutPage() {
   return (
@@ -9,7 +9,7 @@ export default function AboutPage() {
         <h1 className="text-3xl font-extrabold text-brand-800">О нас</h1>
         <div className="mt-5 space-y-4 leading-relaxed text-brand-700">
           <p>
-            <strong>Semena Collection</strong> — интернет-магазин качественных
+            <strong>Tomat Semena</strong> — интернет-магазин качественных
             семян овощей и бахчевых культур. Мы предлагаем проверенные сорта
             томатов, перцев, баклажанов, кукурузы, картофеля, дынь и арбузов.
           </p>

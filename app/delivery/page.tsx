@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Доставка — Semena Collection" };
+export const metadata: Metadata = { title: "Доставка — Tomat Semena" };
 
 export default function DeliveryPage() {
   return (

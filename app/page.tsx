@@ -1,25 +1,12 @@
 import Link from "next/link";
 import ProductGrid from "@/components/product-grid";
 import HeroBanner from "@/components/hero-banner";
-import CategoryTile from "@/components/category-tile";
-import { getCategories, getProducts } from "@/lib/data";
+import { getProducts } from "@/lib/data";
 
 export const revalidate = 60;
 
-const categoryEmoji: Record<string, string> = {
-  tomaty: "🍅",
-  "perec-sladkiy": "🫑",
-  "perec-chili": "🌶️",
-  baklazhany: "🍆",
-  kukuruza: "🌽",
-  kartofel: "🥔",
-  dynya: "🍈",
-  arbuz: "🍉",
-};
-
 export default async function HomePage() {
-  const [categories, featured, fresh] = await Promise.all([
-    getCategories(),
+  const [featured, fresh] = await Promise.all([
     getProducts({ featured: true, limit: 8 }),
     getProducts({ onlyNew: true, limit: 8 }),
   ]);
@@ -28,20 +15,6 @@ export default async function HomePage() {
     <div className="container-page py-6">
       {/* Баннеры (свои картинки из public/banners/ или запасной баннер) */}
       <HeroBanner />
-
-      {/* Категории */}
-      <section className="mt-10">
-        <h2 className="mb-4 text-xl font-bold text-brand-800">Категории</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {categories.map((c) => (
-            <CategoryTile
-              key={c.id}
-              category={c}
-              emoji={categoryEmoji[c.slug] ?? "🌱"}
-            />
-          ))}
-        </div>
-      </section>
 
       {/* Хиты */}
       {featured.length > 0 && (

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Как заказать — Semena Collection" };
+export const metadata: Metadata = { title: "Как заказать — Tomat Semena" };
 
 const steps = [
   ["Выберите товары", "Откройте каталог, найдите нужные сорта и нажмите «В корзину»."],
@@ -16,7 +16,7 @@ export default function HowToOrderPage() {
       <div className="card mx-auto max-w-3xl p-8">
         <h1 className="text-3xl font-extrabold text-brand-800">Как заказать</h1>
         <p className="mt-3 text-brand-700">
-          Сделать заказ в Semena Collection просто — всего 4 шага:
+          Сделать заказ в Tomat Semena просто — всего 4 шага:
         </p>
         <ol className="mt-6 space-y-4">
           {steps.map(([title, text], i) => (

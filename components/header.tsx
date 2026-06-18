@@ -29,7 +29,7 @@ export default function Header() {
         <Link href="/" className="flex items-center gap-2 text-brand-600">
           <LeafIcon className="h-7 w-7" />
           <span className="text-lg font-extrabold tracking-tight text-brand-700">
-            Semena<span className="text-accent-500">Collection</span>
+            Tomat<span className="text-accent-500">Semena</span>
           </span>
         </Link>
 
@@ -67,21 +67,21 @@ export default function Header() {
         </nav>
       </div>
 
-      <div className="border-t border-brand-100 bg-brand-50">
+      <div className="bg-brand-600 shadow-sm">
         <div className="container-page flex items-center justify-between gap-1 overflow-x-auto py-2 text-sm">
-          <Link href="/catalog" className="whitespace-nowrap rounded-full px-4 py-1.5 font-semibold text-brand-700 hover:bg-white">
+          <Link href="/catalog" className="whitespace-nowrap rounded-full px-4 py-1.5 font-bold text-white hover:bg-white/15">
             Каталог
           </Link>
-          <Link href="/about" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/about" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             О нас
           </Link>
-          <Link href="/delivery" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/delivery" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Доставка
           </Link>
-          <Link href="/payment" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/payment" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Оплата
           </Link>
-          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-4 py-1.5 text-brand-700 hover:bg-white">
+          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-4 py-1.5 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Как заказать
           </Link>
         </div>

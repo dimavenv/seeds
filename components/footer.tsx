@@ -10,7 +10,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
           <div className="flex items-center gap-2 text-brand-600">
             <LeafIcon className="h-6 w-6" />
             <span className="text-base font-extrabold text-brand-700">
-              Semena Collection
+              Tomat Semena
             </span>
           </div>
           <p className="mt-3 text-sm text-brand-600">
@@ -53,7 +53,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
       </div>
       <div className="border-t border-brand-100 py-4">
         <div className="container-page text-center text-xs text-brand-500">
-          © {new Date().getFullYear()} Semena Collection. Все права защищены.
+          © {new Date().getFullYear()} Tomat Semena. Все права защищены.
         </div>
       </div>
     </footer>
