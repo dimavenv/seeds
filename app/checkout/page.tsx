@@ -5,6 +5,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
+import {
+  DELIVERY_COST,
+  DELIVERY_METHODS,
+  type DeliveryMethodId,
+} from "@/lib/delivery";
 import DadataAddress, {
   emptyAddress,
   type AddressValue,
@@ -23,7 +28,10 @@ export default function CheckoutPage() {
     email: "",
     comment: "",
   });
+  const [deliveryMethod, setDeliveryMethod] =
+    useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
+  const grandTotal = cartTotal + DELIVERY_COST;
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -72,6 +80,7 @@ export default function CheckoutPage() {
           email: form.email,
           address: addressStr,
           comment: form.comment,
+          delivery_method: deliveryMethod,
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
         }),
       });
@@ -162,6 +171,38 @@ export default function CheckoutPage() {
             <DadataAddress value={address} onChange={setAddress} />
           </fieldset>
 
+          {/* Способ доставки */}
+          <fieldset className="space-y-3">
+            <legend className="text-base font-bold text-brand-800">
+              Способ доставки
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {DELIVERY_METHODS.map((m) => (
+                <label
+                  key={m.id}
+                  className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 ${
+                    deliveryMethod === m.id
+                      ? "border-brand-600 bg-brand-50"
+                      : "border-brand-200 hover:bg-brand-50/50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="delivery_method"
+                    value={m.id}
+                    checked={deliveryMethod === m.id}
+                    onChange={() => setDeliveryMethod(m.id)}
+                    className="accent-brand-600"
+                  />
+                  <span className="font-semibold text-brand-800">{m.label}</span>
+                  <span className="ml-auto text-sm text-brand-500">
+                    {formatPrice(DELIVERY_COST)}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">
               Комментарий к заказу
@@ -169,8 +210,8 @@ export default function CheckoutPage() {
             <textarea value={form.comment} onChange={update("comment")} className="input min-h-24" />
           </label>
           <p className="text-xs text-brand-500">
-            Оплата при получении или по счёту. Менеджер свяжется с вами для
-            подтверждения заказа и расчёта доставки.
+            Оплата при получении. Доставка Ozon или Почтой России —{" "}
+            {formatPrice(DELIVERY_COST)} по всей России.
           </p>
           {error && (
             <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
@@ -193,9 +234,19 @@ export default function CheckoutPage() {
               </li>
             ))}
           </ul>
-          <div className="mt-4 flex justify-between border-t border-brand-100 pt-4 text-lg font-extrabold text-brand-800">
+          <div className="mt-4 space-y-1 border-t border-brand-100 pt-4 text-sm text-brand-700">
+            <div className="flex justify-between">
+              <span>Товары</span>
+              <span>{formatPrice(cartTotal)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Доставка</span>
+              <span>{formatPrice(DELIVERY_COST)}</span>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-between border-t border-brand-100 pt-3 text-lg font-extrabold text-brand-800">
             <span>Итого</span>
-            <span>{formatPrice(cartTotal)}</span>
+            <span>{formatPrice(grandTotal)}</span>
           </div>
           <button type="submit" disabled={submitting} className="btn-accent mt-5 w-full">
             {submitting ? "Оформляем…" : "Подтвердить заказ"}

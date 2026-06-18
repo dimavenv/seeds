@@ -48,6 +48,8 @@ create table if not exists public.orders (
   comment       text,
   status        order_status not null default 'new',
   total         numeric(10,2) not null default 0,
+  delivery_method text,
+  delivery_cost numeric(10,2) not null default 0,
   user_id       uuid references auth.users(id) on delete set null,
   created_at    timestamptz not null default now()
 );
@@ -71,6 +73,20 @@ create table if not exists public.profiles (
   full_name  text,
   created_at timestamptz not null default now()
 );
+
+-- ============ ЗАЯВКИ В ПОДДЕРЖКУ ============
+create table if not exists public.support_requests (
+  id         bigint generated always as identity primary key,
+  name       text not null,
+  email      text not null,
+  subject    text not null,
+  message    text not null,
+  status     text not null default 'new',
+  user_id    uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists support_requests_created_at_idx
+  on public.support_requests(created_at desc);
 
 -- Хелпер: текущий пользователь — админ?
 create or replace function public.is_admin()
@@ -111,6 +127,7 @@ alter table public.products    enable row level security;
 alter table public.orders      enable row level security;
 alter table public.order_items enable row level security;
 alter table public.profiles    enable row level security;
+alter table public.support_requests enable row level security;
 
 -- Категории: публичное чтение, запись только админ
 drop policy if exists categories_select on public.categories;
@@ -156,6 +173,17 @@ create policy profiles_select on public.profiles for select
 drop policy if exists profiles_update on public.profiles;
 create policy profiles_update on public.profiles for update
   using (id = auth.uid()) with check (id = auth.uid());
+
+-- Заявки в поддержку: отправить может любой; читать/править — только админ
+drop policy if exists support_requests_insert on public.support_requests;
+create policy support_requests_insert on public.support_requests
+  for insert with check (true);
+drop policy if exists support_requests_select on public.support_requests;
+create policy support_requests_select on public.support_requests
+  for select using (public.is_admin());
+drop policy if exists support_requests_update on public.support_requests;
+create policy support_requests_update on public.support_requests
+  for update using (public.is_admin()) with check (public.is_admin());
 
 -- Storage bucket для фото товаров: публичное чтение, запись — админ
 

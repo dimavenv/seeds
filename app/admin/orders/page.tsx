@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatPrice, formatDate } from "@/lib/format";
+import { deliveryMethodLabel } from "@/lib/delivery";
 import OrderStatusSelect from "@/components/admin/order-status-select";
 import type { Order } from "@/lib/types";
 
@@ -10,7 +11,7 @@ export default async function AdminOrders() {
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, customer_name, phone, email, address, comment, status, total, created_at, order_items(id, name, price, qty)"
+      "id, customer_name, phone, email, address, comment, status, total, delivery_method, delivery_cost, created_at, order_items(id, name, price, qty)"
     )
     .order("created_at", { ascending: false });
 
@@ -53,6 +54,13 @@ export default async function AdminOrders() {
                   <div><span className="text-brand-500">Телефон:</span> {o.phone}</div>
                   {o.email && <div><span className="text-brand-500">Email:</span> {o.email}</div>}
                   <div><span className="text-brand-500">Адрес:</span> {o.address}</div>
+                  {o.delivery_method && (
+                    <div>
+                      <span className="text-brand-500">Доставка:</span>{" "}
+                      {deliveryMethodLabel(o.delivery_method)}
+                      {o.delivery_cost ? ` — ${formatPrice(o.delivery_cost)}` : ""}
+                    </div>
+                  )}
                   {o.comment && <div><span className="text-brand-500">Комментарий:</span> {o.comment}</div>}
                 </div>
                 <div className="text-sm">

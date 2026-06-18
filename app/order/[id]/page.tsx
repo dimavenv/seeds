@@ -21,8 +21,8 @@ export default function OrderConfirmationPage({
         </h1>
         <p className="mt-3 text-brand-600">
           {searchParams.name ? `${searchParams.name}, спасибо за заказ! ` : ""}
-          Мы свяжемся с вами в ближайшее время для подтверждения и расчёта
-          доставки.
+          Мы свяжемся с вами для подтверждения. Доставка — 300 ₽ (Ozon или Почта
+          России).
         </p>
         {total !== null && !Number.isNaN(total) && (
           <p className="mt-4 text-lg font-extrabold text-brand-700">

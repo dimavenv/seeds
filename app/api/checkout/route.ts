@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/data";
+import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
 import type { Product } from "@/lib/types";
 
 type IncomingItem = { id: number; qty: number };
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     email?: string;
     address?: string;
     comment?: string;
+    delivery_method?: string;
     items?: IncomingItem[];
   };
   try {
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
   }
 
   const { customer_name, phone, address, email, comment } = body;
+  const delivery_method = normalizeDeliveryMethod(body.delivery_method);
   const items = (body.items ?? []).filter(
     (i) => Number.isFinite(i.id) && Number.isFinite(i.qty) && i.qty > 0
   );
@@ -104,7 +107,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Товары не найдены" }, { status: 400 });
     }
 
-    const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+    const total = lines.reduce((s, l) => s + l.price * l.qty, 0) + DELIVERY_COST;
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -114,6 +117,8 @@ export async function POST(request: Request) {
         email: email?.trim() || null,
         address: address.trim(),
         comment: comment?.trim() || null,
+        delivery_method,
+        delivery_cost: DELIVERY_COST,
         total,
         status: "new",
         user_id: userId,

@@ -44,9 +44,22 @@ export type Order = {
   comment: string | null;
   status: OrderStatus;
   total: number;
+  delivery_method?: string | null;
+  delivery_cost?: number | null;
   user_id: string | null;
   created_at: string;
   order_items?: OrderItem[];
+};
+
+export type SupportRequest = {
+  id: number;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: string;
+  user_id: string | null;
+  created_at: string;
 };
 
 export type OrderItem = {
