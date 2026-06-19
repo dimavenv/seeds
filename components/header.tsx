@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useStore } from "@/components/store-provider";
+import Logo from "@/components/logo";
 import {
   CartIcon,
   HeartIcon,
-  LeafIcon,
   SearchIcon,
   UserIcon,
 } from "@/components/icons";
@@ -27,7 +27,7 @@ export default function Header() {
     <header className="sticky top-0 z-40 border-b border-brand-100 bg-white/95 backdrop-blur">
       <div className="container-page flex items-center gap-5 py-4">
         <Link href="/" className="flex items-center gap-2 text-brand-600">
-          <LeafIcon className="h-9 w-9" />
+          <Logo className="h-9 w-9" />
           <span className="text-2xl font-extrabold tracking-tight text-brand-700">
             Tomat<span className="text-accent-500">Semena</span>
           </span>

@@ -70,9 +70,17 @@ npm run dev                        # http://localhost:3000
 
 ## Деплой на Vercel
 
-1. Запушьте репозиторий и импортируйте его в [Vercel](https://vercel.com).
-2. В **Environment Variables** добавьте три переменные из `.env.local`.
-3. Deploy. Фреймворк (Next.js) определится автоматически.
+1. Запушьте репозиторий на GitHub и импортируйте его в [Vercel](https://vercel.com)
+   (**Add New… → Project → Import**). Framework (Next.js) определится сам.
+2. В **Environment Variables** добавьте переменные из `.env.local`
+   (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+   `SUPABASE_SERVICE_ROLE_KEY`, при желании `NEXT_PUBLIC_DADATA_TOKEN`).
+3. **Deploy**. Затем в Supabase → Authentication → URL Configuration укажите
+   адрес с Vercel как **Site URL** (иначе вход на проде не работает).
+4. Каждый `git push` в основную ветку автоматически пересобирает сайт.
+
+📘 **Пошаговая инструкция для новичка** (со скриншот-шагами и нюансами) — в
+[`SETUP-RU.md`](./SETUP-RU.md), раздел «Шаг 7. Публикация сайта на Vercel».
 
 ## Структура
 
@@ -98,6 +106,10 @@ supabase/
 
 Картинки можно загрузить прямо на GitHub — без программирования:
 
+- **Логотип:** файл `public/logo.png` (квадрат ~512px, можно с прозрачным фоном).
+  Показывается рядом с названием в шапке и подвале. Нет файла — показывается
+  стандартный логотип-помидор. Иконку вкладки браузера можно задать файлом
+  `app/icon.png`.
 - **Баннеры главной:** папка `public/banners/`, файлы `1.jpg … 5.jpg`
   (широкие, ~1600px, пропорции 16:6). Прокручиваются каруселью. Нет файлов —
   показывается запасной зелёный баннер.

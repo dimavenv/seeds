@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LeafIcon } from "@/components/icons";
+import Logo from "@/components/logo";
 import type { Category } from "@/lib/types";
 
 export default function Footer({ categories }: { categories: Category[] }) {
@@ -8,7 +8,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
       <div className="container-page grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-center gap-2 text-brand-600">
-            <LeafIcon className="h-6 w-6" />
+            <Logo className="h-6 w-6" />
             <span className="text-base font-extrabold text-brand-700">
               Tomat Semena
             </span>
