@@ -40,6 +40,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
             <li><Link href="/how-to-order" className="hover:text-brand-800">Как заказать</Link></li>
             <li><Link href="/support" className="hover:text-brand-800">Поддержка</Link></li>
             <li><Link href="/favorites" className="hover:text-brand-800">Избранное</Link></li>
+            <li><Link href="/privacy" className="hover:text-brand-800">Политика конфиденциальности</Link></li>
           </ul>
         </div>
 

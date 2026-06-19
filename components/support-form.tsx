@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ConsentCheckbox from "@/components/consent-checkbox";
 
 export default function SupportForm() {
   const [form, setForm] = useState({
@@ -9,6 +10,7 @@ export default function SupportForm() {
     subject: "",
     message: "",
   });
+  const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -21,6 +23,10 @@ export default function SupportForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!consent) {
+      setError("Подтвердите согласие на обработку персональных данных");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/support", {
@@ -84,12 +90,13 @@ export default function SupportForm() {
         </span>
         <textarea required value={form.message} onChange={update("message")} className="input min-h-32" placeholder="Опишите ваш вопрос подробнее" />
       </label>
+      <ConsentCheckbox checked={consent} onChange={setConsent} />
       {error && (
         <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
           {error}
         </p>
       )}
-      <button type="submit" disabled={submitting} className="btn-accent w-full sm:w-auto">
+      <button type="submit" disabled={submitting || !consent} className="btn-accent w-full sm:w-auto">
         {submitting ? "Отправляем…" : "Отправить вопрос"}
       </button>
     </form>

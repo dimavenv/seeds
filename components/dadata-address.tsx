@@ -42,6 +42,31 @@ const SUGGEST_URL =
 // Какие поля поддерживают подсказки и как ограничивать выдачу DaData.
 type Level = "city" | "street" | "house";
 
+// Определить индекс по свободно введённому адресу (когда подсказку не выбирали).
+async function fetchAddressZip(
+  query: string,
+  signal?: AbortSignal
+): Promise<string | null> {
+  if (!TOKEN) return null;
+  try {
+    const res = await fetch(SUGGEST_URL, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Token ${TOKEN}`,
+      },
+      body: JSON.stringify({ query, count: 1 }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { suggestions?: DadataSuggestion[] };
+    return json.suggestions?.[0]?.data.postal_code ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function DadataAddress({
   value,
   onChange,
@@ -53,6 +78,12 @@ export default function DadataAddress({
   const [cityFias, setCityFias] = useState<string | null>(null);
   const [streetFias, setStreetFias] = useState<string | null>(null);
 
+  // Индекс был проставлен автоматически (подсказкой/автоопределением)?
+  // Если пользователь правил индекс руками — не перезаписываем.
+  const autoZipRef = useRef(false);
+  const lastZipQueryRef = useRef("");
+  const zipAbortRef = useRef<AbortController | null>(null);
+
   function set<K extends keyof AddressValue>(key: K, v: string) {
     onChange({ ...value, [key]: v });
   }
@@ -61,7 +92,10 @@ export default function DadataAddress({
   function applySuggestion(level: Level, s: DadataSuggestion) {
     const d = s.data;
     const next = { ...value };
-    if (d.postal_code) next.postal_code = d.postal_code;
+    if (d.postal_code) {
+      next.postal_code = d.postal_code;
+      autoZipRef.current = true;
+    }
     if (d.region_with_type) next.region = d.region_with_type;
     const cityName = d.city_with_type || d.settlement_with_type;
     if (cityName) next.city = cityName;
@@ -78,6 +112,33 @@ export default function DadataAddress({
     }
   }
 
+  // Автоопределение индекса при ручном вводе адреса (без выбора подсказки):
+  // как только заполнены Город+Улица+Дом, запрашиваем индекс по полному адресу.
+  useEffect(() => {
+    if (!TOKEN) return;
+    const city = value.city.trim();
+    const street = value.street.trim();
+    const house = value.house.trim();
+    if (!city || !street || !house) return;
+    // только если индекс пуст или был проставлен автоматически
+    if (value.postal_code.trim() && !autoZipRef.current) return;
+    const query = `${city}, ${street}, ${house}`;
+    if (query === lastZipQueryRef.current) return;
+    const t = setTimeout(async () => {
+      zipAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      zipAbortRef.current = ctrl;
+      const zip = await fetchAddressZip(query, ctrl.signal);
+      lastZipQueryRef.current = query;
+      if (zip && zip !== value.postal_code) {
+        autoZipRef.current = true;
+        onChange({ ...value, postal_code: zip });
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.city, value.street, value.house, value.postal_code]);
+
   // Ограничение области (locations) по выбранному городу/улице.
   function locationsFor(level: Level): object[] | undefined {
     if (level === "street" && cityFias) return [{ city_fias_id: cityFias }];
@@ -89,22 +150,6 @@ export default function DadataAddress({
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <SuggestField
-        label="Индекс"
-        required
-        value={value.postal_code}
-        onChange={(v) => set("postal_code", v)}
-        inputMode="numeric"
-        placeholder="Подставится автоматически"
-        className="sm:col-span-1"
-      />
-      <PlainField
-        label="Регион"
-        value={value.region}
-        onChange={(v) => set("region", v)}
-        placeholder="Московская обл."
-        className="sm:col-span-1"
-      />
-      <SuggestField
         label="Город / населённый пункт"
         required
         level="city"
@@ -115,6 +160,13 @@ export default function DadataAddress({
         value={value.city}
         onChange={(v) => set("city", v)}
         placeholder="Москва"
+        className="sm:col-span-2"
+      />
+      <PlainField
+        label="Регион"
+        value={value.region}
+        onChange={(v) => set("region", v)}
+        placeholder="Московская обл."
         className="sm:col-span-2"
       />
       <SuggestField
@@ -150,6 +202,19 @@ export default function DadataAddress({
         placeholder="34"
         className="sm:col-span-1"
       />
+      {/* Индекс — последним; определяется автоматически, можно поправить */}
+      <PlainField
+        label="Индекс"
+        required
+        value={value.postal_code}
+        onChange={(v) => {
+          autoZipRef.current = false;
+          set("postal_code", v);
+        }}
+        inputMode="numeric"
+        placeholder="Определится автоматически"
+        className="sm:col-span-1"
+      />
     </div>
   );
 }
@@ -168,7 +233,7 @@ function FieldLabel({
   );
 }
 
-// Обычное поле без подсказок (Регион, Квартира).
+// Обычное поле без подсказок (Регион, Квартира, Индекс).
 function PlainField({
   label,
   value,
@@ -176,6 +241,7 @@ function PlainField({
   placeholder,
   className,
   required,
+  inputMode,
 }: {
   label: string;
   value: string;
@@ -183,6 +249,7 @@ function PlainField({
   placeholder?: string;
   className?: string;
   required?: boolean;
+  inputMode?: "numeric" | "text";
 }) {
   return (
     <label className={`block ${className ?? ""}`}>
@@ -193,6 +260,7 @@ function PlainField({
         className="input"
         placeholder={placeholder}
         required={required}
+        inputMode={inputMode}
       />
     </label>
   );

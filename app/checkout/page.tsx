@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
@@ -10,10 +10,31 @@ import {
   DELIVERY_METHODS,
   type DeliveryMethodId,
 } from "@/lib/delivery";
+import {
+  secureGet,
+  secureSet,
+  secureClear,
+} from "@/lib/secure-store";
+import ConsentCheckbox from "@/components/consent-checkbox";
 import DadataAddress, {
   emptyAddress,
   type AddressValue,
 } from "@/components/dadata-address";
+
+const PROFILE_KEY = "checkout_profile";
+
+type SavedProfile = {
+  form: {
+    last_name: string;
+    first_name: string;
+    middle_name: string;
+    phone: string;
+    email: string;
+    comment: string;
+  };
+  address: AddressValue;
+  deliveryMethod: DeliveryMethodId;
+};
 
 export default function CheckoutPage() {
   const { cart, cartTotal, clearCart, ready } = useStore();
@@ -31,7 +52,24 @@ export default function CheckoutPage() {
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
+  const [consent, setConsent] = useState(false);
+  const [remember, setRemember] = useState(false);
   const grandTotal = cartTotal + DELIVERY_COST;
+
+  // Подставить сохранённые («Запомнить меня») данные при загрузке.
+  useEffect(() => {
+    let cancelled = false;
+    secureGet<SavedProfile>(PROFILE_KEY).then((saved) => {
+      if (cancelled || !saved) return;
+      if (saved.form) setForm(saved.form);
+      if (saved.address) setAddress(saved.address);
+      if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
+      setRemember(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -41,6 +79,11 @@ export default function CheckoutPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!consent) {
+      setError("Подтвердите согласие на обработку персональных данных");
+      return;
+    }
 
     // Собираем ФИО и адрес из раздельных полей.
     const customer_name = [form.last_name, form.first_name, form.middle_name]
@@ -89,6 +132,12 @@ export default function CheckoutPage() {
         setError(data.error ?? "Ошибка оформления заказа");
         setSubmitting(false);
         return;
+      }
+      // «Запомнить меня»: сохранить зашифрованно или очистить.
+      if (remember) {
+        secureSet(PROFILE_KEY, { form, address, deliveryMethod });
+      } else {
+        secureClear(PROFILE_KEY);
       }
       clearCart();
       const qs = new URLSearchParams({
@@ -248,7 +297,24 @@ export default function CheckoutPage() {
             <span>Итого</span>
             <span>{formatPrice(grandTotal)}</span>
           </div>
-          <button type="submit" disabled={submitting} className="btn-accent mt-5 w-full">
+
+          <div className="mt-4 space-y-3 border-t border-brand-100 pt-4">
+            <ConsentCheckbox checked={consent} onChange={setConsent} />
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-brand-700">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-brand-600"
+              />
+              <span>
+                Запомнить меня — сохранить данные на этом устройстве
+                (зашифрованно) для следующего заказа.
+              </span>
+            </label>
+          </div>
+
+          <button type="submit" disabled={submitting || !consent} className="btn-accent mt-5 w-full">
             {submitting ? "Оформляем…" : "Подтвердить заказ"}
           </button>
         </div>

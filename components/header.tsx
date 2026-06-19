@@ -25,44 +25,44 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-brand-100 bg-white/95 backdrop-blur">
-      <div className="container-page flex items-center gap-4 py-3">
+      <div className="container-page flex items-center gap-5 py-4">
         <Link href="/" className="flex items-center gap-2 text-brand-600">
-          <LeafIcon className="h-7 w-7" />
-          <span className="text-lg font-extrabold tracking-tight text-brand-700">
+          <LeafIcon className="h-9 w-9" />
+          <span className="text-2xl font-extrabold tracking-tight text-brand-700">
             Tomat<span className="text-accent-500">Semena</span>
           </span>
         </Link>
 
         <form onSubmit={onSearch} className="relative ml-2 hidden flex-1 md:block">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-brand-400" />
+          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-6 w-6 -translate-y-1/2 text-brand-400" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Поиск: томат, перец, баклажан…"
-            className="input pl-10"
+            className="input pl-12 text-base md:py-3"
             aria-label="Поиск"
           />
         </form>
 
-        <nav className="ml-auto flex items-center gap-1 sm:gap-2">
-          <Link href="/favorites" className="relative rounded-full p-2 text-brand-700 hover:bg-brand-50" aria-label="Избранное">
-            <HeartIcon />
+        <nav className="ml-auto flex items-center gap-2 sm:gap-3">
+          <Link href="/favorites" className="relative rounded-full p-2.5 text-brand-700 hover:bg-brand-50" aria-label="Избранное">
+            <HeartIcon className="h-6 w-6" />
             {ready && wishlist.length > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-500 px-1 text-[10px] font-bold text-white">
+              <span className="absolute -right-0 -top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1 text-[11px] font-bold text-white">
                 {wishlist.length}
               </span>
             )}
           </Link>
-          <Link href="/cart" className="relative rounded-full p-2 text-brand-700 hover:bg-brand-50" aria-label="Корзина">
-            <CartIcon />
+          <Link href="/cart" className="relative rounded-full p-2.5 text-brand-700 hover:bg-brand-50" aria-label="Корзина">
+            <CartIcon className="h-6 w-6" />
             {ready && cartCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-500 px-1 text-[10px] font-bold text-white">
+              <span className="absolute -right-0 -top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1 text-[11px] font-bold text-white">
                 {cartCount}
               </span>
             )}
           </Link>
-          <Link href="/account" className="rounded-full p-2 text-brand-700 hover:bg-brand-50" aria-label="Личный кабинет">
-            <UserIcon />
+          <Link href="/account" className="rounded-full p-2.5 text-brand-700 hover:bg-brand-50" aria-label="Личный кабинет">
+            <UserIcon className="h-6 w-6" />
           </Link>
         </nav>
       </div>
