@@ -42,7 +42,7 @@ const getCategoriesCached = unstable_cache(
 );
 
 const PRODUCT_SELECT =
-  "id, slug, name, description, price, category_id, image_url, stock, is_new, is_featured, created_at, category:categories(slug, name)";
+  "id, slug, name, description, price, category_id, image_url, images, stock, is_new, is_featured, created_at, category:categories(slug, name)";
 
 export async function getCategories(): Promise<Category[]> {
   if (!isSupabaseConfigured()) return demoCategories;

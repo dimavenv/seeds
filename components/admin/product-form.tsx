@@ -15,34 +15,59 @@ export default function ProductForm({
   categories: Category[];
 }) {
   const router = useRouter();
-  const [imageUrl, setImageUrl] = useState(product?.image_url ?? "");
+  // Несколько фото: первое в списке — главное (показывается в каталоге).
+  const initialImages =
+    product?.images && product.images.length > 0
+      ? product.images
+      : product?.image_url
+      ? [product.image_url]
+      : [];
+  const [images, setImages] = useState<string[]>(initialImages);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
     setUploading(true);
     setError(null);
     try {
       const supabase = createClient();
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("product-images")
-        .upload(path, file, { upsert: false });
-      if (upErr) {
-        setError("Не удалось загрузить фото: " + upErr.message);
-        return;
+      const uploaded: string[] = [];
+      for (const file of files) {
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("product-images")
+          .upload(path, file, { upsert: false });
+        if (upErr) {
+          setError("Не удалось загрузить фото: " + upErr.message);
+          continue;
+        }
+        const { data } = supabase.storage
+          .from("product-images")
+          .getPublicUrl(path);
+        uploaded.push(data.publicUrl);
       }
-      const { data } = supabase.storage
-        .from("product-images")
-        .getPublicUrl(path);
-      setImageUrl(data.publicUrl);
+      if (uploaded.length) setImages((prev) => [...prev, ...uploaded]);
     } finally {
       setUploading(false);
+      e.target.value = ""; // позволить выбрать те же файлы снова
     }
+  }
+
+  function removeImage(url: string) {
+    setImages((prev) => prev.filter((u) => u !== url));
+  }
+
+  function makePrimary(url: string) {
+    setImages((prev) => [url, ...prev.filter((u) => u !== url)]);
+  }
+
+  function addByUrl(url: string) {
+    const v = url.trim();
+    if (v) setImages((prev) => [...prev, v]);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -50,7 +75,7 @@ export default function ProductForm({
     setSaving(true);
     setError(null);
     const formData = new FormData(e.currentTarget);
-    formData.set("image_url", imageUrl);
+    formData.set("images", JSON.stringify(images));
     const res = await saveProduct({}, formData);
     if (res.error) {
       setError(res.error);
@@ -104,24 +129,69 @@ export default function ProductForm({
       </label>
 
       <div>
-        <span className="mb-1 block text-sm font-semibold text-brand-700">Фото товара</span>
-        <div className="flex items-center gap-4">
-          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-brand-50">
-            {imageUrl && (
-              <Image src={imageUrl} alt="" fill sizes="96px" className="object-cover" />
-            )}
+        <span className="mb-1 block text-sm font-semibold text-brand-700">
+          Фото товара (можно несколько)
+        </span>
+        <p className="mb-2 text-xs text-brand-500">
+          Первое фото — главное (показывается в каталоге). Наведите на фото, чтобы
+          сделать его главным или удалить.
+        </p>
+
+        {images.length > 0 && (
+          <div className="mb-3 grid grid-cols-3 gap-3 sm:grid-cols-4">
+            {images.map((url, i) => (
+              <div
+                key={url}
+                className="group relative aspect-square overflow-hidden rounded-xl border border-brand-100 bg-brand-50"
+              >
+                <Image src={url} alt="" fill sizes="120px" className="object-cover" />
+                {i === 0 && (
+                  <span className="absolute left-1 top-1 rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                    Главное
+                  </span>
+                )}
+                <div className="absolute inset-0 flex items-end justify-between gap-1 bg-gradient-to-t from-black/55 to-transparent p-1 opacity-0 transition group-hover:opacity-100">
+                  {i !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => makePrimary(url)}
+                      className="rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-white"
+                    >
+                      Главное
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeImage(url)}
+                    className="ml-auto rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-accent-600 hover:bg-white"
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="flex-1">
-            <input type="file" accept="image/*" onChange={handleUpload} className="text-sm" />
-            {uploading && <p className="mt-1 text-sm text-brand-500">Загрузка…</p>}
-            <input
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="или вставьте URL изображения"
-              className="input mt-2"
-            />
-          </div>
-        </div>
+        )}
+
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleUpload}
+          className="text-sm"
+        />
+        {uploading && <p className="mt-1 text-sm text-brand-500">Загрузка…</p>}
+        <input
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addByUrl((e.target as HTMLInputElement).value);
+              (e.target as HTMLInputElement).value = "";
+            }
+          }}
+          placeholder="или вставьте URL изображения и нажмите Enter"
+          className="input mt-2"
+        />
       </div>
 
       <div className="flex gap-6">

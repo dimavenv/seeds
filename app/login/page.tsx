@@ -12,14 +12,9 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
-  const [sessionReason, setSessionReason] = useState(false);
 
-  // Сообщение, если сюда вернул /account (сессия не подтвердилась),
-  // и проверка доступности базы при загрузке страницы.
+  // Проверка доступности базы при загрузке страницы.
   useEffect(() => {
-    setSessionReason(
-      new URLSearchParams(window.location.search).get("reason") === "session"
-    );
     fetch("/api/health")
       .then((r) => r.json())
       .then(setHealth)
@@ -82,12 +77,6 @@ export default function LoginPage() {
                 ? "Не заданы ключи Supabase в .env.local."
                 : "Запрос к Supabase не прошёл. Чаще всего это значит, что проект на бесплатном тарифе поставлен на паузу — откройте дашборд Supabase и нажмите Restore. Также сверьте URL и ключи в .env.local."}
             </div>
-          </div>
-        )}
-
-        {sessionReason && !dbDown && (
-          <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
-            Не удалось подтвердить сессию. Попробуйте войти ещё раз.
           </div>
         )}
 

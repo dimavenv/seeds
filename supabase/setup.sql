@@ -31,6 +31,7 @@ create table if not exists public.products (
   price       numeric(10,2) not null default 0,
   category_id bigint references public.categories(id) on delete set null,
   image_url   text,
+  images      text[] not null default '{}',
   stock       int not null default 0,
   is_new      boolean not null default false,
   is_featured boolean not null default false,

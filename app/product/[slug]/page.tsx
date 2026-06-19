@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import AddToCart from "@/components/add-to-cart";
 import ProductGrid from "@/components/product-grid";
+import ProductGallery from "@/components/product-gallery";
 import { getProductBySlug, getProducts } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 
@@ -25,6 +25,14 @@ export default async function ProductPage({
     .filter((p) => p.id !== product.id)
     .slice(0, 4);
 
+  // Список фото для галереи: массив images, иначе одиночное image_url.
+  const galleryImages =
+    product.images && product.images.length > 0
+      ? product.images
+      : product.image_url
+      ? [product.image_url]
+      : [];
+
   return (
     <div className="container-page py-6">
       <nav className="mb-4 text-sm text-brand-500">
@@ -45,22 +53,7 @@ export default async function ProductPage({
       </nav>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <div className="card relative aspect-square overflow-hidden bg-brand-50">
-          {product.image_url ? (
-            <Image
-              src={product.image_url}
-              alt={product.name}
-              fill
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="object-cover"
-              priority
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-brand-300">
-              нет фото
-            </div>
-          )}
-        </div>
+        <ProductGallery images={galleryImages} alt={product.name} />
 
         <div>
           <div className="flex gap-2">

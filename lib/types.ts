@@ -13,6 +13,7 @@ export type Product = {
   price: number;
   category_id: number | null;
   image_url: string | null;
+  images?: string[] | null;
   stock: number;
   is_new: boolean;
   is_featured: boolean;

@@ -39,7 +39,17 @@ export async function saveProduct(
     ? Number(formData.get("category_id"))
     : null;
   const description = String(formData.get("description") ?? "").trim() || null;
-  const imageUrl = String(formData.get("image_url") ?? "").trim() || null;
+  // Несколько фото приходят JSON-массивом; image_url — первое (главное) фото.
+  let images: string[] = [];
+  try {
+    const parsed = JSON.parse(String(formData.get("images") ?? "[]"));
+    if (Array.isArray(parsed)) {
+      images = parsed.filter((u): u is string => typeof u === "string" && !!u.trim());
+    }
+  } catch {
+    images = [];
+  }
+  const imageUrl = images[0] ?? null;
   const stock = Number(formData.get("stock") ?? 0);
   const isNew = formData.get("is_new") === "on";
   const isFeatured = formData.get("is_featured") === "on";
@@ -56,6 +66,7 @@ export async function saveProduct(
     category_id: categoryId,
     description,
     image_url: imageUrl,
+    images,
     stock,
     is_new: isNew,
     is_featured: isFeatured,
