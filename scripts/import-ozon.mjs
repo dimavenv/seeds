@@ -54,6 +54,8 @@ const LIMIT = num("limit", 0); // 0 = все
 const MAX_IMAGES = num("images", 6);
 const DEFAULT_STOCK = num("stock", 100);
 const CHUNK = num("chunk", 25); // размер пачки записи (меньше = надёжнее на слабой сети)
+// Перенести уже сохранённые внешние картинки (ссылки Ozon) в наш Storage.
+const REHOST = has("--rehost");
 
 // ---------- 2. Проверка переменных ----------
 const {
@@ -68,7 +70,7 @@ function die(msg) {
   process.exit(1);
 }
 
-if (!OZON_CLIENT_ID || !OZON_API_KEY)
+if (!REHOST && (!OZON_CLIENT_ID || !OZON_API_KEY))
   die("Нет OZON_CLIENT_ID / OZON_API_KEY в .env.local (ЛК Ozon → Настройки → Seller API).");
 if (!NEXT_PUBLIC_SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)
   die("Нет NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY в .env.local.");
@@ -228,8 +230,119 @@ async function uploadImage(url, offerId, index) {
   return `${NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
+// Перенос уже сохранённых внешних картинок (ссылок Ozon) в наш Storage.
+async function rehostExisting() {
+  console.log("\n📥 Перенос картинок Ozon → Supabase Storage\n");
+  let supaHost = "";
+  try {
+    supaHost = new URL(NEXT_PUBLIC_SUPABASE_URL).host;
+  } catch {}
+
+  const page = 200;
+  let from = 0,
+    ok = 0,
+    skipped = 0,
+    faild = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, slug, image_url, images")
+      .order("id", { ascending: true })
+      .range(from, from + page - 1);
+    if (error) {
+      console.error("Чтение товаров: " + error.message);
+      break;
+    }
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+
+    for (const p of rows) {
+      const current =
+        p.images && p.images.length
+          ? p.images
+          : p.image_url
+          ? [p.image_url]
+          : [];
+      if (current.length === 0) {
+        skipped++;
+        continue;
+      }
+      // Уже у нас в Storage — пропускаем.
+      if (supaHost && current.every((u) => u.includes(supaHost))) {
+        skipped++;
+        continue;
+      }
+
+      process.stdout.write(
+        `[#${p.id}] ${(p.slug || "").slice(0, 40)} — ${current.length} фото… `
+      );
+      const out = [];
+      for (let k = 0; k < current.length; k++) {
+        const u = current[k];
+        if (supaHost && u.includes(supaHost)) {
+          out.push(u); // уже наше — сохраняем как есть
+          continue;
+        }
+        try {
+          out.push(await uploadImage(u, p.id, k));
+        } catch (e) {
+          console.warn(`\n   фото ${k}: ${e.message}`);
+        }
+      }
+      if (out.length === 0) {
+        faild++;
+        console.log("✗ ни одно фото не перенеслось");
+        continue;
+      }
+
+      // Обновляем ссылки на товаре (маленькое тело — проходит на любой сети).
+      let upErr = "";
+      for (let a = 0; a < 4; a++) {
+        try {
+          const { error: e2 } = await withTimeout(
+            supabase
+              .from("products")
+              .update({ images: out, image_url: out[0] })
+              .eq("id", p.id),
+            15000,
+            "обновление товара"
+          );
+          if (!e2) {
+            upErr = "";
+            break;
+          }
+          upErr = e2.message;
+        } catch (e) {
+          upErr = e.message;
+        }
+        await sleep(1000 * (a + 1));
+      }
+      if (upErr) {
+        faild++;
+        console.log(`✗ запись: ${upErr}`);
+      } else {
+        ok++;
+        console.log(`✓ ${out.length}`);
+      }
+    }
+    from += page;
+  }
+
+  console.log(
+    `\n✅ Перенесено: ${ok}, пропущено (уже у нас/без фото): ${skipped}, ошибок: ${faild}.`
+  );
+  if (faild)
+    console.log("Часть не перенеслась — запустите команду ещё раз (уже перенесённые пропустятся).");
+}
+
 // ---------- 7. Основной процесс ----------
 async function main() {
+  if (REHOST) {
+    await rehostExisting();
+    return;
+  }
+
   console.log(
     `\n🚚 Импорт с Ozon${DRY ? " (DRY-RUN, без записи)" : ""}` +
       `  фото≤${MAX_IMAGES}${NO_DESC ? ", без описаний" : ""}` +
