@@ -47,6 +47,9 @@ const SKIP_EXISTING = has("--skip-existing");
 const LINK_IMAGES = has("--link-images") || has("--link");
 // Только дописать описания к уже импортированным товарам (мелкие записи).
 const ONLY_DESC = has("--only-desc") || has("--descriptions");
+// По умолчанию --only-desc пропускает товары, где описание уже есть (удобно для
+// повторного прогона недостающих). --force — обновлять все.
+const FORCE = has("--force");
 const LIMIT = num("limit", 0); // 0 = все
 const MAX_IMAGES = num("images", 6);
 const DEFAULT_STOCK = num("stock", 100);
@@ -265,6 +268,18 @@ async function main() {
 
   // === Режим «только описания»: дописать description к существующим товарам ===
   if (ONLY_DESC) {
+    // Какие товары уже имеют описание — чтобы при повторе не трогать их.
+    const haveDesc = new Set();
+    if (!FORCE && !DRY) {
+      const { data } = await supabase
+        .from("products")
+        .select("slug")
+        .not("description", "is", null)
+        .neq("description", "");
+      for (const r of data ?? []) haveDesc.add(r.slug);
+      console.log(`Уже с описанием: ${haveDesc.size} — их пропустим (--force чтобы обновить все).\n`);
+    }
+
     let okd = 0,
       skd = 0,
       faild = 0,
@@ -273,6 +288,11 @@ async function main() {
       idx++;
       const offerId = it.offer_id ?? it.product_id;
       const slug = slugifyOffer(offerId, it.product_id);
+
+      if (haveDesc.has(slug)) {
+        skd++;
+        continue;
+      }
       process.stdout.write(`[${idx}/${productList.length}] ${slug} … `);
 
       let desc = null;
@@ -325,8 +345,10 @@ async function main() {
       }
     }
     console.log(
-      `\n✅ Описания: обновлено ${okd}, без описания ${skd}, ошибок ${faild}.`
+      `\n✅ Описания: обновлено ${okd}, пропущено (уже есть/нет текста) ${skd}, ошибок ${faild}.`
     );
+    if (faild)
+      console.log("Часть не прошла из-за сети — просто запустите команду ещё раз, она допишет только недостающие.");
     if (DRY) console.log("Это был DRY-RUN — ничего не записано.");
     return;
   }
