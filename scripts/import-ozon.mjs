@@ -45,6 +45,8 @@ const SKIP_EXISTING = has("--skip-existing");
 // Не перезаливать фото в наше хранилище, а сохранить прямые ссылки Ozon CDN.
 // Полезно, если сеть тормозит загрузку (POST) в Supabase Storage.
 const LINK_IMAGES = has("--link-images") || has("--link");
+// Только дописать описания к уже импортированным товарам (мелкие записи).
+const ONLY_DESC = has("--only-desc") || has("--descriptions");
 const LIMIT = num("limit", 0); // 0 = все
 const MAX_IMAGES = num("images", 6);
 const DEFAULT_STOCK = num("stock", 100);
@@ -260,6 +262,74 @@ async function main() {
   }
   const productList = LIMIT ? list.slice(0, LIMIT) : list;
   console.log(`\nВсего к импорту: ${productList.length}\n`);
+
+  // === Режим «только описания»: дописать description к существующим товарам ===
+  if (ONLY_DESC) {
+    let okd = 0,
+      skd = 0,
+      faild = 0,
+      idx = 0;
+    for (const it of productList) {
+      idx++;
+      const offerId = it.offer_id ?? it.product_id;
+      const slug = slugifyOffer(offerId, it.product_id);
+      process.stdout.write(`[${idx}/${productList.length}] ${slug} … `);
+
+      let desc = null;
+      try {
+        const d = await ozon("/v1/product/info/description", {
+          product_id: it.product_id,
+        });
+        desc = stripHtml((d.result ?? d).description);
+      } catch (e) {
+        faild++;
+        console.log(`✗ описание Ozon: ${e.message}`);
+        continue;
+      }
+      if (!desc) {
+        skd++;
+        console.log("— нет описания");
+        continue;
+      }
+      if (DRY) {
+        okd++;
+        console.log(`(dry) ${desc.length} символов`);
+        continue;
+      }
+
+      // обновляем ТОЛЬКО колонку description (тело крошечное → проходит)
+      let err = "";
+      for (let a = 0; a < 4; a++) {
+        try {
+          const { error } = await withTimeout(
+            supabase.from("products").update({ description: desc }).eq("slug", slug),
+            12000,
+            "обновление описания"
+          );
+          if (!error) {
+            err = "";
+            break;
+          }
+          err = error.message;
+        } catch (e) {
+          err = e.message;
+        }
+        await sleep(1000 * (a + 1));
+      }
+      if (err) {
+        faild++;
+        console.log(`✗ ${err}`);
+      } else {
+        okd++;
+        console.log("✓");
+      }
+    }
+    console.log(
+      `\n✅ Описания: обновлено ${okd}, без описания ${skd}, ошибок ${faild}.`
+    );
+    if (DRY) console.log("Это был DRY-RUN — ничего не записано.");
+    return;
+  }
 
   // 7.3 Идём батчами по 100: подробности + фото + описание
   let ok = 0,
