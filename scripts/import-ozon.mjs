@@ -185,25 +185,38 @@ function normalizeImages(raw) {
 }
 
 // ---------- 6. Загрузка одной картинки в Supabase Storage ----------
+// Заливаем напрямую через Storage REST API телом-Buffer: это надёжнее, чем
+// storage-клиент supabase-js, который в Node может зависать на Blob/стриме.
+const BUCKET = "product-images";
 async function uploadImage(url, offerId, index) {
   const res = await fetchT(url, {}, 25000); // скачивание фото с CDN Ozon
   if (!res.ok) throw new Error(`скачивание ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
+  const body = Buffer.from(await res.arrayBuffer());
   const ct = res.headers.get("content-type") || "image/jpeg";
   const ext = (url.split("?")[0].split(".").pop() || "jpg").slice(0, 5);
   const safeOffer = String(offerId).replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40);
   const path = `ozon/${safeOffer}/${index}.${ext}`;
-  const blob = new Blob([buf], { type: ct });
-  const { error } = await withTimeout(
-    supabase.storage
-      .from("product-images")
-      .upload(path, blob, { contentType: ct, upsert: true }),
-    45000,
-    "загрузка в Storage"
+
+  const endpoint = `${NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`;
+  const up = await fetchT(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": ct,
+        "x-upsert": "true",
+      },
+      body,
+    },
+    45000
   );
-  if (error) throw new Error("upload: " + error.message);
-  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
-  return data.publicUrl;
+  if (!up.ok) {
+    const t = await up.text();
+    throw new Error(`upload ${up.status}: ${t.slice(0, 200)}`);
+  }
+  return `${NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
 // ---------- 7. Основной процесс ----------
