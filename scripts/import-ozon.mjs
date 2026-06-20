@@ -72,8 +72,10 @@ function die(msg) {
 
 if (!REHOST && (!OZON_CLIENT_ID || !OZON_API_KEY))
   die("Нет OZON_CLIENT_ID / OZON_API_KEY в .env.local (ЛК Ozon → Настройки → Seller API).");
-if (!NEXT_PUBLIC_SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)
-  die("Нет NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY в .env.local.");
+if (!NEXT_PUBLIC_SUPABASE_URL)
+  die("Не задан NEXT_PUBLIC_SUPABASE_URL (в .env.local или в секретах/переменных GitHub Actions).");
+if (!SUPABASE_SERVICE_ROLE_KEY)
+  die("Не задан SUPABASE_SERVICE_ROLE_KEY (в .env.local или в секретах GitHub Actions).");
 
 const supabase = createClient(
   NEXT_PUBLIC_SUPABASE_URL,

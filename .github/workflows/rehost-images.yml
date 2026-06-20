@@ -17,5 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run import:ozon -- --rehost
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          # URL не секретный (NEXT_PUBLIC) — берём из Secrets ИЛИ из Variables,
+          # что бы вы ни добавили. Service-ключ — только из Secrets.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
