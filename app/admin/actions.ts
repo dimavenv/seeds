@@ -103,3 +103,15 @@ export async function updateOrderStatus(
   await supabase.from("orders").update({ status }).eq("id", id);
   revalidatePath("/admin/orders");
 }
+
+export async function updateOrderTracking(
+  id: number,
+  tracking: string
+): Promise<void> {
+  const session = await getSession();
+  if (!session.isAdmin) return;
+  const value = tracking.trim() || null;
+  const supabase = createClient();
+  await supabase.from("orders").update({ tracking_number: value }).eq("id", id);
+  revalidatePath("/admin/orders");
+}

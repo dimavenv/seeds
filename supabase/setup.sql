@@ -51,6 +51,7 @@ create table if not exists public.orders (
   total         numeric(10,2) not null default 0,
   delivery_method text,
   delivery_cost numeric(10,2) not null default 0,
+  tracking_number text,
   user_id       uuid references auth.users(id) on delete set null,
   created_at    timestamptz not null default now()
 );

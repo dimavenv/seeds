@@ -47,6 +47,7 @@ export type Order = {
   total: number;
   delivery_method?: string | null;
   delivery_cost?: number | null;
+  tracking_number?: string | null;
   user_id: string | null;
   created_at: string;
   order_items?: OrderItem[];

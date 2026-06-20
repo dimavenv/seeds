@@ -25,7 +25,7 @@ export default async function OrderDetailPage({
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, customer_name, phone, email, address, comment, status, total, delivery_method, delivery_cost, created_at, order_items(id, product_id, name, price, qty)"
+      "id, customer_name, phone, email, address, comment, status, total, delivery_method, delivery_cost, tracking_number, created_at, order_items(id, product_id, name, price, qty)"
     )
     .eq("id", Number(params.id))
     .eq("user_id", session.userId)
@@ -88,6 +88,26 @@ export default async function OrderDetailPage({
       <div className="card p-5">
         <OrderStatusSteps status={order.status} />
       </div>
+
+      {/* Трек-номер отправления */}
+      {order.tracking_number && (
+        <div className="card mt-4 flex flex-wrap items-center justify-between gap-3 p-5">
+          <div>
+            <div className="text-sm text-brand-500">Трек-номер отправления</div>
+            <div className="select-all text-lg font-bold tracking-wide text-brand-800">
+              {order.tracking_number}
+            </div>
+          </div>
+          <a
+            href={`https://www.pochta.ru/tracking#${encodeURIComponent(order.tracking_number)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary"
+          >
+            Отследить на Почте России
+          </a>
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         {/* Товары */}

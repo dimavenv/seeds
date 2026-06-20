@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { formatPrice, formatDate } from "@/lib/format";
 import { ORDER_STATUS_LABELS, type Order, type OrderStatus, type Product } from "@/lib/types";
 import LogoutButton from "@/components/logout-button";
+import ThemeToggle from "@/components/theme-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export default async function AccountPage() {
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, total, status, created_at, order_items(id, product_id, name, price, qty)"
+      "id, total, status, tracking_number, created_at, order_items(id, product_id, name, price, qty)"
     )
     .eq("user_id", session.userId)
     .order("created_at", { ascending: false });
@@ -77,6 +78,10 @@ export default async function AccountPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 rounded-full border border-brand-200 pl-3 text-sm text-brand-600">
+            Тема
+            <ThemeToggle />
+          </span>
           {session.isAdmin && (
             <Link href="/admin" className="btn-primary">
               Админ-панель
@@ -115,6 +120,11 @@ export default async function AccountPage() {
                     <div className="text-sm text-brand-500">
                       {formatDate(o.created_at)} · {count} тов.
                     </div>
+                    {o.tracking_number && (
+                      <div className="mt-0.5 text-xs text-brand-500">
+                        📮 Трек: <span className="font-semibold text-brand-700">{o.tracking_number}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`badge ${STATUS_BADGE[o.status]}`}>

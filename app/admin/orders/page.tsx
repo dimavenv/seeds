@@ -3,6 +3,7 @@ import { formatPrice, formatDate } from "@/lib/format";
 import { deliveryMethodLabel } from "@/lib/delivery";
 import { decryptField } from "@/lib/crypto";
 import OrderStatusSelect from "@/components/admin/order-status-select";
+import OrderTrackingInput from "@/components/admin/order-tracking-input";
 import type { Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default async function AdminOrders() {
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, customer_name, phone, email, address, comment, status, total, delivery_method, delivery_cost, created_at, order_items(id, name, price, qty)"
+      "id, customer_name, phone, email, address, comment, status, total, delivery_method, delivery_cost, tracking_number, created_at, order_items(id, name, price, qty)"
     )
     .order("created_at", { ascending: false });
 
@@ -41,11 +42,12 @@ export default async function AdminOrders() {
                     {formatDate(o.created_at)}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <span className="text-lg font-extrabold text-brand-700">
                     {formatPrice(o.total)}
                   </span>
                   <OrderStatusSelect id={o.id} status={o.status} />
+                  <OrderTrackingInput id={o.id} tracking={o.tracking_number ?? null} />
                 </div>
               </div>
 

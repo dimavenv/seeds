@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/components/store-provider";
 import Logo from "@/components/logo";
 import SearchBox from "@/components/search-box";
-import ThemeToggle from "@/components/theme-toggle";
 import {
   CartIcon,
   CloseIcon,
@@ -52,8 +51,6 @@ export default function Header() {
           >
             <SearchIcon className="h-6 w-6" />
           </button>
-
-          <ThemeToggle />
 
           <Link href="/favorites" className="relative rounded-full p-2 text-brand-700 hover:bg-brand-50 sm:p-2.5" aria-label="Избранное">
             <HeartIcon className="h-6 w-6" />
