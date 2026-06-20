@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatPrice, formatDate } from "@/lib/format";
 import { deliveryMethodLabel } from "@/lib/delivery";
+import { decryptField } from "@/lib/crypto";
 import OrderStatusSelect from "@/components/admin/order-status-select";
 import type { Order } from "@/lib/types";
 
@@ -51,9 +52,9 @@ export default async function AdminOrders() {
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <div className="text-sm text-brand-700">
                   <div><span className="text-brand-500">Клиент:</span> {o.customer_name}</div>
-                  <div><span className="text-brand-500">Телефон:</span> {o.phone}</div>
-                  {o.email && <div><span className="text-brand-500">Email:</span> {o.email}</div>}
-                  <div><span className="text-brand-500">Адрес:</span> {o.address}</div>
+                  <div><span className="text-brand-500">Телефон:</span> {decryptField(o.phone)}</div>
+                  {o.email && <div><span className="text-brand-500">Email:</span> {decryptField(o.email)}</div>}
+                  <div><span className="text-brand-500">Адрес:</span> {decryptField(o.address)}</div>
                   {o.delivery_method && (
                     <div>
                       <span className="text-brand-500">Доставка:</span>{" "}

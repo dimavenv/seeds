@@ -4,7 +4,7 @@ import type { Category } from "@/lib/types";
 
 export default function Footer({ categories }: { categories: Category[] }) {
   return (
-    <footer className="mt-16 border-t border-brand-100 bg-white">
+    <footer className="mt-16 border-t border-brand-100 bg-surface">
       <div className="container-page grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-center gap-2 text-brand-600">

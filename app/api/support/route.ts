@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/data";
+import { encryptField } from "@/lib/crypto";
 
 // Привязка заявки к аккаунту — «по возможности» (не блокирует отправку).
 async function bestEffortUserId(): Promise<string | null> {
@@ -66,9 +67,9 @@ export async function POST(request: Request) {
 
     const { error } = await supabase.from("support_requests").insert({
       name,
-      email,
+      email: encryptField(email),
       subject,
-      message,
+      message: encryptField(message),
       status: "new",
       user_id: userId,
     });

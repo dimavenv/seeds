@@ -397,7 +397,7 @@ function SuggestField({
       {canSuggest && open && items.length > 0 && (
         <ul
           role="listbox"
-          className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-brand-200 bg-white py-1 shadow-lg"
+          className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-brand-200 bg-surface py-1 shadow-lg"
         >
           {items.map((s, i) => (
             <li key={`${s.value}-${i}`} role="option" aria-selected={i === active}>

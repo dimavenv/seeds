@@ -14,7 +14,7 @@ export default function AddToCart({ product }: { product: Product }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <div className="flex items-center rounded-full border border-brand-200 bg-white">
+        <div className="flex items-center rounded-full border border-brand-200 bg-surface">
           <button
             onClick={() => setQty((q) => Math.max(1, q - 1))}
             className="px-4 py-2 text-lg text-brand-600"
@@ -48,7 +48,7 @@ export default function AddToCart({ product }: { product: Product }) {
           className={`btn !px-3 ${
             wished
               ? "bg-accent-500 text-white"
-              : "border border-brand-200 bg-white text-brand-600"
+              : "border border-brand-200 bg-surface text-brand-600"
           }`}
         >
           <HeartIcon className="h-5 w-5" filled={wished} />

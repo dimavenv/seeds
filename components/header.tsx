@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/components/store-provider";
 import Logo from "@/components/logo";
 import SearchBox from "@/components/search-box";
+import ThemeToggle from "@/components/theme-toggle";
 import {
   CartIcon,
   CloseIcon,
@@ -26,7 +27,7 @@ export default function Header() {
   }, [searchOpen]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-brand-100 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-brand-100 bg-surface/95 backdrop-blur">
       <div className="container-page flex items-center gap-3 py-3 sm:gap-5 sm:py-4">
         <Link
           href="/"
@@ -51,6 +52,8 @@ export default function Header() {
           >
             <SearchIcon className="h-6 w-6" />
           </button>
+
+          <ThemeToggle />
 
           <Link href="/favorites" className="relative rounded-full p-2 text-brand-700 hover:bg-brand-50 sm:p-2.5" aria-label="Избранное">
             <HeartIcon className="h-6 w-6" />
@@ -104,7 +107,7 @@ export default function Header() {
             className="absolute inset-0 bg-black/50"
             onClick={() => setSearchOpen(false)}
           />
-          <div className="relative mx-auto max-w-2xl bg-white p-4 shadow-lg">
+          <div className="relative mx-auto max-w-2xl bg-surface p-4 shadow-lg">
             <div className="flex items-center gap-2">
               <div className="flex-1">
                 <SearchBox autoFocus onNavigate={() => setSearchOpen(false)} />

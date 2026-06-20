@@ -35,7 +35,7 @@ export default function OrderStatusSteps({ status }: { status: OrderStatus }) {
                 className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-lg transition ${
                   reached
                     ? "border-brand-600 bg-brand-600 text-white"
-                    : "border-brand-200 bg-white text-brand-300"
+                    : "border-brand-200 bg-surface text-brand-300"
                 } ${active ? "ring-4 ring-brand-100" : ""}`}
               >
                 {done ? "✓" : step.icon}

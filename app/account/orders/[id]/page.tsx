@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
 import { formatPrice, formatDate } from "@/lib/format";
 import { deliveryMethodLabel } from "@/lib/delivery";
+import { decryptField } from "@/lib/crypto";
 import { ORDER_STATUS_LABELS, type Order, type Product } from "@/lib/types";
 import OrderStatusSteps from "@/components/order-status-steps";
 import ReorderButton from "@/components/reorder-button";
@@ -158,8 +159,8 @@ export default async function OrderDetailPage({
           <div className="card p-5 text-sm text-brand-700">
             <h3 className="mb-3 font-bold text-brand-800">Доставка</h3>
             <div><span className="text-brand-500">Получатель:</span> {order.customer_name}</div>
-            <div><span className="text-brand-500">Телефон:</span> {order.phone}</div>
-            <div className="mt-1"><span className="text-brand-500">Адрес:</span> {order.address}</div>
+            <div><span className="text-brand-500">Телефон:</span> {decryptField(order.phone)}</div>
+            <div className="mt-1"><span className="text-brand-500">Адрес:</span> {decryptField(order.address)}</div>
             {order.comment && (
               <div className="mt-1"><span className="text-brand-500">Комментарий:</span> {order.comment}</div>
             )}

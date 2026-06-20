@@ -111,7 +111,7 @@ export default function SearchBox({
       </form>
 
       {open && query.length >= 2 && (
-        <div className="absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-xl">
+        <div className="absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-xl">
           {items.length > 0 ? (
             <>
               <ul className="max-h-[60vh] overflow-auto py-1">

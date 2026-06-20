@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/format";
+import { decryptField } from "@/lib/crypto";
 import type { SupportRequest } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,10 @@ export default async function AdminSupport() {
         </div>
       ) : (
         <div className="space-y-4">
-          {requests.map((r) => (
+          {requests.map((r) => {
+            const email = decryptField(r.email) ?? "";
+            const message = decryptField(r.message);
+            return (
             <div key={r.id} className="card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -37,7 +41,7 @@ export default async function AdminSupport() {
                   </div>
                 </div>
                 <a
-                  href={`mailto:${r.email}?subject=Re: ${encodeURIComponent(r.subject)}`}
+                  href={`mailto:${email}?subject=Re: ${encodeURIComponent(r.subject)}`}
                   className="btn-outline !py-1.5"
                 >
                   Ответить
@@ -48,16 +52,17 @@ export default async function AdminSupport() {
                 <div>
                   <span className="text-brand-500">От:</span> {r.name} ·{" "}
                   <a
-                    href={`mailto:${r.email}`}
+                    href={`mailto:${email}`}
                     className="text-brand-700 underline hover:text-brand-800"
                   >
-                    {r.email}
+                    {email}
                   </a>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap">{r.message}</p>
+                <p className="mt-2 whitespace-pre-wrap">{message}</p>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

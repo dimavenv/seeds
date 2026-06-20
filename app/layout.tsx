@@ -19,7 +19,15 @@ export default async function RootLayout({
   const categories = await getCategories();
 
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
+      <head>
+        {/* Применяем тему до отрисовки — без мигания светлой темы. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="flex min-h-screen flex-col">
         <StoreProvider>
           <Header />

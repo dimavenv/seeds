@@ -4,6 +4,48 @@
 
 :root {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Светлая тема (зелёная садовая палитра LETTO) */
+  --brand-50: 241 248 238;
+  --brand-100: 220 237 211;
+  --brand-200: 186 221 174;
+  --brand-300: 146 200 120;
+  --brand-400: 108 174 78;
+  --brand-500: 79 146 48;
+  --brand-600: 60 116 36;
+  --brand-700: 48 91 31;
+  --brand-800: 41 73 30;
+  --brand-900: 36 62 28;
+
+  --accent-400: 255 138 61;
+  --accent-500: 245 115 31;
+  --accent-600: 221 94 19;
+
+  --surface: 255 255 255;
+}
+
+/* Тёмная тема: «края» зелёной шкалы превращаем в нейтрали (50–200 — тёмные
+   фоны, 700–900 — светлый текст), середину (300–600) оставляем зелёной для
+   кнопок/навигации/цен. */
+.dark {
+  color-scheme: dark;
+
+  --brand-50: 17 22 15;   /* фон страницы */
+  --brand-100: 30 38 27;  /* подложки/ховеры/бейджи */
+  --brand-200: 48 60 43;  /* границы */
+  --brand-300: 110 165 95;
+  --brand-400: 130 188 105;
+  --brand-500: 92 168 58;  /* основная зелёная кнопка */
+  --brand-600: 86 160 64;  /* навигация */
+  --brand-700: 198 224 186; /* текст */
+  --brand-800: 220 236 211; /* текст */
+  --brand-900: 236 246 230; /* заголовки */
+
+  --accent-400: 255 150 75;
+  --accent-500: 247 128 50;
+  --accent-600: 235 110 35;
+
+  --surface: 23 29 21; /* карточки/шапка/поля — чуть светлее фона */
 }
 
 body {
@@ -24,13 +66,13 @@ body {
     @apply btn bg-accent-500 text-white hover:bg-accent-600;
   }
   .btn-outline {
-    @apply btn border border-brand-200 bg-white text-brand-700 hover:bg-brand-50;
+    @apply btn border border-brand-200 bg-surface text-brand-700 hover:bg-brand-100;
   }
   .input {
-    @apply w-full rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm text-brand-900 placeholder:text-brand-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100;
+    @apply w-full rounded-xl border border-brand-200 bg-surface px-4 py-2.5 text-sm text-brand-900 placeholder:text-brand-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100;
   }
   .card {
-    @apply rounded-2xl border border-brand-100 bg-white shadow-sm;
+    @apply rounded-2xl border border-brand-100 bg-surface shadow-sm;
   }
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;

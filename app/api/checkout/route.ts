@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/data";
 import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
+import { encryptField } from "@/lib/crypto";
 import type { Product } from "@/lib/types";
 
 type IncomingItem = { id: number; qty: number };
@@ -113,9 +114,9 @@ export async function POST(request: Request) {
       .from("orders")
       .insert({
         customer_name: customer_name.trim(),
-        phone: phone.trim(),
-        email: email?.trim() || null,
-        address: address.trim(),
+        phone: encryptField(phone.trim()),
+        email: encryptField(email?.trim() || null),
+        address: encryptField(address.trim()),
         comment: comment?.trim() || null,
         delivery_method,
         delivery_cost: DELIVERY_COST,
