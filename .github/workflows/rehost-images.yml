@@ -1,10 +1,14 @@
 name: Перенос картинок Ozon → Supabase
 
 # Запуск вручную из вкладки Actions (кнопка «Run workflow»).
-# Качает картинки по ссылкам Ozon из базы и заливает их в Supabase Storage —
-# работает с быстрой сети GitHub, поэтому загрузка не виснет.
+# URL проекта Supabase вводится прямо в форме запуска (он не секретный).
+# Service-ключ берётся из секрета репозитория SUPABASE_SERVICE_ROLE_KEY.
 on:
   workflow_dispatch:
+    inputs:
+      supabase_url:
+        description: "URL проекта Supabase, напр. https://xxxx.supabase.co"
+        required: true
 
 jobs:
   rehost:
@@ -13,11 +17,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
       - run: npm run import:ozon -- --rehost
         env:
-          # URL не секретный (NEXT_PUBLIC) — берём из Secrets ИЛИ из Variables,
-          # что бы вы ни добавили. Service-ключ — только из Secrets.
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL }}
+          # URL — из поля запуска (приоритет), иначе из секрета/переменной.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ inputs.supabase_url || secrets.NEXT_PUBLIC_SUPABASE_URL || vars.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
