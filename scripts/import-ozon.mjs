@@ -267,6 +267,7 @@ async function main() {
     processed = 0;
   const total = productList.length;
   const BATCH = 100;
+  const allRows = []; // собираем строки, пишем пачками в конце (надёжнее)
 
   for (let i = 0; i < productList.length; i += BATCH) {
     const batch = productList.slice(i, i + BATCH);
@@ -368,7 +369,7 @@ async function main() {
           }
         }
 
-        const row = {
+        allRows.push({
           slug,
           name,
           description,
@@ -379,28 +380,54 @@ async function main() {
           stock: DEFAULT_STOCK,
           is_new: false,
           is_featured: false,
-        };
-
-        const { error } = await withTimeout(
-          supabase.from("products").upsert(row, { onConflict: "slug" }),
-          30000,
-          "запись товара"
-        );
-        if (error) throw new Error(error.message);
-
-        ok++;
-        console.log(`✓ ${uploaded.length} фото, ${categorySlug ?? "без категории"}`);
+        });
+        console.log(`✓ собрано (${uploaded.length} фото, ${categorySlug ?? "без категории"})`);
       } catch (e) {
         failed++;
         console.log(`✗ ${e.message}`);
       }
 
-      await sleep(120); // бережём лимиты Ozon
+      await sleep(80); // бережём лимиты Ozon
+    }
+  }
+
+  // 7.4 Запись пачками — на нестабильной сети надёжнее, чем сотни запросов.
+  if (!DRY && allRows.length) {
+    console.log(`\nСобрано ${allRows.length} товаров. Записываю пачками по 50…`);
+    const CHUNK = 50;
+    for (let i = 0; i < allRows.length; i += CHUNK) {
+      const chunk = allRows.slice(i, i + CHUNK);
+      let done = false,
+        lastErr = "";
+      for (let attempt = 0; attempt < 5 && !done; attempt++) {
+        try {
+          const { error } = await withTimeout(
+            supabase.from("products").upsert(chunk, { onConflict: "slug" }),
+            25000,
+            "запись пачки"
+          );
+          if (!error) {
+            done = true;
+            break;
+          }
+          lastErr = error.message;
+        } catch (e) {
+          lastErr = e.message;
+        }
+        if (!done) await sleep(1500 * (attempt + 1));
+      }
+      if (done) {
+        ok += chunk.length;
+        console.log(`  ✓ записано ${Math.min(i + CHUNK, allRows.length)}/${allRows.length}`);
+      } else {
+        failed += chunk.length;
+        console.log(`  ✗ пачка ${i + 1}–${i + chunk.length} не записалась: ${lastErr}`);
+      }
     }
   }
 
   console.log(
-    `\n✅ Готово. Импортировано: ${ok}, пропущено: ${skipped}, ошибок: ${failed}.`
+    `\n✅ Готово. Записано: ${ok}, пропущено: ${skipped}, ошибок: ${failed}.`
   );
   if (DRY) console.log("Это был DRY-RUN — ничего не записано. Уберите --dry для реального импорта.");
 }
