@@ -72,17 +72,54 @@ const supabase = createClient(
 
 // ---------- 3. Хелпер Ozon Seller API ----------
 const OZON_BASE = "https://api-seller.ozon.ru";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// fetch с таймаутом (иначе зависшее соединение остановит весь импорт молча).
+async function fetchT(url, opts = {}, ms = 30000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Обернуть любой промис таймаутом (для зависающих вызовов Storage).
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) =>
+      setTimeout(() => rej(new Error(`таймаут ${label} (${ms}мс)`)), ms)
+    ),
+  ]);
+}
+
 async function ozon(path, body) {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(OZON_BASE + path, {
-      method: "POST",
-      headers: {
-        "Client-Id": OZON_CLIENT_ID,
-        "Api-Key": OZON_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body ?? {}),
-    });
+    let res;
+    try {
+      res = await fetchT(
+        OZON_BASE + path,
+        {
+          method: "POST",
+          headers: {
+            "Client-Id": OZON_CLIENT_ID,
+            "Api-Key": OZON_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body ?? {}),
+        },
+        30000
+      );
+    } catch (e) {
+      // таймаут/сетевая ошибка — повторяем
+      if (attempt < 3) {
+        await sleep(1500 * (attempt + 1));
+        continue;
+      }
+      throw new Error(`Ozon ${path}: сеть/таймаут — ${e.message}`);
+    }
     if (res.status === 429) {
       // превышен лимит — ждём и повторяем
       await sleep(2000 * (attempt + 1));
@@ -96,8 +133,6 @@ async function ozon(path, body) {
   }
   throw new Error(`Ozon ${path}: слишком много 429 (лимит запросов)`);
 }
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- 4. Категория по названию ----------
 const CATEGORY_RULES = [
@@ -151,16 +186,21 @@ function normalizeImages(raw) {
 
 // ---------- 6. Загрузка одной картинки в Supabase Storage ----------
 async function uploadImage(url, offerId, index) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`фото ${res.status}`);
+  const res = await fetchT(url, {}, 25000); // скачивание фото с CDN Ozon
+  if (!res.ok) throw new Error(`скачивание ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const ct = res.headers.get("content-type") || "image/jpeg";
   const ext = (url.split("?")[0].split(".").pop() || "jpg").slice(0, 5);
   const safeOffer = String(offerId).replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40);
   const path = `ozon/${safeOffer}/${index}.${ext}`;
-  const { error } = await supabase.storage
-    .from("product-images")
-    .upload(path, buf, { contentType: ct, upsert: true });
+  const blob = new Blob([buf], { type: ct });
+  const { error } = await withTimeout(
+    supabase.storage
+      .from("product-images")
+      .upload(path, blob, { contentType: ct, upsert: true }),
+    45000,
+    "загрузка в Storage"
+  );
   if (error) throw new Error("upload: " + error.message);
   const { data } = supabase.storage.from("product-images").getPublicUrl(path);
   return data.publicUrl;
@@ -207,7 +247,9 @@ async function main() {
   // 7.3 Идём батчами по 100: подробности + фото + описание
   let ok = 0,
     skipped = 0,
-    failed = 0;
+    failed = 0,
+    processed = 0;
+  const total = productList.length;
   const BATCH = 100;
 
   for (let i = 0; i < productList.length; i += BATCH) {
@@ -223,6 +265,7 @@ async function main() {
       continue;
     }
     const infoItems = info.items ?? info.result?.items ?? [];
+    console.log(`Батч ${i / BATCH + 1}: получено ${infoItems.length} товаров, обрабатываю…`);
 
     for (const item of infoItems) {
       const offerId = item.offer_id ?? item.id;
@@ -231,6 +274,7 @@ async function main() {
         failed++;
         continue;
       }
+      processed++;
       const slug = slugifyOffer(offerId, item.id);
 
       try {
@@ -291,12 +335,15 @@ async function main() {
         }
 
         // загрузка фото в наше хранилище
+        process.stdout.write(
+          `[${processed}/${total}] ${name.slice(0, 60)} — ${srcImages.length} фото… `
+        );
         const uploaded = [];
         for (let k = 0; k < srcImages.length; k++) {
           try {
             uploaded.push(await uploadImage(srcImages[k], offerId, k));
           } catch (e) {
-            console.warn(`    фото ${k} не загрузилось: ${e.message}`);
+            console.warn(`\n    фото ${k} не загрузилось: ${e.message}`);
           }
         }
 
@@ -313,18 +360,18 @@ async function main() {
           is_featured: false,
         };
 
-        const { error } = await supabase
-          .from("products")
-          .upsert(row, { onConflict: "slug" });
+        const { error } = await withTimeout(
+          supabase.from("products").upsert(row, { onConflict: "slug" }),
+          30000,
+          "запись товара"
+        );
         if (error) throw new Error(error.message);
 
         ok++;
-        console.log(
-          `  ✓ [${ok}] ${name} — ${uploaded.length} фото — ${categorySlug ?? "без категории"}`
-        );
+        console.log(`✓ ${uploaded.length} фото, ${categorySlug ?? "без категории"}`);
       } catch (e) {
         failed++;
-        console.error(`  ✗ ${name}: ${e.message}`);
+        console.log(`✗ ${e.message}`);
       }
 
       await sleep(120); // бережём лимиты Ozon
