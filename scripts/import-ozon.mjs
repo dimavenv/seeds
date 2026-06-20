@@ -42,6 +42,9 @@ const num = (name, def) => {
 const DRY = has("--dry");
 const NO_DESC = has("--no-desc");
 const SKIP_EXISTING = has("--skip-existing");
+// Не перезаливать фото в наше хранилище, а сохранить прямые ссылки Ozon CDN.
+// Полезно, если сеть тормозит загрузку (POST) в Supabase Storage.
+const LINK_IMAGES = has("--link-images") || has("--link");
 const LIMIT = num("limit", 0); // 0 = все
 const MAX_IMAGES = num("images", 6);
 const DEFAULT_STOCK = num("stock", 100);
@@ -347,16 +350,21 @@ async function main() {
           continue;
         }
 
-        // загрузка фото в наше хранилище
         process.stdout.write(
           `[${processed}/${total}] ${name.slice(0, 60)} — ${srcImages.length} фото… `
         );
-        const uploaded = [];
-        for (let k = 0; k < srcImages.length; k++) {
-          try {
-            uploaded.push(await uploadImage(srcImages[k], offerId, k));
-          } catch (e) {
-            console.warn(`\n    фото ${k} не загрузилось: ${e.message}`);
+        let uploaded = [];
+        if (LINK_IMAGES) {
+          // Сохраняем прямые ссылки Ozon CDN — без тяжёлых POST в Storage.
+          uploaded = srcImages;
+        } else {
+          // Скачиваем и перезаливаем фото в наше хранилище.
+          for (let k = 0; k < srcImages.length; k++) {
+            try {
+              uploaded.push(await uploadImage(srcImages[k], offerId, k));
+            } catch (e) {
+              console.warn(`\n    фото ${k} не загрузилось: ${e.message}`);
+            }
           }
         }
 
