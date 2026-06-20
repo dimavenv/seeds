@@ -48,6 +48,7 @@ const LINK_IMAGES = has("--link-images") || has("--link");
 const LIMIT = num("limit", 0); // 0 = все
 const MAX_IMAGES = num("images", 6);
 const DEFAULT_STOCK = num("stock", 100);
+const CHUNK = num("chunk", 25); // размер пачки записи (меньше = надёжнее на слабой сети)
 
 // ---------- 2. Проверка переменных ----------
 const {
@@ -391,38 +392,49 @@ async function main() {
     }
   }
 
-  // 7.4 Запись пачками — на нестабильной сети надёжнее, чем сотни запросов.
+  // 7.4 Запись. Пробуем пачкой; если не прошла (большое тело виснет на
+  // нестабильной сети) — дописываем по одному (крошечные тела проходят).
+  async function tryUpsert(payload, ms, attempts) {
+    let lastErr = "";
+    for (let a = 0; a < attempts; a++) {
+      try {
+        const { error } = await withTimeout(
+          supabase.from("products").upsert(payload, { onConflict: "slug" }),
+          ms,
+          "upsert"
+        );
+        if (!error) return null;
+        lastErr = error.message;
+      } catch (e) {
+        lastErr = e.message;
+      }
+      await sleep(1000 * (a + 1));
+    }
+    return lastErr || "не удалось";
+  }
+
   if (!DRY && allRows.length) {
-    console.log(`\nСобрано ${allRows.length} товаров. Записываю пачками по 50…`);
-    const CHUNK = 50;
+    console.log(`\nСобрано ${allRows.length} товаров. Записываю пачками по ${CHUNK}…`);
     for (let i = 0; i < allRows.length; i += CHUNK) {
       const chunk = allRows.slice(i, i + CHUNK);
-      let done = false,
-        lastErr = "";
-      for (let attempt = 0; attempt < 5 && !done; attempt++) {
-        try {
-          const { error } = await withTimeout(
-            supabase.from("products").upsert(chunk, { onConflict: "slug" }),
-            25000,
-            "запись пачки"
-          );
-          if (!error) {
-            done = true;
-            break;
-          }
-          lastErr = error.message;
-        } catch (e) {
-          lastErr = e.message;
-        }
-        if (!done) await sleep(1500 * (attempt + 1));
-      }
-      if (done) {
+      const err = await tryUpsert(chunk, 20000, 3);
+      if (!err) {
         ok += chunk.length;
         console.log(`  ✓ записано ${Math.min(i + CHUNK, allRows.length)}/${allRows.length}`);
-      } else {
-        failed += chunk.length;
-        console.log(`  ✗ пачка ${i + 1}–${i + chunk.length} не записалась: ${lastErr}`);
+        continue;
       }
+      // Фолбэк: пачка не прошла — пишем по одному (мелкие тела надёжнее).
+      console.log(`  пачка не прошла (${err}); пишу по одному…`);
+      for (const row of chunk) {
+        const e1 = await tryUpsert(row, 12000, 3);
+        if (!e1) {
+          ok++;
+        } else {
+          failed++;
+          console.log(`    ✗ ${row.name.slice(0, 45)}: ${e1}`);
+        }
+      }
+      console.log(`  → готово ${Math.min(i + CHUNK, allRows.length)}/${allRows.length} (всего записано ${ok})`);
     }
   }
 
