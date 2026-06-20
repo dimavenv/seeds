@@ -89,6 +89,14 @@ create table if not exists public.support_requests (
 create index if not exists support_requests_created_at_idx
   on public.support_requests(created_at desc);
 
+-- ============ КОРЗИНА/ИЗБРАННОЕ ПОЛЬЗОВАТЕЛЯ ============
+create table if not exists public.user_store (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  cart       jsonb not null default '[]'::jsonb,
+  wishlist   jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 -- Хелпер: текущий пользователь — админ?
 create or replace function public.is_admin()
 returns boolean
@@ -129,6 +137,7 @@ alter table public.orders      enable row level security;
 alter table public.order_items enable row level security;
 alter table public.profiles    enable row level security;
 alter table public.support_requests enable row level security;
+alter table public.user_store  enable row level security;
 
 -- Категории: публичное чтение, запись только админ
 drop policy if exists categories_select on public.categories;
@@ -185,6 +194,11 @@ create policy support_requests_select on public.support_requests
 drop policy if exists support_requests_update on public.support_requests;
 create policy support_requests_update on public.support_requests
   for update using (public.is_admin()) with check (public.is_admin());
+
+-- Корзина/избранное: пользователь видит и правит только своё
+drop policy if exists user_store_rw on public.user_store;
+create policy user_store_rw on public.user_store
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- Storage bucket для фото товаров: публичное чтение, запись — админ
 

@@ -1,12 +1,21 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
 import { formatPrice, formatDate } from "@/lib/format";
-import { ORDER_STATUS_LABELS, type Order } from "@/lib/types";
+import { ORDER_STATUS_LABELS, type Order, type OrderStatus, type Product } from "@/lib/types";
 import LogoutButton from "@/components/logout-button";
 
 export const dynamic = "force-dynamic";
+
+const STATUS_BADGE: Record<OrderStatus, string> = {
+  new: "bg-brand-100 text-brand-700",
+  processing: "bg-amber-100 text-amber-700",
+  shipped: "bg-sky-100 text-sky-700",
+  done: "bg-brand-600 text-white",
+  cancelled: "bg-accent-500/15 text-accent-700",
+};
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -27,21 +36,33 @@ export default async function AccountPage() {
   }
 
   if (!session.userId) {
-    // Не вошёл — отправляем на форму входа (без тревожных сообщений).
     redirect("/login");
   }
 
-  // Заказы покупателя (RLS вернёт только его собственные).
   const supabase = createClient();
   const { data } = await supabase
     .from("orders")
     .select(
-      "id, customer_name, total, status, created_at, order_items(id, name, price, qty)"
+      "id, total, status, created_at, order_items(id, product_id, name, price, qty)"
     )
     .eq("user_id", session.userId)
     .order("created_at", { ascending: false });
 
   const orders = (data ?? []) as Order[];
+
+  // Картинки товаров для миниатюр в истории.
+  const ids = orders
+    .flatMap((o) => (o.order_items ?? []).map((i) => i.product_id))
+    .filter((x): x is number => !!x);
+  const imgMap = new Map<number, string | null>();
+  if (ids.length) {
+    const { data: prods } = await supabase
+      .from("products")
+      .select("id, image_url, images")
+      .in("id", Array.from(new Set(ids)));
+    for (const p of (prods ?? []) as Product[])
+      imgMap.set(p.id, p.image_url || p.images?.[0] || null);
+  }
 
   return (
     <div className="container-page py-8">
@@ -61,6 +82,9 @@ export default async function AccountPage() {
               Админ-панель
             </Link>
           )}
+          <Link href="/favorites" className="btn-outline">
+            Избранное
+          </Link>
           <LogoutButton />
         </div>
       </div>
@@ -76,38 +100,59 @@ export default async function AccountPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {orders.map((o) => (
-            <div key={o.id} className="card p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="font-bold text-brand-800">Заказ #{o.id}</div>
-                  <div className="text-sm text-brand-500">
-                    {formatDate(o.created_at)}
+          {orders.map((o) => {
+            const items = o.order_items ?? [];
+            const count = items.reduce((s, i) => s + i.qty, 0);
+            return (
+              <Link
+                key={o.id}
+                href={`/account/orders/${o.id}`}
+                className="card block p-5 transition hover:border-brand-300 hover:shadow-md"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-brand-800">Заказ #{o.id}</div>
+                    <div className="text-sm text-brand-500">
+                      {formatDate(o.created_at)} · {count} тов.
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`badge ${STATUS_BADGE[o.status]}`}>
+                      {ORDER_STATUS_LABELS[o.status]}
+                    </span>
+                    <span className="text-lg font-extrabold text-brand-700">
+                      {formatPrice(o.total)}
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="badge bg-brand-500 text-white">
-                    {ORDER_STATUS_LABELS[o.status]}
-                  </span>
-                  <span className="text-lg font-extrabold text-brand-700">
-                    {formatPrice(o.total)}
+
+                <div className="mt-4 flex items-center gap-2 border-t border-brand-100 pt-4">
+                  {items.slice(0, 6).map((it) => {
+                    const img = it.product_id ? imgMap.get(it.product_id) : null;
+                    return (
+                      <div
+                        key={it.id}
+                        className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-brand-50"
+                        title={it.name}
+                      >
+                        {img && (
+                          <Image src={img} alt="" fill sizes="56px" className="object-cover" />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {items.length > 6 && (
+                    <span className="text-sm text-brand-500">
+                      +{items.length - 6}
+                    </span>
+                  )}
+                  <span className="ml-auto text-sm font-semibold text-brand-600">
+                    Подробнее →
                   </span>
                 </div>
-              </div>
-              <ul className="mt-3 space-y-1 border-t border-brand-100 pt-3 text-sm text-brand-700">
-                {(o.order_items ?? []).map((it) => (
-                  <li key={it.id} className="flex justify-between gap-2">
-                    <span className="min-w-0 truncate">
-                      {it.name} × {it.qty}
-                    </span>
-                    <span className="whitespace-nowrap">
-                      {formatPrice(it.price * it.qty)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

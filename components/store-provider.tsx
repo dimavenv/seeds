@@ -8,10 +8,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createClient } from "@/lib/supabase/client";
 import type { CartItem, Product } from "@/lib/types";
 
 const CART_KEY = "sc_cart";
 const WISH_KEY = "sc_wishlist";
+const CONFIGURED = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 type StoreContextValue = {
   cart: CartItem[];
@@ -38,24 +40,102 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
+// Слить локальную и серверную корзины: объединяем по id, количество — большее.
+function mergeCarts(a: CartItem[], b: CartItem[]): CartItem[] {
+  const map = new Map<number, CartItem>();
+  for (const it of a) map.set(it.id, { ...it });
+  for (const it of b) {
+    const ex = map.get(it.id);
+    if (ex) ex.qty = Math.max(ex.qty, it.qty);
+    else map.set(it.id, { ...it });
+  }
+  return Array.from(map.values());
+}
+
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<number[]>([]);
   const [ready, setReady] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [synced, setSynced] = useState(false);
 
+  // Клиент Supabase только если он настроен (иначе чистый локальный режим).
+  const supabase = useMemo(() => (CONFIGURED ? createClient() : null), []);
+
+  // 1) Мгновенная загрузка из localStorage.
   useEffect(() => {
     setCart(read<CartItem[]>(CART_KEY, []));
     setWishlist(read<number[]>(WISH_KEY, []));
     setReady(true);
   }, []);
 
+  // 2) Кто вошёл (и реакция на вход/выход).
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUserId(data.user?.id ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUserId(session?.user?.id ?? null);
+      if (!session?.user) setSynced(false); // вышел — позволить пересинк при след. входе
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  // 3) При входе — слить локальное с серверным (один раз на сессию).
+  useEffect(() => {
+    if (!supabase || !ready || !userId || synced) return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from("user_store")
+        .select("cart, wishlist")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!active) return;
+      const serverCart = (data?.cart ?? []) as CartItem[];
+      const serverWish = (data?.wishlist ?? []) as number[];
+      setCart((local) => mergeCarts(local, serverCart));
+      setWishlist((local) => Array.from(new Set([...local, ...serverWish])));
+      setSynced(true);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [supabase, ready, userId, synced]);
+
+  // 4) Локальное сохранение (всегда — и для гостя, и как кэш).
   useEffect(() => {
     if (ready) localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart, ready]);
-
   useEffect(() => {
     if (ready) localStorage.setItem(WISH_KEY, JSON.stringify(wishlist));
   }, [wishlist, ready]);
+
+  // 5) Сквозная запись на сервер (для вошедшего), с дебаунсом.
+  useEffect(() => {
+    if (!supabase || !ready || !userId || !synced) return;
+    const t = setTimeout(() => {
+      supabase
+        .from("user_store")
+        .upsert(
+          {
+            user_id: userId,
+            cart,
+            wishlist,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        )
+        .then(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, wishlist, userId, synced, ready]);
 
   const value = useMemo<StoreContextValue>(() => {
     const cartCount = cart.reduce((s, i) => s + i.qty, 0);

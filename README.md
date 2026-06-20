@@ -36,10 +36,17 @@ npm run dev                        # http://localhost:3000
 ## Настройка Supabase
 
 1. Создайте проект на [supabase.com](https://supabase.com) (есть бесплатный тариф).
-2. В **SQL Editor** выполните по очереди:
-   - `supabase/migrations/0001_init.sql` — таблицы, RLS, триггеры, enum статусов;
-   - `supabase/migrations/0002_storage.sql` — bucket `product-images` и политики;
-   - `supabase/seed.sql` — демо-категории и товары (необязательно).
+2. В **SQL Editor** выполните по очереди все миграции из `supabase/migrations/`
+   по возрастанию номера:
+   - `0001_init.sql` — таблицы, RLS, триггеры, enum статусов;
+   - `0002_storage.sql` — bucket `product-images` и политики;
+   - `0003_support_and_delivery.sql` — заявки в поддержку + поля доставки;
+   - `0004_product_images.sql` — несколько фото на товар;
+   - `0005_user_store.sql` — корзина и избранное, привязанные к аккаунту;
+   - затем `supabase/seed.sql` — демо-категории и товары (необязательно).
+
+   > Можно вместо отдельных миграций один раз выполнить `supabase/setup.sql` —
+   > он содержит всю актуальную схему целиком.
 3. Скопируйте в `.env.local` (Project Settings → API):
 
    ```
