@@ -7,11 +7,8 @@ export default function Footer({ categories }: { categories: Category[] }) {
     <footer className="mt-16 border-t border-brand-100 bg-surface">
       <div className="container-page grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <div className="flex items-center gap-2 text-brand-600">
-            <Logo className="h-6 w-6" />
-            <span className="text-base font-extrabold text-brand-700">
-              Tomat Semena
-            </span>
+          <div className="flex items-center text-brand-600">
+            <Logo className="h-9 w-auto max-w-[180px]" />
           </div>
           <p className="mt-3 text-sm text-brand-600">
             Семена овощей, зелени, ягод и цветов с доставкой по России.

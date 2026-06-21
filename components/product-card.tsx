@@ -12,7 +12,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const wished = ready && isWished(product.id);
 
   return (
-    <div className="card group flex flex-col overflow-hidden transition hover:shadow-md">
+    <div className="card group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 hover:shadow-md motion-safe:animate-fade-up">
       <div className="relative aspect-square overflow-hidden bg-brand-50">
         <Link href={`/product/${product.slug}`}>
           {product.image_url ? (

@@ -34,21 +34,49 @@ export default async function AboutPage() {
   const tomatoes = (await getProducts({ categorySlug: "tomaty", limit: 40 }))
     .filter((p) => p.image_url)
     .sort(() => Math.random() - 0.5)
-    .slice(0, 6);
+    .slice(0, 4);
 
   return (
     <div className="container-page py-10">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="text-3xl font-extrabold leading-tight text-brand-800 sm:text-4xl">
-          Добро пожаловать в интернет-магазин{" "}
-          <span className="whitespace-nowrap">
-            Tomat<span className="text-accent-500">Semena</span>
-          </span>
-          , где семена — это не просто будущие грядки, а начало захватывающего
-          эстетического приключения!
-        </h1>
+      <div className="mx-auto max-w-5xl">
+        {/* Герой: 4 фото (2×2) слева + приветствие справа */}
+        <section className="grid items-center gap-8 lg:grid-cols-2">
+          {tomatoes.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {tomatoes.map((p, i) => (
+                <Link
+                  key={p.id}
+                  href={`/product/${p.slug}`}
+                  title={p.name}
+                  style={{ animationDelay: `${i * 90}ms` }}
+                  className="group relative aspect-square overflow-hidden rounded-2xl bg-brand-50 shadow-sm motion-safe:animate-pop-in"
+                >
+                  <Image
+                    src={p.image_url!}
+                    alt={p.name}
+                    fill
+                    sizes="(max-width: 1024px) 50vw, 25vw"
+                    className="object-cover transition duration-500 group-hover:scale-105"
+                  />
+                </Link>
+              ))}
+            </div>
+          )}
 
-        <div className="mt-6 space-y-4 text-lg leading-relaxed text-brand-700">
+          <div className="motion-safe:animate-fade-up">
+            <h1 className="text-3xl font-extrabold leading-tight text-brand-800 sm:text-4xl">
+              Добро пожаловать в интернет-магазин{" "}
+              <span className="whitespace-nowrap">
+                Tomat<span className="text-accent-500">Semena</span>
+              </span>
+              , где семена — это не просто будущие грядки, а начало
+              захватывающего эстетического приключения!
+            </h1>
+            <div className="mt-3 h-1 w-16 rounded-full bg-accent-500" />
+          </div>
+        </section>
+
+        <div className="mt-10 space-y-4 text-lg leading-relaxed text-brand-700 motion-safe:animate-fade-up">
           <p>
             Меня зовут <strong>Вера</strong>. Мой вдохновляющий приусадебный
             участок находится в самом благодатном и тёплом уголке страны — в
@@ -69,37 +97,16 @@ export default async function AboutPage() {
           </p>
         </div>
 
-        {/* Галерея случайных томатов из каталога */}
-        {tomatoes.length > 0 && (
-          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {tomatoes.map((p) => (
-              <Link
-                key={p.id}
-                href={`/product/${p.slug}`}
-                className="group relative aspect-square overflow-hidden rounded-2xl bg-brand-50 shadow-sm"
-                title={p.name}
-              >
-                <Image
-                  src={p.image_url!}
-                  alt={p.name}
-                  fill
-                  sizes="(max-width: 640px) 50vw, 33vw"
-                  className="object-cover transition duration-300 group-hover:scale-105"
-                />
-                <span className="absolute inset-x-0 bottom-0 line-clamp-2 bg-gradient-to-t from-black/70 to-transparent p-2 text-xs font-medium text-white">
-                  {p.name}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-
         <h2 className="mt-12 text-2xl font-extrabold text-brand-800">
           Главные факты о моих семенах
         </h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          {FACTS.map((f) => (
-            <div key={f.title} className="card p-5">
+          {FACTS.map((f, i) => (
+            <div
+              key={f.title}
+              style={{ animationDelay: `${i * 80}ms` }}
+              className="card p-5 transition duration-300 hover:-translate-y-1 hover:shadow-md motion-safe:animate-fade-up"
+            >
               <div className="flex items-start gap-3">
                 <span className="text-2xl">{f.icon}</span>
                 <div>

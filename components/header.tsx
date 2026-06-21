@@ -30,12 +30,10 @@ export default function Header() {
       <div className="container-page flex items-center gap-3 py-3 sm:gap-5 sm:py-4">
         <Link
           href="/"
-          className="flex shrink-0 items-center gap-2 text-brand-600"
+          className="flex shrink-0 items-center text-brand-600"
+          aria-label="Tomat Semena — на главную"
         >
-          <Logo className="h-8 w-8 sm:h-9 sm:w-9" />
-          <span className="text-lg font-extrabold tracking-tight text-brand-700 sm:text-2xl">
-            Tomat<span className="text-accent-500">Semena</span>
-          </span>
+          <Logo className="h-9 w-auto max-w-[170px] sm:h-11 sm:max-w-[220px]" />
         </Link>
 
         {/* Десктоп: поиск с подсказками */}
