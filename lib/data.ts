@@ -43,6 +43,10 @@ const getCategoriesCached = unstable_cache(
 
 const PRODUCT_SELECT =
   "id, slug, name, description, price, category_id, image_url, images, stock, seeds_per_pack, is_new, is_featured, created_at, category:categories(slug, name)";
+// Без новых колонок: запасной набор, если миграция ещё не применена — чтобы
+// отсутствие колонки не сваливало весь каталог в демо-данные.
+const PRODUCT_SELECT_SAFE =
+  "id, slug, name, description, price, category_id, image_url, images, stock, is_new, is_featured, created_at, category:categories(slug, name)";
 
 export async function getCategories(): Promise<Category[]> {
   if (!isSupabaseConfigured()) return demoCategories;
@@ -95,32 +99,40 @@ function filterDemo(opts: ProductQuery): Product[] {
 export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
   if (!isSupabaseConfigured()) return filterDemo(opts);
   const supabase = createClient();
-  let query = supabase.from("products").select(PRODUCT_SELECT);
 
+  let categoryId: number | null = null;
   if (opts.categorySlug) {
     const { data: cat } = await supabase
       .from("categories")
       .select("id")
       .eq("slug", opts.categorySlug)
       .maybeSingle();
-    if (cat) query = query.eq("category_id", cat.id);
-    else return [];
+    if (!cat) return [];
+    categoryId = cat.id as number;
   }
-  if (opts.q) query = query.ilike("name", `%${opts.q}%`);
-  if (opts.featured) query = query.eq("is_featured", true);
-  if (opts.onlyNew) query = query.eq("is_new", true);
-  if (typeof opts.minPrice === "number") query = query.gte("price", opts.minPrice);
-  if (typeof opts.maxPrice === "number") query = query.lte("price", opts.maxPrice);
 
-  switch (opts.sort) {
-    case "price_asc": query = query.order("price", { ascending: true }); break;
-    case "price_desc": query = query.order("price", { ascending: false }); break;
-    case "name": query = query.order("name", { ascending: true }); break;
-    default: query = query.order("created_at", { ascending: false });
-  }
-  if (opts.limit) query = query.limit(opts.limit);
+  const build = (cols: string) => {
+    let query = supabase.from("products").select(cols);
+    if (categoryId != null) query = query.eq("category_id", categoryId);
+    if (opts.q) query = query.ilike("name", `%${opts.q}%`);
+    if (opts.featured) query = query.eq("is_featured", true);
+    if (opts.onlyNew) query = query.eq("is_new", true);
+    if (typeof opts.minPrice === "number") query = query.gte("price", opts.minPrice);
+    if (typeof opts.maxPrice === "number") query = query.lte("price", opts.maxPrice);
+    switch (opts.sort) {
+      case "price_asc": query = query.order("price", { ascending: true }); break;
+      case "price_desc": query = query.order("price", { ascending: false }); break;
+      case "name": query = query.order("name", { ascending: true }); break;
+      default: query = query.order("created_at", { ascending: false });
+    }
+    if (opts.limit) query = query.limit(opts.limit);
+    return query;
+  };
 
-  const { data, error } = await query;
+  // Пробуем полный набор колонок; если новая колонка ещё не добавлена — повтор
+  // без неё (реальные товары остаются), и только если совсем не вышло — демо.
+  let { data, error } = await build(PRODUCT_SELECT);
+  if (error) ({ data, error } = await build(PRODUCT_SELECT_SAFE));
   if (error || !data) return filterDemo(opts);
   return data as unknown as Product[];
 }
@@ -129,11 +141,10 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   if (!isSupabaseConfigured())
     return demoProducts.find((p) => p.slug === slug) ?? null;
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .eq("slug", slug)
-    .maybeSingle();
+  const trySelect = (cols: string) =>
+    supabase.from("products").select(cols).eq("slug", slug).maybeSingle();
+  let { data, error } = await trySelect(PRODUCT_SELECT);
+  if (error) ({ data, error } = await trySelect(PRODUCT_SELECT_SAFE));
   if (error || !data) return demoProducts.find((p) => p.slug === slug) ?? null;
   return data as unknown as Product;
 }
@@ -143,10 +154,10 @@ export async function getProductsByIds(ids: number[]): Promise<Product[]> {
   if (!isSupabaseConfigured())
     return demoProducts.filter((p) => ids.includes(p.id));
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_SELECT)
-    .in("id", ids);
+  const trySelect = (cols: string) =>
+    supabase.from("products").select(cols).in("id", ids);
+  let { data, error } = await trySelect(PRODUCT_SELECT);
+  if (error) ({ data, error } = await trySelect(PRODUCT_SELECT_SAFE));
   if (error || !data) return demoProducts.filter((p) => ids.includes(p.id));
   return data as unknown as Product[];
 }
