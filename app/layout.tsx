@@ -3,7 +3,8 @@ import "./globals.css";
 import { StoreProvider } from "@/components/store-provider";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
-import { getCategories } from "@/lib/data";
+import VacationBanner from "@/components/vacation-banner";
+import { getCategories, getVacationUntil } from "@/lib/data";
 
 export const metadata: Metadata = {
   title: "Tomat Semena — интернет-магазин семян",
@@ -16,7 +17,10 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const categories = await getCategories();
+  const [categories, vacationUntil] = await Promise.all([
+    getCategories(),
+    getVacationUntil(),
+  ]);
 
   return (
     <html lang="ru" suppressHydrationWarning>
@@ -31,6 +35,7 @@ export default async function RootLayout({
       <body className="flex min-h-screen flex-col">
         <StoreProvider>
           <Header />
+          <VacationBanner until={vacationUntil} />
           <main className="flex-1">{children}</main>
           <Footer categories={categories} />
         </StoreProvider>

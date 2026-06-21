@@ -17,6 +17,17 @@ export function seedsLabel(n: number): string {
   return `${n} ${word}`;
 }
 
+// «5 июля 2026» из строки 'YYYY-MM-DD' (без сдвига по часовому поясу).
+export function formatDateRu(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  if (!y || !m || !d) return isoDate;
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(y, m - 1, d));
+}
+
 export function formatDate(value: string): string {
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",

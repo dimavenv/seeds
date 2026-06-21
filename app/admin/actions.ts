@@ -119,6 +119,19 @@ export async function updateOrderTracking(
   revalidatePath("/admin/orders");
 }
 
+export async function updateVacationUntil(date: string | null): Promise<void> {
+  const session = await getSession();
+  if (!session.isAdmin) return;
+  const value = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+  const supabase = createClient();
+  await supabase
+    .from("site_settings")
+    .update({ vacation_until: value, updated_at: new Date().toISOString() })
+    .eq("id", 1);
+  revalidatePath("/", "layout");
+  revalidatePath("/admin");
+}
+
 export async function updateReviewStatus(
   id: number,
   status: ReviewStatus

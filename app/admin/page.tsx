@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getVacationUntil } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import { ORDER_STATUS_LABELS, type Order } from "@/lib/types";
+import VacationSetting from "@/components/admin/vacation-setting";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
   const supabase = createClient();
 
-  const [{ count: productsCount }, { count: ordersCount }, { data: recent }] =
+  const [{ count: productsCount }, { count: ordersCount }, { data: recent }, vacationUntil] =
     await Promise.all([
       supabase.from("products").select("*", { count: "exact", head: true }),
       supabase.from("orders").select("*", { count: "exact", head: true }),
@@ -17,6 +19,7 @@ export default async function AdminDashboard() {
         .select("id, customer_name, total, status, created_at")
         .order("created_at", { ascending: false })
         .limit(5),
+      getVacationUntil(),
     ]);
 
   const recentOrders = (recent ?? []) as Pick<
@@ -26,6 +29,8 @@ export default async function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      <VacationSetting until={vacationUntil} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="card p-5">
           <div className="text-sm text-brand-500">Товаров в каталоге</div>

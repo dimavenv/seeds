@@ -168,3 +168,20 @@ export async function getCategoryBySlug(
   const cats = await getCategories();
   return cats.find((c) => c.slug === slug) ?? null;
 }
+
+// Дата окончания отпуска (для плашки). null — отпуска нет / БД недоступна.
+export async function getVacationUntil(): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("vacation_until")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error || !data?.vacation_until) return null;
+    return data.vacation_until as string; // 'YYYY-MM-DD'
+  } catch {
+    return null;
+  }
+}
