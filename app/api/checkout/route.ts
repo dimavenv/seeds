@@ -41,9 +41,15 @@ export async function POST(request: Request) {
 
   const { customer_name, phone, address, email, comment } = body;
   const delivery_method = normalizeDeliveryMethod(body.delivery_method);
-  const items = (body.items ?? []).filter(
-    (i) => Number.isFinite(i.id) && Number.isFinite(i.qty) && i.qty > 0
-  );
+  const items = (body.items ?? [])
+    .filter(
+      (i) =>
+        Number.isFinite(i.id) &&
+        Number.isFinite(i.qty) &&
+        i.qty > 0 &&
+        i.qty <= 1000
+    )
+    .slice(0, 100);
 
   if (!customer_name?.trim() || !phone?.trim() || !address?.trim()) {
     return NextResponse.json(

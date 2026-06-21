@@ -179,9 +179,9 @@ drop policy if exists products_admin_write on public.products;
 create policy products_admin_write on public.products for all
   using (public.is_admin()) with check (public.is_admin());
 
--- Заказы: insert разрешён всем (гостевой заказ); select/update — админ или владелец
+-- Заказы: создаёт только сервер сервисным ключом (обход RLS); прямую вставку
+-- из браузера не разрешаем (аудит #3). select/update — админ или владелец.
 drop policy if exists orders_insert on public.orders;
-create policy orders_insert on public.orders for insert with check (true);
 drop policy if exists orders_select on public.orders;
 create policy orders_select on public.orders for select
   using (public.is_admin() or (user_id is not null and user_id = auth.uid()));
@@ -189,9 +189,8 @@ drop policy if exists orders_admin_update on public.orders;
 create policy orders_admin_update on public.orders for update
   using (public.is_admin()) with check (public.is_admin());
 
--- Позиции заказа: insert всем; select — админ или владелец заказа
+-- Позиции заказа: создаёт только сервер сервисным ключом; прямой insert закрыт.
 drop policy if exists order_items_insert on public.order_items;
-create policy order_items_insert on public.order_items for insert with check (true);
 drop policy if exists order_items_select on public.order_items;
 create policy order_items_select on public.order_items for select
   using (
@@ -209,6 +208,10 @@ create policy profiles_select on public.profiles for select
 drop policy if exists profiles_update on public.profiles;
 create policy profiles_update on public.profiles for update
   using (id = auth.uid()) with check (id = auth.uid());
+-- Запрет смены роли собой (аудит #1): на уровне колоночных привилегий
+-- пользователь может править только full_name, но не role.
+revoke update on public.profiles from anon, authenticated;
+grant  update (full_name) on public.profiles to authenticated;
 
 -- Заявки в поддержку: отправить может любой; читать/править — только админ
 drop policy if exists support_requests_insert on public.support_requests;
@@ -227,7 +230,16 @@ create policy reviews_select on public.reviews for select
   using (status = 'approved' or public.is_admin() or user_id = auth.uid());
 drop policy if exists reviews_insert_own on public.reviews;
 create policy reviews_insert_own on public.reviews for insert
-  with check (user_id = auth.uid());
+  with check (
+    user_id = auth.uid()
+    and status = 'pending'
+    and exists (
+      select 1 from public.orders o
+      where o.id = reviews.order_id
+        and o.user_id = auth.uid()
+        and o.status in ('shipped', 'done')
+    )
+  );
 drop policy if exists reviews_admin_update on public.reviews;
 create policy reviews_admin_update on public.reviews for update
   using (public.is_admin()) with check (public.is_admin());

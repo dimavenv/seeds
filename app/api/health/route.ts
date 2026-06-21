@@ -27,20 +27,16 @@ export async function GET() {
         configured: true,
         ms,
         error:
-          error.message ||
           "Запрос к Supabase не выполнен — проект недоступен (возможно, на паузе) или неверный URL/ключ.",
       });
     }
     return NextResponse.json({ ok: true, configured: true, ms });
-  } catch (e) {
+  } catch {
     return NextResponse.json({
       ok: false,
       configured: true,
       ms: Date.now() - started,
-      error:
-        e instanceof Error
-          ? e.message
-          : "Не удалось подключиться к Supabase (таймаут или неверный адрес)",
+      error: "Не удалось подключиться к Supabase (таймаут или неверный адрес)",
     });
   }
 }
