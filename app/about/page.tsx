@@ -64,7 +64,10 @@ export default async function AboutPage() {
           )}
 
           <div className="motion-safe:animate-fade-up">
-            <h1 className="text-3xl font-extrabold leading-tight text-brand-800 sm:text-4xl">
+            <span className="mb-2 block text-2xl font-extrabold text-accent-500">
+              О нас
+            </span>
+            <h1 className="text-2xl font-extrabold leading-snug text-brand-800 sm:text-3xl">
               Добро пожаловать в интернет-магазин{" "}
               <span className="whitespace-nowrap">
                 Tomat<span className="text-accent-500">Semena</span>
