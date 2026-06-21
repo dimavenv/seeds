@@ -67,7 +67,7 @@ export default async function AboutPage() {
             <span className="mb-3 block text-4xl font-black text-accent-500 sm:text-5xl">
               О нас
             </span>
-            <h1 className="text-2xl font-extrabold leading-snug text-brand-800 sm:text-3xl">
+            <h1 className="text-lg font-extrabold leading-snug text-brand-800 sm:text-xl">
               Добро пожаловать в интернет-магазин{" "}
               <span className="whitespace-nowrap">
                 Tomat<span className="text-accent-500">Semena</span>
