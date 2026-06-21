@@ -4,7 +4,7 @@ import AddToCart from "@/components/add-to-cart";
 import ProductGrid from "@/components/product-grid";
 import ProductGallery from "@/components/product-gallery";
 import { getProductBySlug, getProducts } from "@/lib/data";
-import { formatPrice } from "@/lib/format";
+import { formatPrice, seedsLabel } from "@/lib/format";
 
 export const revalidate = 60;
 
@@ -69,6 +69,11 @@ export default async function ProductPage({
           <p className="mt-4 text-4xl font-extrabold text-brand-700">
             {formatPrice(product.price)}
           </p>
+          {product.seeds_per_pack ? (
+            <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700">
+              🌱 В пакетике {seedsLabel(product.seeds_per_pack)}
+            </p>
+          ) : null}
           {product.description && (
             <p className="mt-4 leading-relaxed text-brand-700">
               {product.description}

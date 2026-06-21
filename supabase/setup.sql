@@ -33,6 +33,7 @@ create table if not exists public.products (
   image_url   text,
   images      text[] not null default '{}',
   stock       int not null default 0,
+  seeds_per_pack int,
   is_new      boolean not null default false,
   is_featured boolean not null default false,
   created_at  timestamptz not null default now()

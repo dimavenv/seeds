@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useStore } from "@/components/store-provider";
 import { HeartIcon, CartIcon } from "@/components/icons";
-import { formatPrice } from "@/lib/format";
+import { formatPrice, seedsLabel } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
 export default function ProductCard({ product }: { product: Product }) {
@@ -58,6 +58,11 @@ export default function ProductCard({ product }: { product: Product }) {
         >
           {product.name}
         </Link>
+        {product.seeds_per_pack ? (
+          <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-600">
+            🌱 {seedsLabel(product.seeds_per_pack)} в пакетике
+          </span>
+        ) : null}
         <div className="mt-auto flex items-center justify-between gap-2 pt-3">
           <span className="text-lg font-extrabold text-brand-700">
             {formatPrice(product.price)}

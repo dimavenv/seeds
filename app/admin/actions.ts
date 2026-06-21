@@ -51,6 +51,8 @@ export async function saveProduct(
   }
   const imageUrl = images[0] ?? null;
   const stock = Number(formData.get("stock") ?? 0);
+  const seedsRaw = String(formData.get("seeds_per_pack") ?? "").trim();
+  const seedsPerPack = seedsRaw ? Number(seedsRaw) : null;
   const isNew = formData.get("is_new") === "on";
   const isFeatured = formData.get("is_featured") === "on";
   let slug = String(formData.get("slug") ?? "").trim();
@@ -68,6 +70,7 @@ export async function saveProduct(
     image_url: imageUrl,
     images,
     stock,
+    seeds_per_pack: seedsPerPack,
     is_new: isNew,
     is_featured: isFeatured,
   };

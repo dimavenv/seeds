@@ -15,6 +15,7 @@ export type Product = {
   image_url: string | null;
   images?: string[] | null;
   stock: number;
+  seeds_per_pack?: number | null;
   is_new: boolean;
   is_featured: boolean;
   created_at: string;
