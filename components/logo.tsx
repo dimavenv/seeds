@@ -3,20 +3,41 @@
 import { useState } from "react";
 import { LeafIcon } from "@/components/icons";
 
-// Логотип-метка. Показывает свой файл public/logo.png, если он загружен;
-// иначе — стандартный логотип (лист). Текст названия — отдельно в шапке.
+// Светлая тема: public/logo.png, тёмная: public/logo-dark.png.
+// Если файл не найден — LeafIcon как фолбэк.
 export default function Logo({ className = "h-9 w-9" }: { className?: string }) {
-  const [failed, setFailed] = useState(false);
+  const [lightFailed, setLightFailed] = useState(false);
+  const [darkFailed, setDarkFailed] = useState(false);
 
-  if (failed) return <LeafIcon className={className} />;
+  const imgClass = `${className} object-contain`;
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src="/logo.png"
-      alt="Tomat Semena"
-      className={`${className} object-contain`}
-      onError={() => setFailed(true)}
-    />
+    <>
+      {/* Светлый логотип: скрыт в тёмной теме */}
+      {lightFailed ? (
+        <LeafIcon className={`${imgClass} dark:hidden`} />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src="/logo.png"
+          alt="Tomat Semena"
+          className={`${imgClass} dark:hidden`}
+          onError={() => setLightFailed(true)}
+        />
+      )}
+
+      {/* Тёмный логотип: виден только в тёмной теме */}
+      {darkFailed ? (
+        <LeafIcon className={`${imgClass} hidden dark:block`} />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src="/logo-dark.png"
+          alt="Tomat Semena"
+          className={`${imgClass} hidden dark:block`}
+          onError={() => setDarkFailed(true)}
+        />
+      )}
+    </>
   );
 }
