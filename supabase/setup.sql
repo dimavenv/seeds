@@ -154,6 +154,10 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- Прячем триггерную функцию из публичного REST RPC (аудит #4b): триггеру
+-- права EXECUTE вызывающей роли не нужны, поэтому отзыв ничего не ломает.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+
 -- ============ RLS ============
 alter table public.categories  enable row level security;
 alter table public.products    enable row level security;
@@ -213,10 +217,9 @@ create policy profiles_update on public.profiles for update
 revoke update on public.profiles from anon, authenticated;
 grant  update (full_name) on public.profiles to authenticated;
 
--- Заявки в поддержку: отправить может любой; читать/править — только админ
+-- Заявки в поддержку: создаёт только сервер сервисным ключом (аудит #3b);
+-- прямую вставку из браузера не разрешаем. Читать/править — только админ.
 drop policy if exists support_requests_insert on public.support_requests;
-create policy support_requests_insert on public.support_requests
-  for insert with check (true);
 drop policy if exists support_requests_select on public.support_requests;
 create policy support_requests_select on public.support_requests
   for select using (public.is_admin());
