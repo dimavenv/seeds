@@ -74,6 +74,19 @@ export type OrderItem = {
   qty: number;
 };
 
+export type ReviewStatus = "pending" | "approved" | "rejected";
+
+export type Review = {
+  id: number;
+  user_id: string | null;
+  order_id: number | null;
+  author_name: string;
+  rating: number;
+  text: string;
+  status: ReviewStatus;
+  created_at: string;
+};
+
 export type CartItem = {
   id: number;
   slug: string;

@@ -91,6 +91,19 @@ create table if not exists public.support_requests (
 create index if not exists support_requests_created_at_idx
   on public.support_requests(created_at desc);
 
+-- ============ ОТЗЫВЫ (с модерацией) ============
+create table if not exists public.reviews (
+  id          bigint generated always as identity primary key,
+  user_id     uuid references auth.users(id) on delete set null,
+  order_id    bigint references public.orders(id) on delete set null,
+  author_name text not null default '',
+  rating      int not null check (rating between 1 and 5),
+  text        text not null,
+  status      text not null default 'pending',
+  created_at  timestamptz not null default now()
+);
+create index if not exists reviews_status_idx on public.reviews(status, created_at desc);
+
 -- ============ КОРЗИНА/ИЗБРАННОЕ ПОЛЬЗОВАТЕЛЯ ============
 create table if not exists public.user_store (
   user_id    uuid primary key references auth.users(id) on delete cascade,
@@ -139,6 +152,7 @@ alter table public.orders      enable row level security;
 alter table public.order_items enable row level security;
 alter table public.profiles    enable row level security;
 alter table public.support_requests enable row level security;
+alter table public.reviews     enable row level security;
 alter table public.user_store  enable row level security;
 
 -- Категории: публичное чтение, запись только админ
@@ -196,6 +210,17 @@ create policy support_requests_select on public.support_requests
 drop policy if exists support_requests_update on public.support_requests;
 create policy support_requests_update on public.support_requests
   for update using (public.is_admin()) with check (public.is_admin());
+
+-- Отзывы: читать одобренные/свои/админ; писать — от своего имени; модерация — админ
+drop policy if exists reviews_select on public.reviews;
+create policy reviews_select on public.reviews for select
+  using (status = 'approved' or public.is_admin() or user_id = auth.uid());
+drop policy if exists reviews_insert_own on public.reviews;
+create policy reviews_insert_own on public.reviews for insert
+  with check (user_id = auth.uid());
+drop policy if exists reviews_admin_update on public.reviews;
+create policy reviews_admin_update on public.reviews for update
+  using (public.is_admin()) with check (public.is_admin());
 
 -- Корзина/избранное: пользователь видит и правит только своё
 drop policy if exists user_store_rw on public.user_store;

@@ -32,9 +32,9 @@ export default function Footer({ categories }: { categories: Category[] }) {
           <h3 className="mb-3 text-sm font-semibold text-brand-800">Покупателям</h3>
           <ul className="space-y-1.5 text-sm text-brand-600">
             <li><Link href="/about" className="hover:text-brand-800">О нас</Link></li>
-            <li><Link href="/delivery" className="hover:text-brand-800">Доставка</Link></li>
-            <li><Link href="/payment" className="hover:text-brand-800">Оплата</Link></li>
+            <li><Link href="/delivery" className="hover:text-brand-800">Доставка и оплата</Link></li>
             <li><Link href="/how-to-order" className="hover:text-brand-800">Как заказать</Link></li>
+            <li><Link href="/reviews" className="hover:text-brand-800">Отзывы</Link></li>
             <li><Link href="/support" className="hover:text-brand-800">Поддержка</Link></li>
             <li><Link href="/favorites" className="hover:text-brand-800">Избранное</Link></li>
             <li><Link href="/privacy" className="hover:text-brand-800">Политика конфиденциальности</Link></li>

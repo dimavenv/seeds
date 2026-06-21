@@ -6,9 +6,10 @@ import { getSession } from "@/lib/auth";
 import { formatPrice, formatDate } from "@/lib/format";
 import { deliveryMethodLabel } from "@/lib/delivery";
 import { decryptField } from "@/lib/crypto";
-import { ORDER_STATUS_LABELS, type Order, type Product } from "@/lib/types";
+import { ORDER_STATUS_LABELS, type Order, type Product, type Review } from "@/lib/types";
 import OrderStatusSteps from "@/components/order-status-steps";
 import ReorderButton from "@/components/reorder-button";
+import LeaveReview from "@/components/leave-review";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,15 @@ export default async function OrderDetailPage({
   };
   const goods = items.reduce((s, i) => s + i.price * i.qty, 0);
   const delivery = order.delivery_cost ?? Math.max(0, order.total - goods);
+
+  // Отзыв к этому заказу (если уже оставлен).
+  const { data: myReview } = await supabase
+    .from("reviews")
+    .select("id, user_id, order_id, author_name, rating, text, status, created_at")
+    .eq("order_id", order.id)
+    .eq("user_id", session.userId)
+    .maybeSingle();
+  const canReview = order.status === "shipped" || order.status === "done";
 
   const reorderItems = items
     .map((i) => (i.product_id ? productMap.get(i.product_id) : null))
@@ -186,6 +196,16 @@ export default async function OrderDetailPage({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Отзыв о заказе */}
+      <div className="mt-6">
+        <LeaveReview
+          orderId={order.id}
+          canReview={canReview}
+          defaultName={order.customer_name}
+          existing={(myReview as Review) ?? null}
+        />
       </div>
     </div>
   );

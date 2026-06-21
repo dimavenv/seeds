@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/auth";
-import type { OrderStatus } from "@/lib/types";
+import type { OrderStatus, ReviewStatus } from "@/lib/types";
 
 function slugify(input: string): string {
   const map: Record<string, string> = {
@@ -117,4 +117,16 @@ export async function updateOrderTracking(
   const supabase = createClient();
   await supabase.from("orders").update({ tracking_number: value }).eq("id", id);
   revalidatePath("/admin/orders");
+}
+
+export async function updateReviewStatus(
+  id: number,
+  status: ReviewStatus
+): Promise<void> {
+  const session = await getSession();
+  if (!session.isAdmin) return;
+  const supabase = createClient();
+  await supabase.from("reviews").update({ status }).eq("id", id);
+  revalidatePath("/admin/reviews");
+  revalidatePath("/reviews");
 }

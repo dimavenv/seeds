@@ -81,13 +81,13 @@ export default function Header() {
             О нас
           </Link>
           <Link href="/delivery" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
-            Доставка
-          </Link>
-          <Link href="/payment" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
-            Оплата
+            Доставка и оплата
           </Link>
           <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Как заказать
+          </Link>
+          <Link href="/reviews" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
+            Отзывы
           </Link>
           <Link href="/support" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Поддержка

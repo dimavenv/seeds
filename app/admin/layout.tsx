@@ -57,6 +57,7 @@ export default async function AdminLayout({
         <Link href="/admin/products" className="btn-outline !py-1.5">Товары</Link>
         <Link href="/admin/orders" className="btn-outline !py-1.5">Заказы</Link>
         <Link href="/admin/support" className="btn-outline !py-1.5">Заявки</Link>
+        <Link href="/admin/reviews" className="btn-outline !py-1.5">Отзывы</Link>
         <Link href="/account" className="btn-outline !py-1.5">Личный кабинет</Link>
         <span className="ml-auto text-sm text-brand-500">{session.email}</span>
       </div>
