@@ -33,7 +33,7 @@ export default function Header() {
           className="flex shrink-0 items-center text-brand-600"
           aria-label="Tomat Semena — на главную"
         >
-          <Logo className="h-12 w-auto max-w-[210px] sm:h-14 sm:max-w-[280px]" />
+          <Logo className="h-24 w-auto max-w-[420px] sm:h-28 sm:max-w-[560px]" />
         </Link>
 
         {/* Десктоп: поиск с подсказками */}
