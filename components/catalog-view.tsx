@@ -1,4 +1,3 @@
-import CatalogFilters from "@/components/catalog-filters";
 import CategoryNav from "@/components/category-nav";
 import ProductGrid from "@/components/product-grid";
 import { getCategories, getProducts } from "@/lib/data";
@@ -43,7 +42,6 @@ export default async function CatalogView({
       <p className="mb-5 text-sm text-brand-500">
         Найдено товаров: {products.length}
       </p>
-      <CatalogFilters />
       <ProductGrid products={products} />
     </div>
   );
