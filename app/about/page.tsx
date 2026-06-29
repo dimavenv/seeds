@@ -65,7 +65,7 @@ export default async function AboutPage() {
 
           <div className="motion-safe:animate-fade-up">
             <span className="mb-3 block text-3xl font-black text-accent-500 sm:mb-4 sm:text-4xl">
-              О нас
+              О НАС
             </span>
             <h1 className="text-lg font-extrabold leading-snug text-brand-800 sm:text-xl">
               Добро пожаловать в интернет-магазин{" "}
