@@ -25,17 +25,27 @@ const STEPS: { title: string; body: React.ReactNode }[] = [
           быстро, оперативно и надёжно.
         </p>
         <p>Внимательно укажите адрес в зависимости от выбранного способа:</p>
-        <ul className="space-y-1.5">
-          <li>
-            <span className="font-semibold text-brand-800">Через Ozon:</span>{" "}
-            точный адрес нужного вам пункта выдачи заказов (ПВЗ). Вы должны быть
-            зарегистрированы на Ozon и иметь приложение на смартфоне.
+        <ul className="space-y-2.5">
+          <li className="flex gap-2.5">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#005bff] text-xs font-black text-white">
+              O
+            </span>
+            <span>
+              <span className="font-semibold text-brand-800">Через Ozon:</span>{" "}
+              точный адрес нужного вам пункта выдачи заказов (ПВЗ). Вы должны
+              быть зарегистрированы на Ozon и иметь приложение на смартфоне.
+            </span>
           </li>
-          <li>
-            <span className="font-semibold text-brand-800">
-              Почтой России:
-            </span>{" "}
-            ваш полный домашний адрес и почтовый индекс.
+          <li className="flex gap-2.5">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#1d71b8] text-sm text-white">
+              📮
+            </span>
+            <span>
+              <span className="font-semibold text-brand-800">
+                Почтой России:
+              </span>{" "}
+              ваш полный домашний адрес и почтовый индекс.
+            </span>
           </li>
         </ul>
         <p>
@@ -95,7 +105,7 @@ export default function DeliveryPage() {
       <h1 className="text-center text-3xl font-extrabold uppercase tracking-tight text-brand-800 sm:text-4xl">
         Доставка <span className="text-accent-500">и оплата</span>
       </h1>
-      <p className="mt-4 text-center text-lg font-semibold text-brand-700">
+      <p className="mt-4 text-center text-2xl font-extrabold text-black dark:text-white sm:text-3xl">
         Как оформить и оплатить заказ
       </p>
 
