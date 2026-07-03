@@ -74,7 +74,7 @@ const IMPORTANT: { icon: string; title: string; body: React.ReactNode }[] = [
   },
   {
     icon: "📮",
-    title: "Если в вашем пункте нет Ozon",
+    title: "Если в вашем населённом пункте нет Ozon",
     body: <>Вы также можете воспользоваться доставкой Почтой России.</>,
   },
   {
