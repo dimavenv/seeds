@@ -9,10 +9,22 @@ export function CartIcon({ className = "h-5 w-5" }: IconProps) {
   );
 }
 
-export function HeartIcon({ className = "h-5 w-5", filled = false }: IconProps & { filled?: boolean }) {
+export function HeartIcon({
+  className = "h-5 w-5",
+  filled = false,
+  onAnimationEnd,
+}: IconProps & { filled?: boolean; onAnimationEnd?: () => void }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg className={className} onAnimationEnd={onAnimationEnd} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20.8 8.6c0 4.5-7.2 9.1-8.8 10-1.6-.9-8.8-5.5-8.8-10A4.6 4.6 0 0 1 12 6a4.6 4.6 0 0 1 8.8 2.6z" />
+    </svg>
+  );
+}
+
+export function CheckIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m4.5 12.5 5 5 10-11" />
     </svg>
   );
 }

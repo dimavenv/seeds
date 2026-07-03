@@ -2,17 +2,33 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRef, useState } from "react";
 import { useStore } from "@/components/store-provider";
-import { HeartIcon, CartIcon } from "@/components/icons";
+import { HeartIcon, CartIcon, CheckIcon } from "@/components/icons";
 import { formatPrice, seedsLabel } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
 export default function ProductCard({ product }: { product: Product }) {
   const { addToCart, toggleWish, isWished, ready } = useStore();
   const wished = ready && isWished(product.id);
+  const [added, setAdded] = useState(false);
+  const [heartPulse, setHeartPulse] = useState(false);
+  const addedTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  function handleAdd() {
+    addToCart(product);
+    setAdded(true);
+    clearTimeout(addedTimer.current);
+    addedTimer.current = setTimeout(() => setAdded(false), 1200);
+  }
+
+  function handleWish() {
+    toggleWish(product.id);
+    setHeartPulse(true);
+  }
 
   return (
-    <div className="card group flex flex-col overflow-hidden transition duration-300 hover:-translate-y-1 hover:shadow-md motion-safe:animate-fade-up">
+    <div className="card group flex flex-col overflow-hidden transition duration-300 motion-safe:hover:-translate-y-1 hover:shadow-md">
       <div className="relative aspect-square overflow-hidden bg-brand-50">
         <Link href={`/product/${product.slug}`}>
           {product.image_url ? (
@@ -21,7 +37,7 @@ export default function ProductCard({ product }: { product: Product }) {
               alt={product.name}
               fill
               sizes="(max-width: 768px) 50vw, 25vw"
-              className="object-cover transition duration-300 group-hover:scale-105"
+              className="object-cover transition duration-500 group-hover:scale-105"
             />
           ) : (
             <div className="flex h-full items-center justify-center text-brand-300">
@@ -38,13 +54,17 @@ export default function ProductCard({ product }: { product: Product }) {
           )}
         </div>
         <button
-          onClick={() => toggleWish(product.id)}
-          aria-label="В избранное"
-          className={`absolute right-2 top-2 rounded-full p-2 shadow-sm transition ${
+          onClick={handleWish}
+          aria-label={wished ? "Убрать из избранного" : "В избранное"}
+          className={`absolute right-2 top-2 rounded-full p-2 shadow-sm transition motion-safe:active:scale-90 ${
             wished ? "bg-accent-500 text-white" : "bg-white/90 text-brand-600 hover:bg-white"
           }`}
         >
-          <HeartIcon className="h-4 w-4" filled={wished} />
+          <HeartIcon
+            className={`h-4 w-4 ${heartPulse ? "motion-safe:animate-heart-beat" : ""}`}
+            filled={wished}
+            onAnimationEnd={() => setHeartPulse(false)}
+          />
         </button>
       </div>
 
@@ -54,7 +74,7 @@ export default function ProductCard({ product }: { product: Product }) {
         )}
         <Link
           href={`/product/${product.slug}`}
-          className="mt-0.5 line-clamp-2 text-sm font-semibold text-brand-800 hover:text-brand-600"
+          className="mt-0.5 line-clamp-2 text-sm font-semibold text-brand-800 transition-colors hover:text-brand-600"
         >
           {product.name}
         </Link>
@@ -69,12 +89,16 @@ export default function ProductCard({ product }: { product: Product }) {
           </span>
           {product.stock > 0 ? (
             <button
-              onClick={() => addToCart(product)}
-              className="btn-accent !px-3 !py-2"
+              onClick={handleAdd}
+              className={`${added ? "btn bg-brand-500 text-white" : "btn-accent"} !px-3 !py-2`}
               aria-label="В корзину"
             >
-              <CartIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">В корзину</span>
+              {added ? (
+                <CheckIcon className="h-4 w-4 motion-safe:animate-pop-in" />
+              ) : (
+                <CartIcon className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">{added ? "Готово" : "В корзину"}</span>
             </button>
           ) : (
             <span className="rounded-full bg-brand-100 px-3 py-2 text-xs font-semibold text-brand-400">

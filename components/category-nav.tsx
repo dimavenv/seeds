@@ -12,14 +12,14 @@ export default function CategoryNav({
   activeSlug?: string;
 }) {
   const chip = (active: boolean) =>
-    `whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${
+    `whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition motion-safe:active:scale-95 ${
       active
-        ? "bg-brand-600 text-white"
+        ? "bg-brand-600 text-white shadow-sm"
         : "bg-brand-50 text-brand-700 hover:bg-brand-100"
     }`;
 
   return (
-    <nav className="mb-5 flex gap-2 overflow-x-auto pb-1">
+    <nav className="scrollbar-hide mb-5 flex gap-2 overflow-x-auto pb-1">
       <Link href="/catalog" className={chip(!activeSlug)}>
         🌱 Все семена
       </Link>

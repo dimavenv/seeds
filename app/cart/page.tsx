@@ -15,8 +15,8 @@ export default function CartPage() {
 
   if (cart.length === 0) {
     return (
-      <div className="container-page py-16 text-center">
-        <CartIcon className="mx-auto h-12 w-12 text-brand-300" />
+      <div className="container-page py-16 text-center motion-safe:animate-fade-up">
+        <CartIcon className="mx-auto h-12 w-12 text-brand-300 motion-safe:animate-float" />
         <h1 className="mt-4 text-2xl font-bold text-brand-800">Корзина пуста</h1>
         <p className="mt-2 text-brand-500">
           Добавьте семена из каталога, чтобы оформить заказ.
@@ -34,7 +34,10 @@ export default function CartPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">
           {cart.map((item) => (
-            <div key={item.id} className="card flex items-center gap-4 p-3">
+            <div
+              key={item.id}
+              className="card flex flex-wrap items-center gap-3 p-3 motion-safe:animate-fade-up sm:gap-4"
+            >
               <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-brand-50">
                 {item.image_url && (
                   <Image
@@ -46,10 +49,10 @@ export default function CartPage() {
                   />
                 )}
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-36">
                 <Link
                   href={`/product/${item.slug}`}
-                  className="line-clamp-2 font-semibold text-brand-800 hover:text-brand-600"
+                  className="line-clamp-2 font-semibold text-brand-800 transition-colors hover:text-brand-600"
                 >
                   {item.name}
                 </Link>
@@ -57,35 +60,38 @@ export default function CartPage() {
                   {formatPrice(item.price)} / шт.
                 </div>
               </div>
-              <div className="flex items-center rounded-full border border-brand-200">
+              {/* На мобильных управление переносится на отдельную строку. */}
+              <div className="flex w-full items-center justify-between gap-3 sm:w-auto">
+                <div className="flex items-center rounded-full border border-brand-200">
+                  <button
+                    onClick={() => setQty(item.id, item.qty - 1)}
+                    className="px-3 py-1.5 text-brand-600 transition-colors hover:text-brand-800 motion-safe:active:scale-90"
+                    aria-label="Меньше"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-sm font-semibold">
+                    {item.qty}
+                  </span>
+                  <button
+                    onClick={() => setQty(item.id, item.qty + 1)}
+                    className="px-3 py-1.5 text-brand-600 transition-colors hover:text-brand-800 motion-safe:active:scale-90"
+                    aria-label="Больше"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="w-24 text-right font-bold text-brand-700">
+                  {formatPrice(item.price * item.qty)}
+                </div>
                 <button
-                  onClick={() => setQty(item.id, item.qty - 1)}
-                  className="px-3 py-1.5 text-brand-600"
-                  aria-label="Меньше"
+                  onClick={() => removeFromCart(item.id)}
+                  className="rounded-full p-2 text-sm text-brand-400 transition-colors hover:bg-brand-50 hover:text-accent-600"
+                  aria-label="Удалить"
                 >
-                  −
-                </button>
-                <span className="w-8 text-center text-sm font-semibold">
-                  {item.qty}
-                </span>
-                <button
-                  onClick={() => setQty(item.id, item.qty + 1)}
-                  className="px-3 py-1.5 text-brand-600"
-                  aria-label="Больше"
-                >
-                  +
+                  ✕
                 </button>
               </div>
-              <div className="w-24 text-right font-bold text-brand-700">
-                {formatPrice(item.price * item.qty)}
-              </div>
-              <button
-                onClick={() => removeFromCart(item.id)}
-                className="text-sm text-brand-400 hover:text-accent-600"
-                aria-label="Удалить"
-              >
-                ✕
-              </button>
             </div>
           ))}
         </div>
@@ -96,9 +102,9 @@ export default function CartPage() {
             <span>Товары ({cart.reduce((s, i) => s + i.qty, 0)})</span>
             <span className="font-semibold">{formatPrice(cartTotal)}</span>
           </div>
-          <div className="mt-2 flex justify-between text-sm text-brand-500">
+          <div className="mt-2 flex justify-between gap-4 text-sm text-brand-500">
             <span>Доставка</span>
-            <span>рассчитывается при оформлении</span>
+            <span className="text-right">рассчитывается при оформлении</span>
           </div>
           <div className="mt-4 flex justify-between border-t border-brand-100 pt-4 text-lg font-extrabold text-brand-800">
             <span>К оплате</span>

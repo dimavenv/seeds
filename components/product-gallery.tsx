@@ -32,7 +32,7 @@ export default function ProductGallery({
           alt={alt}
           fill
           sizes="(max-width: 1024px) 100vw, 50vw"
-          className="object-cover"
+          className="object-cover motion-safe:animate-fade-in"
           priority
         />
       </div>
@@ -45,7 +45,7 @@ export default function ProductGallery({
               type="button"
               onClick={() => setActive(i)}
               aria-label={`Фото ${i + 1}`}
-              className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-brand-50 transition ${
+              className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-brand-50 transition motion-safe:hover:scale-105 motion-safe:active:scale-95 ${
                 i === active
                   ? "border-brand-600"
                   : "border-transparent hover:border-brand-200"

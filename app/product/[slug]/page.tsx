@@ -1,12 +1,36 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import AddToCart from "@/components/add-to-cart";
 import ProductGrid from "@/components/product-grid";
 import ProductGallery from "@/components/product-gallery";
+import Reveal from "@/components/reveal";
 import { getProductBySlug, getProducts } from "@/lib/data";
 import { formatPrice, seedsLabel } from "@/lib/format";
 
 export const revalidate = 60;
+
+// SEO: заголовок, описание и картинка товара для поисковиков и мессенджеров.
+export async function generateMetadata({
+  params,
+}: {
+  params: { slug: string };
+}): Promise<Metadata> {
+  const product = await getProductBySlug(params.slug);
+  if (!product) return { title: "Товар не найден" };
+  const description =
+    product.description?.slice(0, 160) ||
+    `Купить семена «${product.name}» с доставкой по России.`;
+  return {
+    title: product.name,
+    description,
+    openGraph: {
+      title: product.name,
+      description,
+      images: product.image_url ? [product.image_url] : undefined,
+    },
+  };
+}
 
 export default async function ProductPage({
   params,
@@ -86,12 +110,14 @@ export default async function ProductPage({
       </div>
 
       {related.length > 0 && (
-        <section className="mt-14">
-          <h2 className="mb-4 text-xl font-bold text-brand-800">
-            Похожие товары
-          </h2>
-          <ProductGrid products={related} />
-        </section>
+        <Reveal>
+          <section className="mt-14">
+            <h2 className="mb-4 text-xl font-bold text-brand-800">
+              Похожие товары
+            </h2>
+            <ProductGrid products={related} />
+          </section>
+        </Reveal>
       )}
     </div>
   );

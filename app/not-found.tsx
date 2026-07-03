@@ -6,11 +6,11 @@ export default function NotFound() {
     <div className="bg-brand-50">
       <div className="container-page flex min-h-[70vh] flex-col items-center justify-center py-16 text-center">
         {/* Большое 4🍅4 */}
-        <div className="flex select-none items-center justify-center gap-2 sm:gap-4">
+        <div className="flex select-none items-center justify-center gap-2 motion-safe:animate-fade-up sm:gap-4">
           <span className="text-[7rem] font-black leading-none text-brand-700 sm:text-[11rem]">
             4
           </span>
-          <TomatoIcon className="h-28 w-28 drop-shadow-sm sm:h-44 sm:w-44" />
+          <TomatoIcon className="h-28 w-28 drop-shadow-sm motion-safe:animate-float sm:h-44 sm:w-44" />
           <span className="text-[7rem] font-black leading-none text-brand-700 sm:text-[11rem]">
             4
           </span>
