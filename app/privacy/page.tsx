@@ -101,7 +101,7 @@ export default function PrivacyPage() {
           </p>
         </div>
 
-        <p className="mt-6 text-sm text-brand-400">
+        <p className="mt-6 text-sm text-brand-500">
           Реквизиты Оператора (наименование, ИНН, адрес) необходимо заполнить в
           файле{" "}
           <code className="rounded bg-brand-100 px-1">app/privacy/page.tsx</code>.

@@ -54,7 +54,7 @@ export default function SupportForm() {
         <p className="mt-3 font-semibold text-brand-800">
           Заявка отправлена!
         </p>
-        <p className="mt-1 text-sm text-brand-700">
+        <p className="mt-1 text-sm text-brand-600">
           Мы ответим на указанную почту <strong>{form.email}</strong>. Обработка
           ручная и может занять время.
         </p>

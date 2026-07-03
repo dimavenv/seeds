@@ -30,7 +30,7 @@ export default function Header() {
       <div className="container-page flex items-center gap-3 py-3 sm:gap-5 sm:py-4">
         <Link
           href="/"
-          className="flex shrink-0 items-center text-brand-700"
+          className="flex shrink-0 items-center text-brand-600"
           aria-label="Tomat Semena — на главную"
         >
           <Logo className="h-[4.5rem] w-auto max-w-[320px] sm:h-20 sm:max-w-[400px]" />

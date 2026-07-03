@@ -73,7 +73,7 @@ export default async function OrderDetailPage({
 
   return (
     <div className="container-page py-8">
-      <nav className="mb-4 text-sm text-brand-400">
+      <nav className="mb-4 text-sm text-brand-500">
         <Link href="/account" className="hover:text-brand-700">
           Личный кабинет
         </Link>
@@ -84,7 +84,7 @@ export default async function OrderDetailPage({
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-brand-800">Заказ #{order.id}</h1>
-          <p className="text-sm text-brand-400">
+          <p className="text-sm text-brand-500">
             от {formatDate(order.created_at)} ·{" "}
             <span className="font-semibold text-brand-700">
               {ORDER_STATUS_LABELS[order.status]}
@@ -103,7 +103,7 @@ export default async function OrderDetailPage({
       {order.tracking_number && (
         <div className="card mt-4 flex flex-wrap items-center justify-between gap-3 p-5">
           <div>
-            <div className="text-sm text-brand-400">Трек-номер отправления</div>
+            <div className="text-sm text-brand-500">Трек-номер отправления</div>
             <div className="select-all text-lg font-bold tracking-wide text-brand-800">
               {order.tracking_number}
             </div>
@@ -146,7 +146,7 @@ export default async function OrderDetailPage({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-brand-800">{it.name}</div>
-                    <div className="text-sm text-brand-400">
+                    <div className="text-sm text-brand-500">
                       {formatPrice(it.price)} × {it.qty}
                     </div>
                   </div>
@@ -188,11 +188,11 @@ export default async function OrderDetailPage({
 
           <div className="card p-5 text-sm text-brand-700">
             <h3 className="mb-3 font-bold text-brand-800">Доставка</h3>
-            <div><span className="text-brand-400">Получатель:</span> {order.customer_name}</div>
-            <div><span className="text-brand-400">Телефон:</span> {decryptField(order.phone)}</div>
-            <div className="mt-1"><span className="text-brand-400">Адрес:</span> {decryptField(order.address)}</div>
+            <div><span className="text-brand-500">Получатель:</span> {order.customer_name}</div>
+            <div><span className="text-brand-500">Телефон:</span> {decryptField(order.phone)}</div>
+            <div className="mt-1"><span className="text-brand-500">Адрес:</span> {decryptField(order.address)}</div>
             {order.comment && (
-              <div className="mt-1"><span className="text-brand-400">Комментарий:</span> {order.comment}</div>
+              <div className="mt-1"><span className="text-brand-500">Комментарий:</span> {order.comment}</div>
             )}
           </div>
         </div>

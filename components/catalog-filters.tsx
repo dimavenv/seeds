@@ -47,7 +47,7 @@ export default function CatalogFilters() {
         className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-end"
       >
         <label className="flex-1">
-          <span className="mb-1 block text-xs font-semibold text-brand-700">Поиск</span>
+          <span className="mb-1 block text-xs font-semibold text-brand-600">Поиск</span>
           <span className="relative block">
             <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-400" />
             <input
@@ -59,7 +59,7 @@ export default function CatalogFilters() {
           </span>
         </label>
         <label className="w-full sm:w-28">
-          <span className="mb-1 block text-xs font-semibold text-brand-700">Цена от</span>
+          <span className="mb-1 block text-xs font-semibold text-brand-600">Цена от</span>
           <input
             type="number"
             min={0}
@@ -70,7 +70,7 @@ export default function CatalogFilters() {
           />
         </label>
         <label className="w-full sm:w-28">
-          <span className="mb-1 block text-xs font-semibold text-brand-700">до</span>
+          <span className="mb-1 block text-xs font-semibold text-brand-600">до</span>
           <input
             type="number"
             min={0}
@@ -86,7 +86,7 @@ export default function CatalogFilters() {
       </form>
 
       <label className="lg:w-56">
-        <span className="mb-1 block text-xs font-semibold text-brand-700">Сортировка</span>
+        <span className="mb-1 block text-xs font-semibold text-brand-600">Сортировка</span>
         <select
           value={sort}
           onChange={(e) => apply({ sort: e.target.value })}

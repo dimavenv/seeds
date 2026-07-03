@@ -35,7 +35,7 @@ export default async function ProductPage({
 
   return (
     <div className="container-page py-6">
-      <nav className="mb-4 text-sm text-brand-400">
+      <nav className="mb-4 text-sm text-brand-500">
         <Link href="/" className="hover:text-brand-700">Главная</Link>
         <span className="mx-1.5">/</span>
         <Link href="/catalog" className="hover:text-brand-700">Каталог</Link>
@@ -64,7 +64,7 @@ export default async function ProductPage({
             {product.name}
           </h1>
           {product.category?.name && (
-            <p className="mt-1 text-sm text-brand-400">{product.category.name}</p>
+            <p className="mt-1 text-sm text-brand-500">{product.category.name}</p>
           )}
           <p className="mt-4 text-4xl font-extrabold text-brand-700">
             {formatPrice(product.price)}

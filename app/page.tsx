@@ -21,7 +21,7 @@ export default async function HomePage() {
         <section className="mt-12">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold text-brand-800">Хиты продаж</h2>
-            <Link href="/catalog" className="text-sm font-semibold text-brand-700 hover:text-brand-800">
+            <Link href="/catalog" className="text-sm font-semibold text-brand-600 hover:text-brand-800">
               Все товары →
             </Link>
           </div>
@@ -34,7 +34,7 @@ export default async function HomePage() {
         <section className="mt-12">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold text-brand-800">Новинки</h2>
-            <Link href="/catalog?sort=new" className="text-sm font-semibold text-brand-700 hover:text-brand-800">
+            <Link href="/catalog?sort=new" className="text-sm font-semibold text-brand-600 hover:text-brand-800">
               Смотреть все →
             </Link>
           </div>
@@ -53,7 +53,7 @@ export default async function HomePage() {
             <span className="text-2xl">{icon}</span>
             <div>
               <div className="font-semibold text-brand-800">{title}</div>
-              <div className="text-sm text-brand-700">{text}</div>
+              <div className="text-sm text-brand-600">{text}</div>
             </div>
           </div>
         ))}

@@ -27,7 +27,7 @@ export default function FavoritesPage() {
   }, [wishlist, ready]);
 
   if (!ready || loading) {
-    return <div className="container-page py-10 text-brand-400">Загрузка…</div>;
+    return <div className="container-page py-10 text-brand-500">Загрузка…</div>;
   }
 
   if (wishlist.length === 0) {
@@ -37,7 +37,7 @@ export default function FavoritesPage() {
         <h1 className="mt-4 text-2xl font-bold text-brand-800">
           В избранном пока пусто
         </h1>
-        <p className="mt-2 text-brand-400">
+        <p className="mt-2 text-brand-500">
           Нажимайте на сердечко у товара, чтобы сохранить понравившиеся сорта.
         </p>
         <Link href="/catalog" className="btn-primary mt-6">

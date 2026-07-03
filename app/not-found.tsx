@@ -19,7 +19,7 @@ export default function NotFound() {
         <h1 className="mt-2 max-w-xl text-2xl font-extrabold uppercase tracking-tight text-brand-800 sm:text-3xl">
           Возможно, это не то, что вы искали
         </h1>
-        <p className="mt-3 max-w-md text-brand-700">
+        <p className="mt-3 max-w-md text-brand-600">
           Похоже, эта грядка опустела: товар закончился или ссылка устарела.
           Загляните в каталог — там много семян для богатого урожая.
         </p>

@@ -20,7 +20,7 @@ export default function VacationSetting({ until }: { until: string | null }) {
   return (
     <div className="card p-5">
       <h2 className="text-lg font-bold text-brand-800">Режим «Отпуск»</h2>
-      <p className="mt-1 text-sm text-brand-400">
+      <p className="mt-1 text-sm text-brand-500">
         Укажите дату, до которой вы в отпуске. На сайте появится плашка, что
         заказы принимаются, но будут отправлены после этой даты. Без даты плашки
         нет.
@@ -62,7 +62,7 @@ export default function VacationSetting({ until }: { until: string | null }) {
       </div>
 
       {until && (
-        <p className="mt-3 text-sm text-brand-700">
+        <p className="mt-3 text-sm text-brand-600">
           Сейчас включён отпуск: заказы отправятся после{" "}
           <span className="font-semibold text-brand-800">
             {formatDateRu(until)}

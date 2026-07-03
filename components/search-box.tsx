@@ -104,7 +104,7 @@ export default function SearchBox({
         <button
           type="submit"
           aria-label="Искать"
-          className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-brand-600 p-2 text-white transition hover:brightness-95"
+          className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-brand-600 p-2 text-white transition hover:bg-brand-700"
         >
           <SearchIcon className="h-5 w-5" />
         </button>
@@ -137,7 +137,7 @@ export default function SearchBox({
                         <span className="block truncate text-sm font-medium text-brand-800">
                           {p.name}
                         </span>
-                        <span className="block text-sm font-semibold text-brand-700">
+                        <span className="block text-sm font-semibold text-brand-600">
                           {formatPrice(p.price)}
                         </span>
                       </span>
@@ -154,7 +154,7 @@ export default function SearchBox({
               </button>
             </>
           ) : (
-            <div className="px-4 py-5 text-center text-sm text-brand-400">
+            <div className="px-4 py-5 text-center text-sm text-brand-500">
               {loading ? "Ищем…" : "Ничего не найдено"}
             </div>
           )}

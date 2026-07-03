@@ -121,7 +121,7 @@ export default function DeliveryPage() {
               {i + 1}
             </span>
             <h2 className="mt-5 text-lg font-bold text-brand-800">{s.title}</h2>
-            <div className="mt-3 space-y-3 text-sm leading-relaxed text-brand-700">
+            <div className="mt-3 space-y-3 text-sm leading-relaxed text-brand-600">
               {s.body}
             </div>
           </div>
@@ -140,7 +140,7 @@ export default function DeliveryPage() {
             </div>
             <div>
               <h3 className="font-bold text-brand-800">По всей России</h3>
-              <p className="mt-1 text-sm leading-relaxed text-brand-700">
+              <p className="mt-1 text-sm leading-relaxed text-brand-600">
                 Доставка семян осуществляется по всей территории страны.
               </p>
             </div>
@@ -153,7 +153,7 @@ export default function DeliveryPage() {
               <h3 className="font-bold text-brand-800">
                 Фиксированно — 300 ₽
               </h3>
-              <p className="mt-1 text-sm leading-relaxed text-brand-700">
+              <p className="mt-1 text-sm leading-relaxed text-brand-600">
                 Единая стоимость для любого способа — как через Ozon, так и
                 Почтой России.
               </p>
@@ -175,7 +175,7 @@ export default function DeliveryPage() {
               </div>
               <div className="leading-relaxed">
                 <h3 className="font-bold text-brand-800">{it.title}</h3>
-                <p className="mt-0.5 text-sm text-brand-700">{it.body}</p>
+                <p className="mt-0.5 text-sm text-brand-600">{it.body}</p>
               </div>
             </div>
           ))}

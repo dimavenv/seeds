@@ -114,7 +114,7 @@ export default async function AboutPage() {
                 <span className="text-2xl">{f.icon}</span>
                 <div>
                   <h3 className="font-bold text-brand-800">{f.title}</h3>
-                  <p className="mt-1 text-sm leading-relaxed text-brand-700">
+                  <p className="mt-1 text-sm leading-relaxed text-brand-600">
                     {f.text}
                   </p>
                 </div>

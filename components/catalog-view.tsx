@@ -39,7 +39,7 @@ export default async function CatalogView({
     <div className="container-page py-6">
       <CategoryNav categories={categories} activeSlug={categorySlug} />
       <h1 className="mb-1 text-2xl font-bold text-brand-800">{title}</h1>
-      <p className="mb-5 text-sm text-brand-400">
+      <p className="mb-5 text-sm text-brand-500">
         Найдено товаров: {products.length}
       </p>
       <ProductGrid products={products} />
