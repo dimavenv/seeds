@@ -28,7 +28,7 @@ export default async function AccountPage() {
           <h1 className="text-xl font-bold text-brand-800">
             Личный кабинет недоступен
           </h1>
-          <p className="mt-2 text-brand-600">
+          <p className="mt-2 text-brand-700">
             Не настроен Supabase. Укажите ключи в <code className="rounded bg-brand-100 px-1">.env.local</code>.
           </p>
         </div>
@@ -70,7 +70,7 @@ export default async function AccountPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-brand-800">Личный кабинет</h1>
-          <p className="text-sm text-brand-500">
+          <p className="text-sm text-brand-400">
             {session.email}
             <span className="ml-2 badge bg-brand-100 text-brand-700">
               {session.isAdmin ? "Администратор" : "Покупатель"}
@@ -78,7 +78,7 @@ export default async function AccountPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 rounded-full border border-brand-200 pl-3 text-sm text-brand-600">
+          <span className="flex items-center gap-1 rounded-full border border-brand-200 pl-3 text-sm text-brand-700">
             Тема
             <ThemeToggle />
           </span>
@@ -98,7 +98,7 @@ export default async function AccountPage() {
 
       {orders.length === 0 ? (
         <div className="card p-8 text-center">
-          <p className="text-brand-600">У вас пока нет заказов.</p>
+          <p className="text-brand-700">У вас пока нет заказов.</p>
           <Link href="/catalog" className="btn-accent mt-4">
             Перейти в каталог
           </Link>
@@ -117,11 +117,11 @@ export default async function AccountPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="font-bold text-brand-800">Заказ #{o.id}</div>
-                    <div className="text-sm text-brand-500">
+                    <div className="text-sm text-brand-400">
                       {formatDate(o.created_at)} · {count} тов.
                     </div>
                     {o.tracking_number && (
-                      <div className="mt-0.5 text-xs text-brand-500">
+                      <div className="mt-0.5 text-xs text-brand-400">
                         📮 Трек: <span className="font-semibold text-brand-700">{o.tracking_number}</span>
                       </div>
                     )}
@@ -152,11 +152,11 @@ export default async function AccountPage() {
                     );
                   })}
                   {items.length > 6 && (
-                    <span className="text-sm text-brand-500">
+                    <span className="text-sm text-brand-400">
                       +{items.length - 6}
                     </span>
                   )}
-                  <span className="ml-auto text-sm font-semibold text-brand-600">
+                  <span className="ml-auto text-sm font-semibold text-brand-700">
                     Подробнее →
                   </span>
                 </div>

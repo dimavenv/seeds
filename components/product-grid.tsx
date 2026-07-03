@@ -4,7 +4,7 @@ import type { Product } from "@/lib/types";
 export default function ProductGrid({ products }: { products: Product[] }) {
   if (products.length === 0) {
     return (
-      <div className="card p-10 text-center text-brand-500">
+      <div className="card p-10 text-center text-brand-400">
         Товары не найдены.
       </div>
     );

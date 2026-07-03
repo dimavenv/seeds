@@ -139,7 +139,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
             className={`relative -mb-px flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition ${
               tab === t.id
                 ? "border-b-2 border-accent-500 text-brand-800"
-                : "border-b-2 border-transparent text-brand-400 hover:text-brand-600"
+                : "border-b-2 border-transparent text-brand-400 hover:text-brand-700"
             }`}
           >
             {t.label}
@@ -147,7 +147,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
               className={`rounded-full px-2 py-0.5 text-xs ${
                 tab === t.id
                   ? "bg-accent-500 text-white"
-                  : "bg-brand-100 text-brand-500"
+                  : "bg-brand-100 text-brand-400"
               }`}
             >
               {t.count}
@@ -168,7 +168,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
 
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
-          <thead className="bg-brand-50 text-left text-brand-500">
+          <thead className="bg-brand-50 text-left text-brand-400">
             <tr>
               <th className="p-3">Фото</th>
               <th>Название</th>
@@ -211,7 +211,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
                   />
                 </td>
                 <td className="space-x-3 whitespace-nowrap pr-3 text-right">
-                  <Link href={`/admin/products/${p.id}`} className="text-sm font-semibold text-brand-600 hover:underline">
+                  <Link href={`/admin/products/${p.id}`} className="text-sm font-semibold text-brand-700 hover:underline">
                     Изменить
                   </Link>
                   <button
@@ -231,7 +231,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-6 text-center text-brand-500">
+                <td colSpan={6} className="p-6 text-center text-brand-400">
                   {query
                     ? "Ничего не найдено."
                     : tab === "ready"

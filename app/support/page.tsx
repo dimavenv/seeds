@@ -22,7 +22,7 @@ export default function SupportPage() {
           <SupportForm />
         </div>
 
-        <p className="mt-6 text-sm text-brand-500">
+        <p className="mt-6 text-sm text-brand-400">
           Также можно написать напрямую на{" "}
           <a
             href="mailto:info@tomatsemena.ru"

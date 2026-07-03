@@ -26,7 +26,7 @@ export default async function AdminOrders() {
       </h2>
 
       {orders.length === 0 ? (
-        <div className="card p-6 text-center text-brand-500">
+        <div className="card p-6 text-center text-brand-400">
           Заказов пока нет.
         </div>
       ) : (
@@ -38,7 +38,7 @@ export default async function AdminOrders() {
                   <div className="text-lg font-bold text-brand-800">
                     Заказ #{o.id}
                   </div>
-                  <div className="text-sm text-brand-500">
+                  <div className="text-sm text-brand-400">
                     {formatDate(o.created_at)}
                   </div>
                 </div>
@@ -53,18 +53,18 @@ export default async function AdminOrders() {
 
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <div className="text-sm text-brand-700">
-                  <div><span className="text-brand-500">Клиент:</span> {o.customer_name}</div>
-                  <div><span className="text-brand-500">Телефон:</span> {decryptField(o.phone)}</div>
-                  {o.email && <div><span className="text-brand-500">Email:</span> {decryptField(o.email)}</div>}
-                  <div><span className="text-brand-500">Адрес:</span> {decryptField(o.address)}</div>
+                  <div><span className="text-brand-400">Клиент:</span> {o.customer_name}</div>
+                  <div><span className="text-brand-400">Телефон:</span> {decryptField(o.phone)}</div>
+                  {o.email && <div><span className="text-brand-400">Email:</span> {decryptField(o.email)}</div>}
+                  <div><span className="text-brand-400">Адрес:</span> {decryptField(o.address)}</div>
                   {o.delivery_method && (
                     <div>
-                      <span className="text-brand-500">Доставка:</span>{" "}
+                      <span className="text-brand-400">Доставка:</span>{" "}
                       {deliveryMethodLabel(o.delivery_method)}
                       {o.delivery_cost ? ` — ${formatPrice(o.delivery_cost)}` : ""}
                     </div>
                   )}
-                  {o.comment && <div><span className="text-brand-500">Комментарий:</span> {o.comment}</div>}
+                  {o.comment && <div><span className="text-brand-400">Комментарий:</span> {o.comment}</div>}
                 </div>
                 <div className="text-sm">
                   <div className="mb-1 font-semibold text-brand-700">Состав:</div>

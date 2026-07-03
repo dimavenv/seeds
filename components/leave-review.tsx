@@ -43,7 +43,7 @@ export default function LeaveReview({
         <p className="mt-2 whitespace-pre-wrap text-sm text-brand-700">
           {existing.text}
         </p>
-        <p className="mt-2 text-xs text-brand-500">
+        <p className="mt-2 text-xs text-brand-400">
           {STATUS_TEXT[existing.status] ?? ""}
         </p>
       </div>
@@ -57,7 +57,7 @@ export default function LeaveReview({
         <p className="mt-2 font-semibold text-brand-800">
           Спасибо! Отзыв отправлен на модерацию.
         </p>
-        <p className="mt-1 text-sm text-brand-600">
+        <p className="mt-1 text-sm text-brand-700">
           После проверки он появится в разделе «Отзывы».
         </p>
       </div>
@@ -66,7 +66,7 @@ export default function LeaveReview({
 
   if (!canReview) {
     return (
-      <div className="card p-5 text-sm text-brand-500">
+      <div className="card p-5 text-sm text-brand-400">
         Оставить отзыв можно после получения заказа.
       </div>
     );
@@ -138,7 +138,7 @@ export default function LeaveReview({
       >
         {busy ? "Отправляем…" : "Отправить отзыв"}
       </button>
-      <p className="mt-2 text-xs text-brand-500">
+      <p className="mt-2 text-xs text-brand-400">
         Отзыв публикуется после проверки модератором.
       </p>
     </div>

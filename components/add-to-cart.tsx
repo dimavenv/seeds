@@ -19,7 +19,7 @@ export default function AddToCart({ product }: { product: Product }) {
           <div className="flex items-center rounded-full border border-brand-200 bg-surface">
             <button
               onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="px-4 py-2 text-lg text-brand-600"
+              className="px-4 py-2 text-lg text-brand-700"
               aria-label="Меньше"
             >
               −
@@ -27,7 +27,7 @@ export default function AddToCart({ product }: { product: Product }) {
             <span className="w-10 text-center font-semibold">{qty}</span>
             <button
               onClick={() => setQty((q) => q + 1)}
-              className="px-4 py-2 text-lg text-brand-600"
+              className="px-4 py-2 text-lg text-brand-700"
               aria-label="Больше"
             >
               +
@@ -57,14 +57,14 @@ export default function AddToCart({ product }: { product: Product }) {
           className={`btn !px-3 ${
             wished
               ? "bg-accent-500 text-white"
-              : "border border-brand-200 bg-surface text-brand-600"
+              : "border border-brand-200 bg-surface text-brand-700"
           }`}
         >
           <HeartIcon className="h-5 w-5" filled={wished} />
         </button>
       </div>
       {inStock ? (
-        <span className="text-sm text-brand-600">В наличии: {product.stock} шт.</span>
+        <span className="text-sm text-brand-700">В наличии: {product.stock} шт.</span>
       ) : (
         <span className="text-sm text-accent-600">
           Этого сорта сейчас нет в наличии. Загляните позже или добавьте в

@@ -46,7 +46,7 @@ export default async function AdminReviews() {
       <CreateReviewForm />
 
       {reviews.length === 0 ? (
-        <div className="card p-6 text-center text-brand-500">
+        <div className="card p-6 text-center text-brand-400">
           Отзывов пока нет.
         </div>
       ) : (
@@ -66,7 +66,7 @@ export default async function AdminReviews() {
                   <div className="mt-1 text-sm font-semibold text-brand-800">
                     {r.author_name || "Покупатель"}
                   </div>
-                  <div className="text-xs text-brand-500">
+                  <div className="text-xs text-brand-400">
                     {formatDate(r.created_at)}
                     {r.order_id ? ` · заказ #${r.order_id}` : ""}
                   </div>

@@ -136,7 +136,7 @@ export default function ProductForm({
         <span className="mb-1 block text-sm font-semibold text-brand-700">
           Фото товара (можно несколько)
         </span>
-        <p className="mb-2 text-xs text-brand-500">
+        <p className="mb-2 text-xs text-brand-400">
           Первое фото — главное (показывается в каталоге). Наведите на фото, чтобы
           сделать его главным или удалить.
         </p>
@@ -184,7 +184,7 @@ export default function ProductForm({
           onChange={handleUpload}
           className="text-sm"
         />
-        {uploading && <p className="mt-1 text-sm text-brand-500">Загрузка…</p>}
+        {uploading && <p className="mt-1 text-sm text-brand-400">Загрузка…</p>}
         <input
           onKeyDown={(e) => {
             if (e.key === "Enter") {

@@ -65,7 +65,7 @@ export default function LoginPage() {
     <div className="container-page py-16">
       <div className="card mx-auto max-w-md p-8">
         <h1 className="text-2xl font-bold text-brand-800">Вход</h1>
-        <p className="mt-1 text-sm text-brand-500">
+        <p className="mt-1 text-sm text-brand-400">
           Войдите в личный кабинет или панель администратора.
         </p>
 
@@ -98,9 +98,9 @@ export default function LoginPage() {
             {loading ? "Входим…" : "Войти"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-brand-500">
+        <p className="mt-4 text-center text-sm text-brand-400">
           Нет аккаунта?{" "}
-          <Link href="/register" className="font-semibold text-brand-600 hover:text-brand-800">
+          <Link href="/register" className="font-semibold text-brand-700 hover:text-brand-800">
             Зарегистрироваться
           </Link>
         </p>

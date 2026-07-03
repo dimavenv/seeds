@@ -41,7 +41,7 @@ export default function ProductCard({ product }: { product: Product }) {
           onClick={() => toggleWish(product.id)}
           aria-label="В избранное"
           className={`absolute right-2 top-2 rounded-full p-2 shadow-sm transition ${
-            wished ? "bg-accent-500 text-white" : "bg-white/90 text-brand-600 hover:bg-white"
+            wished ? "bg-accent-500 text-white" : "bg-white/90 text-brand-700 hover:bg-white"
           }`}
         >
           <HeartIcon className="h-4 w-4" filled={wished} />
@@ -54,12 +54,12 @@ export default function ProductCard({ product }: { product: Product }) {
         )}
         <Link
           href={`/product/${product.slug}`}
-          className="mt-0.5 line-clamp-2 text-sm font-semibold text-brand-800 hover:text-brand-600"
+          className="mt-0.5 line-clamp-2 text-sm font-semibold text-brand-800 hover:text-brand-700"
         >
           {product.name}
         </Link>
         {product.seeds_per_pack ? (
-          <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-600">
+          <span className="mt-1.5 inline-flex w-fit items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
             🌱 {seedsLabel(product.seeds_per_pack)} в пакетике
           </span>
         ) : null}

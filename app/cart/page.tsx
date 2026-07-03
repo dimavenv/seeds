@@ -10,7 +10,7 @@ export default function CartPage() {
   const { cart, cartTotal, setQty, removeFromCart, ready } = useStore();
 
   if (!ready) {
-    return <div className="container-page py-10 text-brand-500">Загрузка…</div>;
+    return <div className="container-page py-10 text-brand-400">Загрузка…</div>;
   }
 
   if (cart.length === 0) {
@@ -18,7 +18,7 @@ export default function CartPage() {
       <div className="container-page py-16 text-center">
         <CartIcon className="mx-auto h-12 w-12 text-brand-300" />
         <h1 className="mt-4 text-2xl font-bold text-brand-800">Корзина пуста</h1>
-        <p className="mt-2 text-brand-500">
+        <p className="mt-2 text-brand-400">
           Добавьте семена из каталога, чтобы оформить заказ.
         </p>
         <Link href="/catalog" className="btn-primary mt-6">
@@ -49,18 +49,18 @@ export default function CartPage() {
               <div className="min-w-0 flex-1">
                 <Link
                   href={`/product/${item.slug}`}
-                  className="line-clamp-2 font-semibold text-brand-800 hover:text-brand-600"
+                  className="line-clamp-2 font-semibold text-brand-800 hover:text-brand-700"
                 >
                   {item.name}
                 </Link>
-                <div className="text-sm text-brand-500">
+                <div className="text-sm text-brand-400">
                   {formatPrice(item.price)} / шт.
                 </div>
               </div>
               <div className="flex items-center rounded-full border border-brand-200">
                 <button
                   onClick={() => setQty(item.id, item.qty - 1)}
-                  className="px-3 py-1.5 text-brand-600"
+                  className="px-3 py-1.5 text-brand-700"
                   aria-label="Меньше"
                 >
                   −
@@ -70,7 +70,7 @@ export default function CartPage() {
                 </span>
                 <button
                   onClick={() => setQty(item.id, item.qty + 1)}
-                  className="px-3 py-1.5 text-brand-600"
+                  className="px-3 py-1.5 text-brand-700"
                   aria-label="Больше"
                 >
                   +
@@ -96,7 +96,7 @@ export default function CartPage() {
             <span>Товары ({cart.reduce((s, i) => s + i.qty, 0)})</span>
             <span className="font-semibold">{formatPrice(cartTotal)}</span>
           </div>
-          <div className="mt-2 flex justify-between text-sm text-brand-500">
+          <div className="mt-2 flex justify-between text-sm text-brand-400">
             <span>Доставка</span>
             <span>рассчитывается при оформлении</span>
           </div>

@@ -155,7 +155,7 @@ export default function CheckoutPage() {
     return (
       <div className="container-page py-16 text-center">
         <h1 className="text-2xl font-bold text-brand-800">Корзина пуста</h1>
-        <p className="mt-2 text-brand-500">Добавьте товары перед оформлением.</p>
+        <p className="mt-2 text-brand-400">Добавьте товары перед оформлением.</p>
         <Link href="/catalog" className="btn-primary mt-6">
           В каталог
         </Link>
@@ -173,7 +173,7 @@ export default function CheckoutPage() {
             <legend className="text-base font-bold text-brand-800">
               Получатель
             </legend>
-            <p className="text-xs text-brand-500">
+            <p className="text-xs text-brand-400">
               Укажите ФИО полностью, без сокращений.
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -244,7 +244,7 @@ export default function CheckoutPage() {
                     className="accent-brand-600"
                   />
                   <span className="font-semibold text-brand-800">{m.label}</span>
-                  <span className="ml-auto text-sm text-brand-500">
+                  <span className="ml-auto text-sm text-brand-400">
                     {formatPrice(DELIVERY_COST)}
                   </span>
                 </label>
@@ -258,7 +258,7 @@ export default function CheckoutPage() {
             </span>
             <textarea value={form.comment} onChange={update("comment")} className="input min-h-24" />
           </label>
-          <p className="text-xs text-brand-500">
+          <p className="text-xs text-brand-400">
             Оплата при получении. Доставка Ozon или Почтой России —{" "}
             {formatPrice(DELIVERY_COST)} по всей России.
           </p>

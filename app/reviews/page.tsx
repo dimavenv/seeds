@@ -45,13 +45,13 @@ export default async function ReviewsPage() {
           <div className="mx-auto mt-8 flex max-w-sm flex-col items-center rounded-2xl bg-brand-50 p-6 shadow-sm">
             <div className="text-5xl font-black text-brand-800">{avg}</div>
             <Stars value={Math.round(Number(avg))} className="mt-2 text-2xl" />
-            <p className="mt-2 text-sm text-brand-500">
+            <p className="mt-2 text-sm text-brand-400">
               на основе {reviews.length} отзыв{reviews.length === 1 ? "а" : reviews.length < 5 ? "ов" : "ов"}
             </p>
             <div className="mt-4 w-full space-y-1.5">
               {dist.map(({ n, count }) => (
                 <div key={n} className="flex items-center gap-2 text-xs">
-                  <span className="w-3 text-right text-brand-600">{n}</span>
+                  <span className="w-3 text-right text-brand-700">{n}</span>
                   <span className="text-amber-400">★</span>
                   <div className="flex-1 overflow-hidden rounded-full bg-brand-100">
                     <div
@@ -59,7 +59,7 @@ export default async function ReviewsPage() {
                       style={{ width: reviews.length > 0 ? `${(count / reviews.length) * 100}%` : "0%" }}
                     />
                   </div>
-                  <span className="w-4 text-brand-500">{count}</span>
+                  <span className="w-4 text-brand-400">{count}</span>
                 </div>
               ))}
             </div>
@@ -69,7 +69,7 @@ export default async function ReviewsPage() {
         {reviews.length === 0 ? (
           <div className="card mx-auto mt-8 max-w-lg p-8 text-center">
             <div className="text-4xl">🌱</div>
-            <p className="mt-3 text-brand-600">
+            <p className="mt-3 text-brand-700">
               Здесь скоро появятся отзывы. Оставить отзыв можно из истории
               заказа после получения.
             </p>

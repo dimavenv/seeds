@@ -33,20 +33,20 @@ export default async function AdminDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="card p-5">
-          <div className="text-sm text-brand-500">Товаров в каталоге</div>
+          <div className="text-sm text-brand-400">Товаров в каталоге</div>
           <div className="mt-1 text-3xl font-extrabold text-brand-800">
             {productsCount ?? 0}
           </div>
-          <Link href="/admin/products" className="mt-2 inline-block text-sm font-semibold text-brand-600">
+          <Link href="/admin/products" className="mt-2 inline-block text-sm font-semibold text-brand-700">
             Управление →
           </Link>
         </div>
         <div className="card p-5">
-          <div className="text-sm text-brand-500">Всего заказов</div>
+          <div className="text-sm text-brand-400">Всего заказов</div>
           <div className="mt-1 text-3xl font-extrabold text-brand-800">
             {ordersCount ?? 0}
           </div>
-          <Link href="/admin/orders" className="mt-2 inline-block text-sm font-semibold text-brand-600">
+          <Link href="/admin/orders" className="mt-2 inline-block text-sm font-semibold text-brand-700">
             Все заказы →
           </Link>
         </div>
@@ -62,10 +62,10 @@ export default async function AdminDashboard() {
           Последние заказы
         </h2>
         {recentOrders.length === 0 ? (
-          <p className="text-sm text-brand-500">Заказов пока нет.</p>
+          <p className="text-sm text-brand-400">Заказов пока нет.</p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="text-left text-brand-500">
+            <thead className="text-left text-brand-400">
               <tr>
                 <th className="py-2">№</th>
                 <th>Клиент</th>

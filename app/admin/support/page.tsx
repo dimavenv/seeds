@@ -21,7 +21,7 @@ export default async function AdminSupport() {
       </h2>
 
       {requests.length === 0 ? (
-        <div className="card p-6 text-center text-brand-500">
+        <div className="card p-6 text-center text-brand-400">
           Заявок пока нет.
         </div>
       ) : (
@@ -36,7 +36,7 @@ export default async function AdminSupport() {
                   <div className="text-lg font-bold text-brand-800">
                     {r.subject}
                   </div>
-                  <div className="text-sm text-brand-500">
+                  <div className="text-sm text-brand-400">
                     {formatDate(r.created_at)}
                   </div>
                 </div>
@@ -50,7 +50,7 @@ export default async function AdminSupport() {
 
               <div className="mt-3 text-sm text-brand-700">
                 <div>
-                  <span className="text-brand-500">От:</span> {r.name} ·{" "}
+                  <span className="text-brand-400">От:</span> {r.name} ·{" "}
                   <a
                     href={`mailto:${email}`}
                     className="text-brand-700 underline hover:text-brand-800"

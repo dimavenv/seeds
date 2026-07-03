@@ -7,10 +7,10 @@ export default function Footer({ categories }: { categories: Category[] }) {
     <footer className="mt-16 border-t border-brand-100 bg-surface">
       <div className="container-page grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <div className="flex items-center text-brand-600">
+          <div className="flex items-center text-brand-700">
             <Logo className="h-9 w-auto max-w-[180px]" />
           </div>
-          <p className="mt-3 text-sm text-brand-600">
+          <p className="mt-3 text-sm text-brand-700">
             Коллекционные семена томатов, перцев, баклажанов, дынь и арбузов с
             доставкой по России.
           </p>
@@ -18,7 +18,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
 
         <div>
           <h3 className="mb-3 text-sm font-semibold text-brand-800">Каталог</h3>
-          <ul className="space-y-1.5 text-sm text-brand-600">
+          <ul className="space-y-1.5 text-sm text-brand-700">
             {categories.slice(0, 6).map((c) => (
               <li key={c.id}>
                 <Link href={`/catalog/${c.slug}`} className="hover:text-brand-800">
@@ -31,7 +31,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
 
         <div>
           <h3 className="mb-3 text-sm font-semibold text-brand-800">Покупателям</h3>
-          <ul className="space-y-1.5 text-sm text-brand-600">
+          <ul className="space-y-1.5 text-sm text-brand-700">
             <li><Link href="/about" className="hover:text-brand-800">О нас</Link></li>
             <li><Link href="/delivery" className="hover:text-brand-800">Доставка и оплата</Link></li>
             <li><Link href="/reviews" className="hover:text-brand-800">Отзывы</Link></li>
@@ -43,7 +43,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
 
         <div>
           <h3 className="mb-3 text-sm font-semibold text-brand-800">Контакты</h3>
-          <ul className="space-y-1.5 text-sm text-brand-600">
+          <ul className="space-y-1.5 text-sm text-brand-700">
             <li>Доставка почтой по всей России</li>
             <li>Пн–Вс: 9:00–20:00</li>
             <li>info@tomatsemena.ru</li>
@@ -51,7 +51,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
         </div>
       </div>
       <div className="border-t border-brand-100 py-4">
-        <div className="container-page text-center text-xs text-brand-500">
+        <div className="container-page text-center text-xs text-brand-400">
           © {new Date().getFullYear()} Tomat Semena. Все права защищены.
         </div>
       </div>

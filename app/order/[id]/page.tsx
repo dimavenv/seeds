@@ -19,7 +19,7 @@ export default function OrderConfirmationPage({
         <h1 className="mt-5 text-2xl font-bold text-brand-800">
           Заказ №{params.id} оформлен!
         </h1>
-        <p className="mt-3 text-brand-600">
+        <p className="mt-3 text-brand-700">
           {searchParams.name ? `${searchParams.name}, спасибо за заказ! ` : ""}
           Мы свяжемся с вами для подтверждения. Доставка — 300 ₽ (Ozon или Почта
           России).

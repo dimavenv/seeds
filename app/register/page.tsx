@@ -68,9 +68,9 @@ export default function RegisterPage() {
             {loading ? "Создаём…" : "Зарегистрироваться"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-brand-500">
+        <p className="mt-4 text-center text-sm text-brand-400">
           Уже есть аккаунт?{" "}
-          <Link href="/login" className="font-semibold text-brand-600 hover:text-brand-800">
+          <Link href="/login" className="font-semibold text-brand-700 hover:text-brand-800">
             Войти
           </Link>
         </p>
