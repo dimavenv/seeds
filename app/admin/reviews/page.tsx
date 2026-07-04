@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/format";
 import Stars from "@/components/stars";
 import ReviewModeration from "@/components/admin/review-moderation";
+import CreateReviewForm from "@/components/admin/create-review-form";
 import type { Review, ReviewStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -21,11 +22,10 @@ export default async function AdminReviews() {
   const supabase = createClient();
   const { data } = await supabase
     .from("reviews")
-    .select("id, author_name, rating, text, status, created_at, order_id, user_id")
+    .select("id, author_name, rating, text, status, source, created_at, order_id, user_id")
     .order("created_at", { ascending: false });
 
   const reviews = (data ?? []) as Review[];
-  // На модерации — наверх.
   reviews.sort(
     (a, b) =>
       (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1)
@@ -43,6 +43,8 @@ export default async function AdminReviews() {
         )}
       </h2>
 
+      <CreateReviewForm />
+
       {reviews.length === 0 ? (
         <div className="card p-6 text-center text-brand-500">
           Отзывов пока нет.
@@ -53,7 +55,14 @@ export default async function AdminReviews() {
             <div key={r.id} className="card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <Stars value={r.rating} />
+                  <div className="flex items-center gap-2">
+                    <Stars value={r.rating} />
+                    {r.source === "ozon" && (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-blue-600">
+                        Ozon
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-1 text-sm font-semibold text-brand-800">
                     {r.author_name || "Покупатель"}
                   </div>

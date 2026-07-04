@@ -67,14 +67,20 @@ export default function ProductCard({ product }: { product: Product }) {
           <span className="text-lg font-extrabold text-brand-700">
             {formatPrice(product.price)}
           </span>
-          <button
-            onClick={() => addToCart(product)}
-            className="btn-accent !px-3 !py-2"
-            aria-label="В корзину"
-          >
-            <CartIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">В корзину</span>
-          </button>
+          {product.stock > 0 ? (
+            <button
+              onClick={() => addToCart(product)}
+              className="btn-accent !px-3 !py-2"
+              aria-label="В корзину"
+            >
+              <CartIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">В корзину</span>
+            </button>
+          ) : (
+            <span className="rounded-full bg-brand-100 px-3 py-2 text-xs font-semibold text-brand-400">
+              Нет в наличии
+            </span>
+          )}
         </div>
       </div>
     </div>

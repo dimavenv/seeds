@@ -25,7 +25,7 @@ const FACTS: { icon: string; title: string; text: string }[] = [
   {
     icon: "✍️",
     title: "Личный знак качества",
-    text: "Здесь нет места массовому автоматизированному производству — за каждым пакетиком семян стою лично я. Каждая семечка проходит строгий ручной отбор, правильную сушку и бережное хранение. Я отправляю только тот материал, в чьей чистоте и всхожести уверена на все 100%.",
+    text: "Здесь нет места массовому автоматизированному производству — за каждым пакетиком семян стою лично я. Каждое семечко проходит строгий ручной отбор, правильную сушку и бережное хранение, после чего я упаковываю семена по 10 штук в zip-lock пакеты без полиграфии. Я отправляю только тот материал, в чьей чистоте и всхожести уверена на 100%.",
   },
 ];
 
@@ -64,8 +64,8 @@ export default async function AboutPage() {
           )}
 
           <div className="motion-safe:animate-fade-up">
-            <span className="mb-4 block text-5xl font-black text-accent-500 sm:mb-5 sm:text-6xl">
-              О нас
+            <span className="mb-3 block text-3xl font-black text-accent-500 sm:mb-4 sm:text-4xl">
+              О НАС
             </span>
             <h1 className="text-lg font-extrabold leading-snug text-brand-800 sm:text-xl">
               Добро пожаловать в интернет-магазин{" "}
@@ -73,7 +73,7 @@ export default async function AboutPage() {
                 Tomat<span className="text-accent-500">Semena</span>
               </span>
               , где семена — это не просто будущие грядки, а начало
-              захватывающего эстетического приключения!
+              захватывающего экзотического приключения!
             </h1>
             <div className="mt-3 h-1 w-16 rounded-full bg-accent-500" />
           </div>
@@ -122,6 +122,13 @@ export default async function AboutPage() {
             </div>
           ))}
         </div>
+
+        <p className="mt-5 text-xs leading-relaxed text-brand-400">
+          * Обратите внимание: наши семена продаются специально как декоративные
+          и коллекционные. Все рекомендации по вкусу, способу использования,
+          обработке и ингредиентам основаны на переданном опыте и предназначены
+          только для ознакомления.
+        </p>
 
         <div className="mt-10 rounded-2xl bg-brand-50 p-6 text-center">
           <p className="text-lg font-semibold text-brand-800">

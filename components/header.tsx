@@ -33,7 +33,7 @@ export default function Header() {
           className="flex shrink-0 items-center text-brand-600"
           aria-label="Tomat Semena — на главную"
         >
-          <Logo className="h-12 w-auto max-w-[210px] sm:h-14 sm:max-w-[280px]" />
+          <Logo className="h-[4.5rem] w-auto max-w-[320px] sm:h-20 sm:max-w-[400px]" />
         </Link>
 
         {/* Десктоп: поиск с подсказками */}
@@ -82,9 +82,6 @@ export default function Header() {
           </Link>
           <Link href="/delivery" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Доставка и оплата
-          </Link>
-          <Link href="/how-to-order" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
-            Как заказать
           </Link>
           <Link href="/reviews" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Отзывы

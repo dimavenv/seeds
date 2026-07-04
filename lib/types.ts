@@ -84,6 +84,7 @@ export type Review = {
   rating: number;
   text: string;
   status: ReviewStatus;
+  source: string | null;
   created_at: string;
 };
 

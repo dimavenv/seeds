@@ -87,6 +87,32 @@ export async function saveProduct(
   return { ok: true };
 }
 
+export async function updateProductInline(
+  id: number,
+  fields: { price?: number; stock?: number }
+): Promise<{ ok?: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session.isAdmin) return { error: "Нет доступа" };
+
+  const payload: { price?: number; stock?: number } = {};
+  if (typeof fields.price === "number" && !Number.isNaN(fields.price)) {
+    payload.price = Math.max(0, fields.price);
+  }
+  if (typeof fields.stock === "number" && !Number.isNaN(fields.stock)) {
+    payload.stock = Math.max(0, Math.round(fields.stock));
+  }
+  if (Object.keys(payload).length === 0) return { error: "Нечего сохранять" };
+
+  const supabase = createClient();
+  const { error } = await supabase.from("products").update(payload).eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/products");
+  revalidatePath("/catalog");
+  revalidatePath("/");
+  return { ok: true };
+}
+
 export async function deleteProduct(id: number): Promise<void> {
   const session = await getSession();
   if (!session.isAdmin) return;

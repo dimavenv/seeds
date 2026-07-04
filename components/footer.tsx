@@ -11,7 +11,8 @@ export default function Footer({ categories }: { categories: Category[] }) {
             <Logo className="h-9 w-auto max-w-[180px]" />
           </div>
           <p className="mt-3 text-sm text-brand-600">
-            Семена овощей, зелени, ягод и цветов с доставкой по России.
+            Коллекционные семена томатов, перцев, баклажанов, дынь и арбузов с
+            доставкой по России.
           </p>
         </div>
 
@@ -33,7 +34,6 @@ export default function Footer({ categories }: { categories: Category[] }) {
           <ul className="space-y-1.5 text-sm text-brand-600">
             <li><Link href="/about" className="hover:text-brand-800">О нас</Link></li>
             <li><Link href="/delivery" className="hover:text-brand-800">Доставка и оплата</Link></li>
-            <li><Link href="/how-to-order" className="hover:text-brand-800">Как заказать</Link></li>
             <li><Link href="/reviews" className="hover:text-brand-800">Отзывы</Link></li>
             <li><Link href="/support" className="hover:text-brand-800">Поддержка</Link></li>
             <li><Link href="/favorites" className="hover:text-brand-800">Избранное</Link></li>
