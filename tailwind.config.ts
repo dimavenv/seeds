@@ -12,6 +12,12 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Читабельность: мелкие размеры чуть крупнее стандартных Tailwind
+      // (xs 12→13px, sm 14→15px) — правка действует на весь сайт сразу.
+      fontSize: {
+        xs: ["0.8125rem", { lineHeight: "1.15rem" }],
+        sm: ["0.9375rem", { lineHeight: "1.4rem" }],
+      },
       colors: {
         brand: {
           50: v("--brand-50"),

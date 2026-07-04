@@ -28,12 +28,12 @@ const STEPS: { title: string; body: React.ReactNode }[] = [
         <ul className="list-disc space-y-2 pl-5">
           <li>
             Через{" "}
-            <span className="font-semibold text-brand-800">Ozon:</span> точный
+            <span className="font-semibold text-accent-600">Ozon:</span> точный
             адрес нужного вам пункта выдачи заказов (ПВЗ). Вы должны быть
             зарегистрированы на Ozon и иметь приложение на смартфоне.
           </li>
           <li>
-            <span className="font-semibold text-brand-800">
+            <span className="font-semibold text-accent-600">
               Почтой России:
             </span>{" "}
             ваш полный домашний адрес и почтовый индекс.
@@ -112,7 +112,7 @@ export default function DeliveryPage() {
               {i + 1}
             </span>
             <h2 className="mt-5 text-lg font-bold text-brand-800">{s.title}</h2>
-            <div className="mt-3 space-y-3 text-[15px] leading-relaxed text-brand-600">
+            <div className="mt-3 space-y-3 text-base leading-relaxed text-brand-600">
               {s.body}
             </div>
           </div>
@@ -131,7 +131,7 @@ export default function DeliveryPage() {
             </div>
             <div>
               <h3 className="font-bold text-brand-800">По всей России</h3>
-              <p className="mt-1 text-[15px] leading-relaxed text-brand-600">
+              <p className="mt-1 text-base leading-relaxed text-brand-600">
                 Доставка семян осуществляется по всей территории страны.
               </p>
             </div>
@@ -144,7 +144,7 @@ export default function DeliveryPage() {
               <h3 className="font-bold text-brand-800">
                 Фиксированно — 300 ₽
               </h3>
-              <p className="mt-1 text-[15px] leading-relaxed text-brand-600">
+              <p className="mt-1 text-base leading-relaxed text-brand-600">
                 Единая стоимость для любого способа — как через Ozon, так и
                 Почтой России.
               </p>
@@ -166,7 +166,7 @@ export default function DeliveryPage() {
               </div>
               <div className="leading-relaxed">
                 <h3 className="font-bold text-brand-800">{it.title}</h3>
-                <p className="mt-0.5 text-[15px] text-brand-600">{it.body}</p>
+                <p className="mt-0.5 text-base text-brand-600">{it.body}</p>
               </div>
             </div>
           ))}
