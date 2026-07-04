@@ -18,6 +18,7 @@ import {
 import ConsentCheckbox from "@/components/consent-checkbox";
 import DadataAddress, {
   emptyAddress,
+  DadataAddressLine,
   type AddressValue,
 } from "@/components/dadata-address";
 
@@ -34,10 +35,20 @@ type SavedProfile = {
   };
   address: AddressValue;
   deliveryMethod: DeliveryMethodId;
+  pickup?: string; // адрес ПВЗ Ozon (в старых сохранениях отсутствует)
 };
 
+// Пояснения к способам доставки в начале формы.
+const METHOD_HINTS: Record<DeliveryMethodId, string> = {
+  ozon: "В пункт выдачи заказов Ozon",
+  post: "На домашний адрес по индексу",
+};
+
+type InsufficientItem = { id: number; available: number; name?: string };
+
 export default function CheckoutPage() {
-  const { cart, cartTotal, clearCart, ready } = useStore();
+  const { cart, cartTotal, clearCart, setQty, removeFromCart, ready } =
+    useStore();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +63,7 @@ export default function CheckoutPage() {
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
+  const [pickup, setPickup] = useState("");
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
   const grandTotal = cartTotal + DELIVERY_COST;
@@ -64,6 +76,7 @@ export default function CheckoutPage() {
       if (saved.form) setForm(saved.form);
       if (saved.address) setAddress(saved.address);
       if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
+      if (saved.pickup) setPickup(saved.pickup);
       setRemember(true);
     });
     return () => {
@@ -74,6 +87,26 @@ export default function CheckoutPage() {
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [field]: e.target.value }));
+  }
+
+  // Сервер ответил, что каких-то товаров не хватает: поджимаем корзину под
+  // фактическое наличие и объясняем, что изменилось.
+  function applyInsufficient(list: InsufficientItem[]) {
+    const details: string[] = [];
+    for (const s of list) {
+      const name = s.name ?? cart.find((i) => i.id === s.id)?.name ?? `товар #${s.id}`;
+      if (s.available <= 0) {
+        removeFromCart(s.id);
+        details.push(`«${name}» закончился и убран из корзины`);
+      } else {
+        setQty(s.id, s.available);
+        details.push(`«${name}» — осталось ${s.available} шт., количество уменьшено`);
+      }
+    }
+    setError(
+      `Наличие изменилось, пока вы оформляли заказ: ${details.join("; ")}. ` +
+        "Проверьте корзину и подтвердите заказ ещё раз."
+    );
   }
 
   async function submit(e: React.FormEvent) {
@@ -91,26 +124,34 @@ export default function CheckoutPage() {
       .filter(Boolean)
       .join(" ");
 
-    const missingAddress =
-      !address.postal_code.trim() ||
-      !address.city.trim() ||
-      !address.street.trim() ||
-      !address.house.trim();
-    if (missingAddress) {
-      setError("Заполните индекс, город, улицу и дом");
-      return;
+    let addressStr: string;
+    if (deliveryMethod === "ozon") {
+      if (!pickup.trim()) {
+        setError("Укажите адрес пункта выдачи заказов Ozon");
+        return;
+      }
+      addressStr = `ПВЗ Ozon: ${pickup.trim()}`;
+    } else {
+      const missingAddress =
+        !address.postal_code.trim() ||
+        !address.city.trim() ||
+        !address.street.trim() ||
+        !address.house.trim();
+      if (missingAddress) {
+        setError("Заполните индекс, город, улицу и дом");
+        return;
+      }
+      addressStr = [
+        address.postal_code.trim(),
+        address.region.trim(),
+        address.city.trim(),
+        address.street.trim() && `ул. ${address.street.trim()}`,
+        address.house.trim() && `д. ${address.house.trim()}`,
+        address.flat.trim() && `кв. ${address.flat.trim()}`,
+      ]
+        .filter(Boolean)
+        .join(", ");
     }
-
-    const addressStr = [
-      address.postal_code.trim(),
-      address.region.trim(),
-      address.city.trim(),
-      address.street.trim() && `ул. ${address.street.trim()}`,
-      address.house.trim() && `д. ${address.house.trim()}`,
-      address.flat.trim() && `кв. ${address.flat.trim()}`,
-    ]
-      .filter(Boolean)
-      .join(", ");
 
     setSubmitting(true);
     try {
@@ -129,13 +170,18 @@ export default function CheckoutPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Ошибка оформления заказа");
+        // 409 — база сообщила, что наличия не хватает.
+        if (res.status === 409 && Array.isArray(data.insufficient)) {
+          applyInsufficient(data.insufficient as InsufficientItem[]);
+        } else {
+          setError(data.error ?? "Ошибка оформления заказа");
+        }
         setSubmitting(false);
         return;
       }
       // «Запомнить меня»: сохранить зашифрованно или очистить.
       if (remember) {
-        secureSet(PROFILE_KEY, { form, address, deliveryMethod });
+        secureSet(PROFILE_KEY, { form, address, deliveryMethod, pickup });
       } else {
         secureClear(PROFILE_KEY);
       }
@@ -168,7 +214,84 @@ export default function CheckoutPage() {
       <h1 className="mb-6 text-2xl font-bold text-brand-800">Оформление заказа</h1>
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
         <div className="card space-y-6 p-5 lg:col-span-2">
-          {/* ФИО */}
+          {/* Способ доставки — первым: от него зависит форма адреса */}
+          <fieldset className="space-y-3">
+            <legend className="text-base font-bold text-brand-800">
+              Способ доставки
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {DELIVERY_METHODS.map((m) => (
+                <label
+                  key={m.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 ${
+                    deliveryMethod === m.id
+                      ? "border-brand-600 bg-brand-50"
+                      : "border-brand-200 hover:bg-brand-50/50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="delivery_method"
+                    value={m.id}
+                    checked={deliveryMethod === m.id}
+                    onChange={() => setDeliveryMethod(m.id)}
+                    className="mt-1 accent-brand-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold text-brand-800">
+                        {m.label}
+                      </span>
+                      <span className="whitespace-nowrap text-sm text-brand-500">
+                        {formatPrice(DELIVERY_COST)}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-sm text-brand-500">
+                      {METHOD_HINTS[m.id]}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {/* Адрес — зависит от способа доставки */}
+          {deliveryMethod === "ozon" ? (
+            <fieldset className="space-y-3">
+              <legend className="text-base font-bold text-brand-800">
+                Пункт выдачи Ozon
+              </legend>
+              <p className="text-sm text-brand-500">
+                Укажите точный адрес нужного вам пункта выдачи заказов (ПВЗ).
+                Вы должны быть зарегистрированы на{" "}
+                <span className="font-semibold text-accent-600">Ozon</span> и
+                иметь приложение на смартфоне.
+              </p>
+              <DadataAddressLine
+                label="Адрес пункта выдачи (ПВЗ)"
+                required
+                value={pickup}
+                onChange={setPickup}
+                placeholder="Город, улица, дом — где вам удобно забирать"
+              />
+            </fieldset>
+          ) : (
+            <fieldset className="space-y-3">
+              <legend className="text-base font-bold text-brand-800">
+                Адрес доставки
+              </legend>
+              <p className="text-sm text-brand-500">
+                Для доставки{" "}
+                <span className="font-semibold text-accent-600">
+                  Почтой России
+                </span>{" "}
+                укажите ваш полный домашний адрес и почтовый индекс.
+              </p>
+              <DadataAddress value={address} onChange={setAddress} />
+            </fieldset>
+          )}
+
+          {/* ФИО и контакты */}
           <fieldset className="space-y-3">
             <legend className="text-base font-bold text-brand-800">
               Получатель
@@ -212,46 +335,6 @@ export default function CheckoutPage() {
             </div>
           </fieldset>
 
-          {/* Адрес доставки */}
-          <fieldset className="space-y-3">
-            <legend className="text-base font-bold text-brand-800">
-              Адрес доставки
-            </legend>
-            <DadataAddress value={address} onChange={setAddress} />
-          </fieldset>
-
-          {/* Способ доставки */}
-          <fieldset className="space-y-3">
-            <legend className="text-base font-bold text-brand-800">
-              Способ доставки
-            </legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {DELIVERY_METHODS.map((m) => (
-                <label
-                  key={m.id}
-                  className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 ${
-                    deliveryMethod === m.id
-                      ? "border-brand-600 bg-brand-50"
-                      : "border-brand-200 hover:bg-brand-50/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="delivery_method"
-                    value={m.id}
-                    checked={deliveryMethod === m.id}
-                    onChange={() => setDeliveryMethod(m.id)}
-                    className="accent-brand-600"
-                  />
-                  <span className="font-semibold text-brand-800">{m.label}</span>
-                  <span className="ml-auto text-sm text-brand-500">
-                    {formatPrice(DELIVERY_COST)}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">
               Комментарий к заказу
@@ -259,8 +342,8 @@ export default function CheckoutPage() {
             <textarea value={form.comment} onChange={update("comment")} className="input min-h-24" />
           </label>
           <p className="text-xs text-brand-500">
-            Оплата при получении. Доставка Ozon или Почтой России —{" "}
-            {formatPrice(DELIVERY_COST)} по всей России.
+            Доставка Ozon или Почтой России — {formatPrice(DELIVERY_COST)} по
+            всей России.
           </p>
           {error && (
             <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
@@ -315,7 +398,7 @@ export default function CheckoutPage() {
           </div>
 
           <button type="submit" disabled={submitting || !consent} className="btn-accent mt-5 w-full">
-            {submitting ? "Оформляем…" : "Подтвердить заказ"}
+            {submitting ? "Проверяем наличие…" : "Подтвердить заказ"}
           </button>
         </div>
       </form>

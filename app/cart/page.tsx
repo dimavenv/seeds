@@ -56,6 +56,11 @@ export default function CartPage() {
                 <div className="text-sm text-brand-500">
                   {formatPrice(item.price)} / шт.
                 </div>
+                {item.stock != null && item.qty >= item.stock && (
+                  <div className="text-xs text-accent-600">
+                    В наличии только {item.stock} шт.
+                  </div>
+                )}
               </div>
               <div className="flex items-center rounded-full border border-brand-200">
                 <button
@@ -70,7 +75,8 @@ export default function CartPage() {
                 </span>
                 <button
                   onClick={() => setQty(item.id, item.qty + 1)}
-                  className="px-3 py-1.5 text-brand-600"
+                  disabled={item.stock != null && item.qty >= item.stock}
+                  className="px-3 py-1.5 text-brand-600 disabled:opacity-40"
                   aria-label="Больше"
                 >
                   +

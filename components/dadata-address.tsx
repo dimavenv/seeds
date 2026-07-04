@@ -219,6 +219,37 @@ export default function DadataAddress({
   );
 }
 
+// Однострочный адрес с подсказками DaData «до дома» — для адреса ПВЗ Ozon.
+// Без токена DaData ведёт себя как обычное текстовое поле.
+export function DadataAddressLine({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  className?: string;
+}) {
+  return (
+    <SuggestField
+      label={label}
+      value={value}
+      onChange={onChange}
+      onPick={(s) => onChange(s.value)}
+      level="house"
+      placeholder={placeholder}
+      required={required}
+      className={className}
+    />
+  );
+}
+
 function FieldLabel({
   label,
   required,

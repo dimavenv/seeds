@@ -40,14 +40,23 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-// Слить локальную и серверную корзины: объединяем по id, количество — большее.
+// Ограничение количества наличием (если наличие известно).
+function clampQty(qty: number, stock: number | null | undefined): number {
+  const limit = typeof stock === "number" ? Math.max(1, stock) : Infinity;
+  return Math.min(Math.max(1, qty), limit);
+}
+
+// Слить локальную и серверную корзины: объединяем по id, количество — большее
+// (но не выше известного наличия).
 function mergeCarts(a: CartItem[], b: CartItem[]): CartItem[] {
   const map = new Map<number, CartItem>();
   for (const it of a) map.set(it.id, { ...it });
   for (const it of b) {
     const ex = map.get(it.id);
-    if (ex) ex.qty = Math.max(ex.qty, it.qty);
-    else map.set(it.id, { ...it });
+    if (ex) {
+      ex.stock = it.stock ?? ex.stock;
+      ex.qty = clampQty(Math.max(ex.qty, it.qty), ex.stock);
+    } else map.set(it.id, { ...it });
   }
   return Array.from(map.values());
 }
@@ -147,10 +156,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cartTotal,
       addToCart: (product, qty = 1) =>
         setCart((prev) => {
+          const stock = Number.isFinite(product.stock) ? product.stock : null;
+          if (stock !== null && stock <= 0) return prev; // нет в наличии
           const found = prev.find((i) => i.id === product.id);
           if (found) {
             return prev.map((i) =>
-              i.id === product.id ? { ...i, qty: i.qty + qty } : i
+              i.id === product.id
+                ? { ...i, stock, qty: clampQty(i.qty + qty, stock) }
+                : i
             );
           }
           return [
@@ -161,15 +174,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               name: product.name,
               price: product.price,
               image_url: product.image_url,
-              qty,
+              qty: clampQty(qty, stock),
+              stock,
             },
           ];
         }),
       setQty: (id, qty) =>
         setCart((prev) =>
-          prev
-            .map((i) => (i.id === id ? { ...i, qty: Math.max(1, qty) } : i))
-            .filter((i) => i.qty > 0)
+          prev.map((i) => (i.id === id ? { ...i, qty: clampQty(qty, i.stock) } : i))
         ),
       removeFromCart: (id) =>
         setCart((prev) => prev.filter((i) => i.id !== id)),

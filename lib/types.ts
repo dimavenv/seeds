@@ -95,4 +95,7 @@ export type CartItem = {
   price: number;
   image_url: string | null;
   qty: number;
+  // Наличие на момент добавления — верхний предел количества в корзине.
+  // Может отсутствовать у старых корзин из localStorage.
+  stock?: number | null;
 };

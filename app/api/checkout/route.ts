@@ -73,12 +73,12 @@ export async function POST(request: Request) {
   try {
     const supabase = createServiceClient();
 
-    // Параллельно: авторитетные цены (сервисным ключом, в обход RLS) и
-    // best-effort привязка к аккаунту.
+    // Параллельно: авторитетные цены и остатки (сервисным ключом, в обход RLS)
+    // и best-effort привязка к аккаунту.
     const [{ data: products, error: productsError }, userId] = await Promise.all([
       supabase
         .from("products")
-        .select("id, name, price")
+        .select("id, name, price, stock")
         .in("id", items.map((i) => i.id)),
       bestEffortUserId(),
     ]);
@@ -90,7 +90,31 @@ export async function POST(request: Request) {
       );
     }
 
-    const priceList = (products ?? []) as Pick<Product, "id" | "name" | "price">[];
+    const priceList = (products ?? []) as Pick<
+      Product,
+      "id" | "name" | "price" | "stock"
+    >[];
+
+    // Проверка наличия по свежим данным из базы. Товары, которых больше нет
+    // в каталоге, считаем закончившимися (available: 0).
+    const insufficient: { id: number; available: number; name?: string }[] = [];
+    for (const i of items) {
+      const p = priceList.find((x) => x.id === i.id);
+      if (!p) insufficient.push({ id: i.id, available: 0 });
+      else if (p.stock < i.qty)
+        insufficient.push({
+          id: i.id,
+          available: Math.max(0, p.stock),
+          name: p.name,
+        });
+    }
+    if (insufficient.length > 0) {
+      return NextResponse.json(
+        { error: "Некоторых товаров недостаточно в наличии", insufficient },
+        { status: 409 }
+      );
+    }
+
     const lines = items
       .map((i) => {
         const p = priceList.find((x) => x.id === i.id);
@@ -110,6 +134,32 @@ export async function POST(request: Request) {
 
     const total = lines.reduce((s, l) => s + l.price * l.qty, 0) + DELIVERY_COST;
 
+    // Атомарно проверяем наличие ещё раз и списываем остатки (RPC блокирует
+    // строки товаров, поэтому два одновременных заказа не уведут stock в минус).
+    // Если миграция 0011 ещё не применена — падаем на неатомарный фолбэк ниже.
+    const rpcItems = items.map((i) => ({ id: i.id, qty: i.qty }));
+    let decremented = false;
+    const { data: shortRows, error: rpcError } = await supabase.rpc(
+      "checkout_decrement_stock",
+      { p_items: rpcItems }
+    );
+    if (!rpcError) {
+      const short = (shortRows ?? []) as { id: number; available: number }[];
+      if (short.length > 0) {
+        return NextResponse.json(
+          {
+            error: "Некоторых товаров недостаточно в наличии",
+            insufficient: short.map((s) => ({
+              ...s,
+              name: priceList.find((p) => p.id === s.id)?.name,
+            })),
+          },
+          { status: 409 }
+        );
+      }
+      decremented = true;
+    }
+
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert({
@@ -128,6 +178,15 @@ export async function POST(request: Request) {
       .single();
 
     if (orderError || !order) {
+      // Остатки уже списаны, а заказ не создался — возвращаем списанное
+      // (отрицательный qty в RPC прибавляет к остатку).
+      if (decremented) {
+        await supabase
+          .rpc("checkout_decrement_stock", {
+            p_items: rpcItems.map((i) => ({ id: i.id, qty: -i.qty })),
+          })
+          .then(() => {});
+      }
       return NextResponse.json(
         { error: "Не удалось создать заказ" },
         { status: 500 }
@@ -142,6 +201,23 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Не удалось сохранить состав заказа" },
         { status: 500 }
+      );
+    }
+
+    // Фолбэк без RPC: списываем оптимистично по прочитанным значениям
+    // (guard .eq("stock", прежнее) защищает от гонки — при несовпадении
+    // просто не трогаем остаток, честные данные важнее).
+    if (!decremented) {
+      await Promise.all(
+        lines.map((l) => {
+          const p = priceList.find((x) => x.id === l.product_id);
+          if (!p) return Promise.resolve(null);
+          return supabase
+            .from("products")
+            .update({ stock: Math.max(0, p.stock - l.qty) })
+            .eq("id", l.product_id)
+            .eq("stock", p.stock);
+        })
       );
     }
 
