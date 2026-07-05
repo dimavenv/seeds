@@ -255,42 +255,6 @@ export default function CheckoutPage() {
             </div>
           </fieldset>
 
-          {/* Адрес — зависит от способа доставки */}
-          {deliveryMethod === "ozon" ? (
-            <fieldset className="space-y-3">
-              <legend className="text-base font-bold text-brand-800">
-                Пункт выдачи Ozon
-              </legend>
-              <p className="text-sm text-brand-500">
-                Укажите точный адрес нужного вам пункта выдачи заказов (ПВЗ).
-                Вы должны быть зарегистрированы на{" "}
-                <span className="font-semibold text-accent-600">Ozon</span> и
-                иметь приложение на смартфоне.
-              </p>
-              <DadataAddressLine
-                label="Адрес пункта выдачи (ПВЗ)"
-                required
-                value={pickup}
-                onChange={setPickup}
-                placeholder="Город, улица, дом — где вам удобно забирать"
-              />
-            </fieldset>
-          ) : (
-            <fieldset className="space-y-3">
-              <legend className="text-base font-bold text-brand-800">
-                Адрес доставки
-              </legend>
-              <p className="text-sm text-brand-500">
-                Для доставки{" "}
-                <span className="font-semibold text-accent-600">
-                  Почтой России
-                </span>{" "}
-                укажите ваш полный домашний адрес и почтовый индекс.
-              </p>
-              <DadataAddress value={address} onChange={setAddress} />
-            </fieldset>
-          )}
-
           {/* ФИО и контакты */}
           <fieldset className="space-y-3">
             <legend className="text-base font-bold text-brand-800">
@@ -334,6 +298,42 @@ export default function CheckoutPage() {
               </label>
             </div>
           </fieldset>
+
+          {/* Адрес — зависит от способа доставки */}
+          {deliveryMethod === "ozon" ? (
+            <fieldset className="space-y-3">
+              <legend className="text-base font-bold text-brand-800">
+                Пункт выдачи Ozon
+              </legend>
+              <p className="text-sm text-brand-500">
+                Укажите точный адрес нужного вам пункта выдачи заказов (ПВЗ).
+                Вы должны быть зарегистрированы на{" "}
+                <span className="font-semibold text-accent-600">Ozon</span> и
+                иметь приложение на смартфоне.
+              </p>
+              <DadataAddressLine
+                label="Адрес пункта выдачи (ПВЗ)"
+                required
+                value={pickup}
+                onChange={setPickup}
+                placeholder="Город, улица, дом — где вам удобно забирать"
+              />
+            </fieldset>
+          ) : (
+            <fieldset className="space-y-3">
+              <legend className="text-base font-bold text-brand-800">
+                Адрес доставки
+              </legend>
+              <p className="text-sm text-brand-500">
+                Для доставки{" "}
+                <span className="font-semibold text-accent-600">
+                  Почтой России
+                </span>{" "}
+                укажите ваш полный домашний адрес и почтовый индекс.
+              </p>
+              <DadataAddress value={address} onChange={setAddress} />
+            </fieldset>
+          )}
 
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">

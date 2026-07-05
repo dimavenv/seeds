@@ -100,8 +100,9 @@ export default function DeliveryPage() {
         Как оформить и оплатить заказ
       </p>
 
-      {/* Шаги оформления */}
-      <div className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-3">
+      {/* Шаги оформления: во 2-й колонке текста заметно больше, поэтому
+          колонки разной ширины — так низ текста выравнивается по уровню. */}
+      <div className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-[0.95fr_3.05fr_1.75fr]">
         {STEPS.map((s, i) => (
           <div
             key={s.title}
