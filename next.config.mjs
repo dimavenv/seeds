@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Автономная сборка для запуска в Docker на VPS (см. Dockerfile и SETUP-VPS-RU.md).
+  // На Vercel эта опция ни на что не влияет — деплой туда работает как раньше.
+  output: "standalone",
   images: {
     // Не оптимизируем картинки на сервере: на медленном канале серверный fetch
     // к удалённым картинкам (picsum и т.п.) висел минутами и забивал dev-сервер.

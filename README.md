@@ -89,6 +89,21 @@ npm run dev                        # http://localhost:3000
 > Providers → Email → «Confirm email» off) либо подтвердите почту администратора —
 > загрузка в Storage требует активной сессии админа.
 
+## Деплой на российский VPS
+
+Сайт можно разместить на российском VPS (Timeweb Cloud, Beget, Selectel и т.п.)
+в Docker: в репозитории есть `Dockerfile`, `docker-compose.yml`, конфиг nginx
+(`deploy/nginx.conf`) и скрипт обновления (`deploy/update.sh`).
+
+📘 **Пошаговая инструкция** — [`SETUP-VPS-RU.md`](./SETUP-VPS-RU.md): создание
+сервера, Docker, домен, HTTPS, обновление сайта. Коротко:
+
+```bash
+git clone <репозиторий> /opt/shop && cd /opt/shop
+nano .env                      # ключи Supabase (по образцу .env.local.example)
+docker compose up -d --build   # сайт на 127.0.0.1:3000, наружу — через nginx
+```
+
 ## Деплой на Vercel
 
 1. Запушьте репозиторий на GitHub и импортируйте его в [Vercel](https://vercel.com)
