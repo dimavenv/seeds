@@ -1,115 +1,113 @@
-# 🇷🇺 Перенос сайта на российский VPS (пошагово)
+# 🇷🇺 Перенос tomatsemena.ru на VPS reg.ru (пошагово)
 
-Эта инструкция переносит **сам сайт** с Vercel на российский VPS. База данных
-(Supabase) на этом этапе остаётся как есть — сайт просто ходит в неё по тем же
-ключам. Перенос базы на российский сервер — **этап 2**, см. последний раздел.
+Инструкция переносит **сам сайт** с Vercel на российский VPS. **База данных на
+этом этапе не трогается**: сайт продолжает работать с текущим облачным Supabase
+по тем же ключам. Перенос базы (PocketBase на этом же сервере) — этап 2,
+см. последний раздел.
 
 Схема после переноса:
 
 ```
-Покупатель → ваш домен → nginx (VPS, 80/443) → Docker-контейнер с сайтом (порт 3000)
-                                                └→ Supabase (пока в облаке)
+Покупатель → tomatsemena.ru → nginx (VPS, 80/443) → Next.js под pm2 (127.0.0.1:3000)
+                                                     └→ Supabase (пока в облаке)
 ```
 
-Понадобится примерно час. Программировать не нужно — только копировать команды.
+Всё делается копированием команд, займёт 1–2 часа. Правило безопасности
+миграции: **сначала поднимаем и проверяем всё на новом сервере, и только потом
+переключаем DNS.**
 
 ---
 
-## Что понадобится
+## Шаг 1. Заказать VPS на reg.ru
 
-1. **VPS у российского провайдера.** Подойдёт любой, например:
-   [Timeweb Cloud](https://timeweb.cloud), [Beget](https://beget.com),
-   [Selectel](https://selectel.ru), [REG.RU](https://reg.ru), [VDSina](https://vdsina.ru).
-   - Конфигурация: минимум **2 ГБ RAM, 1–2 CPU, 20 ГБ диска** (сборка Next.js
-     на 1 ГБ может падать по памяти).
-   - Операционная система: **Ubuntu 22.04** или **24.04**.
-2. **Домен** (например, на REG.RU или у того же провайдера). Можно временно
-   работать и по IP-адресу, но HTTPS и вход в аккаунты нормально заработают
-   только с доменом.
-3. Пароль/ключ root-доступа к серверу — провайдер выдаёт после создания сервера.
+1. reg.ru → VPS/VDS → регион **Москва**, ОС **Debian 12**.
+2. Конфигурация: минимум **2 vCPU / 4 ГБ RAM / 40+ ГБ NVMe** — с запасом под
+   этап 2 (PocketBase на этом же сервере).
+3. IP-адрес и пароль root придут письмом и видны в личном кабинете.
 
----
+## Шаг 2. Первый вход и базовая настройка
 
-## Шаг 1. Создать сервер
-
-В панели провайдера создайте сервер (обычно кнопка «Создать сервер» / «Cloud
-server»): выберите Ubuntu 22.04/24.04, тариф от 2 ГБ RAM, дата-центр в России.
-После создания провайдер покажет **IP-адрес** и **пароль root** (или попросит
-загрузить SSH-ключ). Сохраните их.
-
-## Шаг 2. Подключиться к серверу по SSH
-
-- **Windows 10/11:** откройте PowerShell.
-- **macOS / Linux:** откройте Терминал.
+С компьютера (Windows — PowerShell, macOS/Linux — Терминал):
 
 ```bash
 ssh root@ВАШ_IP
 ```
 
-Введите пароль (при вводе символы не отображаются — это нормально). При первом
-подключении на вопрос про fingerprint ответьте `yes`.
-
-## Шаг 3. Базовая настройка и защита
+На сервере:
 
 ```bash
 apt update && apt upgrade -y
-
-# Фаервол: разрешаем только SSH и веб-порты
-apt install -y ufw
-ufw allow OpenSSH
-ufw allow 80/tcp
-ufw allow 443/tcp
-ufw --force enable
+timedatectl set-timezone Europe/Moscow
+apt install -y curl git ufw fail2ban nginx rsync
 ```
 
-## Шаг 4. Установить Docker
+## Шаг 3. Пользователь вместо root и защита SSH
 
 ```bash
-curl -fsSL https://get.docker.com | sh
-docker --version   # должно показать версию — значит всё хорошо
+adduser dima                # придумайте пароль, остальные поля можно пропустить
+usermod -aG sudo dima
+rsync --archive --chown=dima:dima ~/.ssh /home/dima 2>/dev/null || true
 ```
 
-> **Если `docker pull`/сборка падает с ошибкой доступа к registry** (Docker Hub
-> периодически ограничивает доступ с российских IP), подключите зеркало:
->
-> ```bash
-> cat > /etc/docker/daemon.json <<'EOF'
-> {
->   "registry-mirrors": [
->     "https://dockerhub.timeweb.cloud",
->     "https://mirror.gcr.io"
->   ]
-> }
-> EOF
-> systemctl restart docker
-> ```
-
-## Шаг 5. Скачать код сайта на сервер
+С **локального компьютера** загрузите свой SSH-ключ (если ключа нет — сначала
+`ssh-keygen -t ed25519` и три раза Enter):
 
 ```bash
-apt install -y git
-cd /opt
-git clone https://github.com/dimavenv/seeds.git shop
-cd /opt/shop
+ssh-copy-id dima@ВАШ_IP
+ssh dima@ВАШ_IP    # проверьте, что вход по ключу работает, НЕ закрывая root-сессию
 ```
 
-> **Если репозиторий приватный**, git попросит логин и пароль. Вместо пароля
-> нужен **токен**: GitHub → Settings → Developer settings →
-> **Personal access tokens → Fine-grained tokens** → Generate new token →
-> доступ только к этому репозиторию, права **Contents: Read-only**.
-> Логин — ваш ник на GitHub, пароль — этот токен.
+Когда вход под `dima` по ключу работает — закройте вход root и пароли
+(на сервере, через `sudo nano /etc/ssh/sshd_config`):
 
-## Шаг 6. Создать файл с ключами (.env)
-
-Сайт продолжает работать с вашей текущей базой Supabase — ключи те же, что были
-на Vercel (Vercel → Project → Settings → Environment Variables, либо Supabase →
-Project Settings → API).
+```
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+```
 
 ```bash
-nano /opt/shop/.env
+sudo systemctl restart ssh
 ```
 
-Вставьте (подставьте свои значения):
+## Шаг 4. Фаервол и fail2ban
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'    # 80 + 443
+sudo ufw enable
+sudo systemctl status fail2ban --no-pager   # active (running) — защита SSH от перебора
+```
+
+## Шаг 5. Node.js 22 и pm2
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pm2
+pm2 install pm2-logrotate
+```
+
+## Шаг 6. Код сайта и ключи
+
+```bash
+sudo mkdir -p /var/www/seeds && sudo chown dima:dima /var/www/seeds
+cd /var/www/seeds
+git clone https://github.com/dimavenv/seeds.git .
+```
+
+> Если репозиторий приватный, вместо пароля git попросит **токен**: GitHub →
+> Settings → Developer settings → Personal access tokens → Fine-grained →
+> доступ к одному репозиторию, права Contents: Read-only.
+
+Создайте файл с ключами (те же значения, что были на Vercel: Vercel → Project →
+Settings → Environment Variables, либо Supabase → Project Settings → API):
+
+```bash
+nano /var/www/seeds/.env.production
+```
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://ВАШ_ПРОЕКТ.supabase.co
@@ -121,118 +119,178 @@ SUPABASE_SERVICE_ROLE_KEY=ваш-service-role-ключ
 # NEXT_PUBLIC_DADATA_TOKEN=...
 ```
 
-Сохранить в nano: `Ctrl+O`, `Enter`, выйти: `Ctrl+X`.
+Сохранить: `Ctrl+O`, `Enter`; выйти: `Ctrl+X`. Файл в `.gitignore`, в git не попадёт.
 
-> Файл `.env` — секретный, он в `.gitignore` и никогда не попадёт в git.
+> **Важно:** `NEXT_PUBLIC_*` вшиваются в код при сборке, поэтому файл должен
+> существовать **до** `npm run build`. Серверные секреты передаёт в приложение
+> pm2 — `ecosystem.config.js` сам читает `.env.production` (standalone-сервер
+> Next.js env-файлы не читает). После правки ключей: пересборка + `pm2 reload
+> ecosystem.config.js --update-env`.
 
-## Шаг 7. Собрать и запустить сайт
-
-```bash
-cd /opt/shop
-docker compose up -d --build
-```
-
-Первая сборка занимает 3–7 минут. Проверка:
+## Шаг 7. Сборка и запуск под pm2
 
 ```bash
-docker compose ps                          # STATUS должен стать healthy
-curl http://127.0.0.1:3000/api/health      # ожидаем {"ok":true,...}
+cd /var/www/seeds
+npm ci
+npm run build
+cp -r .next/static .next/standalone/.next/
+cp -r public .next/standalone/
+
+pm2 start ecosystem.config.js
+pm2 save
+pm2 startup systemd -u dima --hp /home/dima
+# ⬑ выполните команду, которую выведет pm2 startup — это автозапуск после перезагрузки
 ```
 
-Если `"ok":false` — сайт работает, но не достучался до Supabase: проверьте ключи
-в `.env` и что проект Supabase не на паузе. После правки `.env` пересоберите:
-`docker compose up -d --build`.
+Проверка:
 
-Логи при проблемах: `docker compose logs -f web` (выход — `Ctrl+C`).
+```bash
+pm2 ls                                    # seeds ×2, status: online, ↺ 0
+curl http://127.0.0.1:3000/api/health     # {"ok":true,...}
+```
 
-## Шаг 8. Домен: DNS-запись
+Если `"ok":false` — сайт жив, но не видит Supabase: сверьте ключи в
+`.env.production` (и что проект Supabase не на паузе), затем пересоберите
+(шаг 7 заново). Логи: `pm2 logs seeds`.
 
-В панели, где куплен домен, создайте **A-запись**:
+> Если pm2 показывает рестарты с ошибкой «Failed to start server» без
+> подробностей — порт 3000 занят другим процессом. Найти: `pgrep -a next-server`
+> (процесс Next называется `next-server`, а не `node`) и убить лишний.
+
+## Шаг 8. nginx
+
+```bash
+sudo cp /var/www/seeds/deploy/nginx.conf /etc/nginx/sites-available/tomatsemena
+sudo ln -s /etc/nginx/sites-available/tomatsemena /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Сайт уже должен открываться в браузере по `http://ВАШ_IP` — проверьте до
+переключения DNS.
+
+## Шаг 9. TLS-сертификат — платный DV у РФ-поставщика
+
+Для .ru-магазина с планируемыми платежами **не полагайтесь на Let's Encrypt**:
+формально он ещё может выдавать сертификаты негосударственным организациям РФ,
+но зарубежные УЦ уже практиковали принудительный отзыв по .ru-доменам
+(GlobalSign, июнь 2026). Надёжный путь — **платный DV-сертификат** у reg.ru
+(«SSL-сертификаты» в ЛК), RU-CENTER и т.п. Он же закрывает требования
+Альфа-Банка к сайту (RSA ≥ 2048, SHA-256, доверенный УЦ).
+
+1. Закажите DV-сертификат на `tomatsemena.ru` (+ `www`), пройдите проверку
+   домена (обычно DNS-запись или файл на сайте — reg.ru покажет).
+2. Получите файлы сертификата и положите на сервер:
+
+```bash
+sudo mkdir -p /etc/ssl/tomatsemena
+sudo nano /etc/ssl/tomatsemena/fullchain.pem   # сертификат + цепочка (CA bundle)
+sudo nano /etc/ssl/tomatsemena/privkey.pem     # приватный ключ
+sudo chmod 600 /etc/ssl/tomatsemena/privkey.pem
+```
+
+3. В `/etc/nginx/sites-available/tomatsemena` раскомментируйте блок **HTTPS** и
+   строку `return 301 https://...` в блоке HTTP (удалив из него `location /`),
+   затем:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+> Certbot/Let's Encrypt можно держать как запасной вариант, но не как
+> единственный. Поставьте себе напоминание о продлении платного сертификата —
+> автопродления, как у certbot, у него нет.
+
+## Шаг 10. DNS: переключение домена
+
+Пока идёт настройка, снизьте TTL A-записей до **300 секунд** — тогда откат, если
+что-то пойдёт не так, займёт минуты.
+
+В ЛК reg.ru (управление DNS домена tomatsemena.ru) укажите:
 
 | Тип | Имя | Значение |
 |-----|-----|----------|
-| A | `@` (или поддомен, например `shop`) | IP вашего VPS |
+| A | `@` | IP VPS |
+| A | `www` | IP VPS |
+| A | `api` | IP VPS (заготовка на этап 2, можно добавить сразу) |
 
-DNS обновляется от пары минут до пары часов. Проверить: `ping ваш-домен.ru`
-должен показывать IP сервера.
+Если домен был привязан к Vercel — удалите его там (Project → Settings →
+Domains), чтобы не конфликтовали инструкции DNS. Проверка: `ping tomatsemena.ru`
+показывает IP сервера.
 
-## Шаг 9. nginx и HTTPS-сертификат
+## Шаг 11. Supabase: новый адрес сайта
 
-```bash
-apt install -y nginx certbot python3-certbot-nginx
-
-# Конфиг из репозитория; замените shop.example.ru на свой домен
-sed 's/shop\.example\.ru/ваш-домен.ru/g' /opt/shop/deploy/nginx.conf \
-  > /etc/nginx/sites-available/shop
-ln -s /etc/nginx/sites-available/shop /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx
-```
-
-Сайт уже должен открываться по `http://ваш-домен.ru`. Теперь HTTPS (бесплатный
-сертификат Let's Encrypt, продлевается автоматически):
-
-```bash
-certbot --nginx -d ваш-домен.ru
-```
-
-Certbot спросит email и предложит редирект на HTTPS — соглашайтесь (вариант
-Redirect). Готово: сайт работает по `https://ваш-домен.ru`.
-
-## Шаг 10. Переключить Supabase на новый адрес
-
-Чтобы вход в аккаунты и письма работали с нового домена:
+Чтобы вход в аккаунты и письма работали с нового адреса:
 
 1. Supabase → **Authentication → URL Configuration**.
-2. **Site URL** → `https://ваш-домен.ru`.
+2. **Site URL** → `https://tomatsemena.ru`.
 3. В **Redirect URLs** добавьте этот же адрес.
 
-## Шаг 11. Проверка и отключение Vercel
+## Шаг 12. Финальная проверка и отключение Vercel
 
-Проверьте на новом домене: главная, каталог, карточка товара, корзина,
-оформление заказа, `/login`, `/admin`, загрузка фото товара.
+Пройдите по сайту на боевом домене: главная, каталог, карточка товара, корзина,
+оформление заказа, `/login`, `/admin`, загрузка фото товара, `/api/health`.
 
-Когда всё работает, Vercel-проект можно удалить (Vercel → Project → Settings →
-Delete Project) или просто оставить — мешать он не будет. Если на Vercel был
-подключён этот же домен — сначала отвяжите его там (Settings → Domains).
+Когда всё работает — Vercel-проект можно удалить (Settings → Delete Project)
+или оставить выключенным; мешать он не будет.
 
 ---
 
 ## Как обновлять сайт
 
-Автодеплоя «как на Vercel» больше нет — после изменений в GitHub выполните на
-сервере одну команду:
+Автодеплоя «как на Vercel» больше нет. После изменений в GitHub — одна команда
+на сервере:
 
 ```bash
-bash /opt/shop/deploy/update.sh
+bash /var/www/seeds/deploy/update.sh
 ```
 
-Она подтянет код, пересоберёт контейнер и перезапустит сайт (перерыв ~5 секунд).
+Она подтягивает код, пересобирает и делает `pm2 reload` (воркеры перезапускаются
+по одному — без простоя).
+
+## Бэкапы, логи, мониторинг
+
+- **Логи:** `pm2 logs seeds` (ротация — pm2-logrotate), nginx — `/var/log/nginx/`.
+- **Мониторинг:** `pm2 monit`; внешний uptime-пинг на `https://tomatsemena.ru/api/health`
+  (например, UptimeRobot или пинг из Яндекс.Метрики).
+- **Бэкапы:** пока база в Supabase — там же и бэкапы; на этапе 2 настроим
+  локальные + оффсайт (Yandex Object Storage).
 
 ## Если что-то пошло не так
 
 | Симптом | Что делать |
 |---------|-----------|
-| Сборка падает: `JavaScript heap out of memory` | Мало RAM. Добавьте swap: `fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile` |
-| `docker compose up` не тянет образы | Зеркала registry — см. шаг 4 |
-| Сайт открывается, но каталог демо/пустой | `curl http://127.0.0.1:3000/api/health` — если `ok:false`, неверные ключи в `.env` или Supabase на паузе |
-| Вход в аккаунт не работает | Шаг 10 (Site URL в Supabase) и открывайте сайт по https |
-| `502 Bad Gateway` от nginx | Контейнер не запущен: `docker compose ps`, `docker compose logs web` |
-| Посмотреть, что происходит | `docker compose logs -f web` |
+| Сборка падает: `heap out of memory` | Добавьте swap: `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile` |
+| pm2: рестарты, «Failed to start server» | Порт 3000 занят: `pgrep -a next-server`, убейте лишний процесс |
+| `/api/health` → `ok:false` | Ключи в `.env.production` / Supabase на паузе; после правки — пересборка |
+| Вход в аккаунт не работает | Шаг 11 (Site URL) и открывайте сайт по https |
+| `502 Bad Gateway` | `pm2 ls` — приложение упало; `pm2 logs seeds` |
+| Supabase недоступен с РФ-IP | Редко, но возможно; тогда ускоряем этап 2 (перенос БД) |
+
+## Юридический минимум для .ru-магазина (сделать параллельно)
+
+1. **152-ФЗ:** персональные данные покупателей должны храниться в РФ — это
+   закроет этап 2 (перенос базы). Пока база в Supabase — не затягивайте с ним.
+2. **Уведомление в Роскомнадзор** (pd.rkn.gov.ru) об обработке ПД — подаётся
+   один раз, до начала обработки; штраф за неподачу для ИП — 30–50 тыс. ₽.
+3. На сайте: политика обработки ПД (страница `/privacy` уже есть — проверьте
+   актуальность), согласие с чекбоксом в формах, реквизиты ИП, условия
+   доставки/возврата. Это же потребует Альфа-Банк при подключении эквайринга.
 
 ---
 
-## Этап 2. Перенос базы данных в Россию (следующий шаг)
+## Этап 2. Перенос базы данных (позже, по плану)
 
-Сейчас данные (товары, заказы, аккаунты) остаются в облачном Supabase. Вторым
-этапом переносим и их на этот же VPS:
+Сейчас данные (товары, заказы, аккаунты, фото) остаются в облачном Supabase.
+План этапа 2 — **PocketBase на этом же VPS**:
 
-- поднимем на сервере **self-hosted Supabase** (или чистый PostgreSQL) в том же
-  `docker-compose.yml` — файл уже рассчитан на добавление сервисов;
-- перенесём схему (`supabase/migrations/`), данные и фото из Storage;
-- поменяем ключи в `.env` на локальные — код сайта менять не придётся.
+- установка PocketBase под systemd (127.0.0.1:8090), наружу — через
+  `api.tomatsemena.ru` (блок-заготовка уже лежит в `deploy/nginx.conf`);
+- создание коллекций, перенос данных и картинок скриптом, API Rules вместо RLS;
+- переписывание слоя данных (`lib/supabase/*` → `lib/pb.ts`, `lib/data.ts`,
+  `lib/auth.ts`, `app/api/*`, админка) — код правится один раз, хостинг сайта
+  при этом не меняется;
+- бэкапы: встроенные в PocketBase + cron с оффсайт-копией.
 
-Для этапа 2 стоит взять тариф посолиднее: **от 4 ГБ RAM и 40 ГБ диска** (полный
-self-hosted Supabase — это несколько сервисов). Учитывайте это при выборе
-тарифа уже сейчас, либо выбирайте провайдера, у которого тариф можно повысить
-без пересоздания сервера.
+После этапа 2 отдельным шагом — подключение оплаты (Альфа-Банк: эквайринг,
+СБП, онлайн-касса по 54-ФЗ).

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Обновление сайта на VPS: подтянуть свежий код, пересобрать и перезапустить.
-# Запуск из корня проекта или откуда угодно: bash deploy/update.sh
+# Обновление сайта на VPS: свежий код → сборка → перезапуск без простоя.
+# Запуск: bash deploy/update.sh (из любого места)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -8,14 +8,19 @@ cd "$(dirname "$0")/.."
 echo "==> Получаю свежий код из git..."
 git pull
 
-echo "==> Пересобираю и перезапускаю контейнер..."
-docker compose up -d --build web
+echo "==> Ставлю зависимости и собираю..."
+npm ci
+npm run build
 
-echo "==> Убираю старые образы..."
-docker image prune -f >/dev/null
+# standalone-сборка не включает статику и public — докопируем
+cp -r .next/static .next/standalone/.next/
+cp -r public .next/standalone/
+
+echo "==> Перезапускаю через pm2 (reload — воркеры по одному, без простоя)..."
+pm2 reload ecosystem.config.js --update-env
 
 echo "==> Проверяю здоровье сайта..."
 sleep 5
 curl -fsS http://127.0.0.1:3000/api/health || true
 echo
-echo "Готово. Логи: docker compose logs -f web"
+echo "Готово. Логи: pm2 logs seeds"

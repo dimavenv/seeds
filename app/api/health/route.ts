@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/data";
 
 // Диагностика доступности Supabase. Откройте /api/health в браузере.
+// force-dynamic обязателен: иначе при `next build` ответ запекается статически
+// (обработчик сам ловит DynamicServerError через try/catch) и на проде роут
+// всегда возвращал бы состояние на момент сборки, а не живой статус базы.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({

@@ -91,17 +91,19 @@ npm run dev                        # http://localhost:3000
 
 ## Деплой на российский VPS
 
-Сайт можно разместить на российском VPS (Timeweb Cloud, Beget, Selectel и т.п.)
-в Docker: в репозитории есть `Dockerfile`, `docker-compose.yml`, конфиг nginx
+Сайт размещается на российском VPS (reg.ru, Debian 12) под **pm2** за nginx:
+в репозитории есть `ecosystem.config.js` (pm2), конфиг nginx
 (`deploy/nginx.conf`) и скрипт обновления (`deploy/update.sh`).
 
-📘 **Пошаговая инструкция** — [`SETUP-VPS-RU.md`](./SETUP-VPS-RU.md): создание
-сервера, Docker, домен, HTTPS, обновление сайта. Коротко:
+📘 **Пошаговая инструкция** — [`SETUP-VPS-RU.md`](./SETUP-VPS-RU.md): сервер,
+Node + pm2, nginx, платный TLS-сертификат, DNS, обновление сайта. Коротко:
 
 ```bash
-git clone <репозиторий> /opt/shop && cd /opt/shop
-nano .env                      # ключи Supabase (по образцу .env.local.example)
-docker compose up -d --build   # сайт на 127.0.0.1:3000, наружу — через nginx
+git clone <репозиторий> /var/www/seeds && cd /var/www/seeds
+nano .env.production   # ключи Supabase — ДО сборки (по образцу .env.local.example)
+npm ci && npm run build
+cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+pm2 start ecosystem.config.js   # сайт на 127.0.0.1:3000, наружу — через nginx
 ```
 
 ## Деплой на Vercel

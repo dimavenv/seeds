@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Автономная сборка для запуска в Docker на VPS (см. Dockerfile и SETUP-VPS-RU.md).
+  // Автономная сборка для запуска на VPS под pm2 (см. SETUP-VPS-RU.md).
   // На Vercel эта опция ни на что не влияет — деплой туда работает как раньше.
   output: "standalone",
   images: {
