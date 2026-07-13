@@ -109,6 +109,12 @@ SUPABASE_SERVICE_ROLE_KEY=...
 sudo ufw allow 8090/tcp
 ```
 
+> ℹ️ Служебный файл из шага 2 уже настроен слушать на `0.0.0.0:8090`, чтобы
+> браузер покупателя доставал базу по `http://IP:8090`. Это временно, до домена;
+> на шаге 10 база уедет за nginx на `https://api.tomatsemena.ru`, а порт 8090
+> закроется. Не тяните с доменом — держать базу в интернете по голому http долго
+> не стоит; пароль суперпользователя сделайте посложнее.
+
 > ⚠️ `DATA_ENCRYPTION_KEY` должен остаться ТЕМ ЖЕ, что был: телефоны и адреса
 > в заказах переносятся в зашифрованном виде, и расшифровывает их этот ключ.
 
@@ -224,10 +230,15 @@ sudo crontab -e                            # добавьте строку:
 2. В `/etc/nginx/sites-available/tomatsemena` раскомментируйте блок
    `api.tomatsemena.ru` (заготовка уже в `deploy/nginx.conf`), получите
    сертификат и на него, `sudo nginx -t && sudo systemctl reload nginx`.
-3. В `.env.production` поменяйте:
+3. Верните PocketBase на localhost (теперь наружу отдаёт nginx):
+   ```bash
+   sudo sed -i 's|--http=0.0.0.0:8090|--http=127.0.0.1:8090|' /etc/systemd/system/pocketbase.service
+   sudo systemctl daemon-reload && sudo systemctl restart pocketbase
+   ```
+4. В `.env.production` поменяйте:
    `NEXT_PUBLIC_PB_URL=https://api.tomatsemena.ru`
-4. Закройте прямой порт: `sudo ufw delete allow 8090/tcp`.
-5. Пересоберите: `bash deploy/update.sh`.
+5. Закройте прямой порт: `sudo ufw delete allow 8090/tcp`.
+6. Пересоберите: `bash deploy/update.sh`.
 
 > ⚠️ Фото, перекачанные на шаге 6, получили URL вида `http://IP:8090/...`.
 > После смены адреса выполните замену в товарах одной командой:
