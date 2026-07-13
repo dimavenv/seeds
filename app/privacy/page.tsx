@@ -23,8 +23,8 @@ export default function PrivacyPage() {
             1. Оператор персональных данных
           </h2>
           <p>
-            Оператор: <strong>[ИП/ООО — указать наименование]</strong>, ИНН{" "}
-            <strong>[указать ИНН]</strong>, адрес:{" "}
+            Оператор: <strong>ИП Кутушева Вера Евгеньевна</strong>, ИНН{" "}
+            <strong>322237500354090</strong>, адрес:{" "}
             <strong>[указать адрес]</strong>. Контактный e-mail:{" "}
             <a
               href="mailto:info@tomatsemena.ru"
@@ -101,11 +101,6 @@ export default function PrivacyPage() {
           </p>
         </div>
 
-        <p className="mt-6 text-sm text-brand-500">
-          Реквизиты Оператора (наименование, ИНН, адрес) необходимо заполнить в
-          файле{" "}
-          <code className="rounded bg-brand-100 px-1">app/privacy/page.tsx</code>.
-        </p>
       </div>
     </div>
   );
