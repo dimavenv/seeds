@@ -175,6 +175,44 @@ export async function updateVacationUntil(date: string | null): Promise<void> {
   revalidatePath("/admin");
 }
 
+// Возврат оплаты через Альфа-Банк (полная сумма заказа).
+export async function refundOrder(
+  id: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const { session } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
+
+  const { isAlfaConfigured, alfaRefund } = await import("@/lib/alfa");
+  if (!isAlfaConfigured()) return { error: "Онлайн-оплата не подключена" };
+
+  const pb = await pbAdmin();
+  let order: { alfa_order_id: string; total: number; payment_status: string };
+  try {
+    const rec = await pb.collection("orders").getOne(id);
+    order = {
+      alfa_order_id: String(rec.alfa_order_id ?? ""),
+      total: Number(rec.total ?? 0),
+      payment_status: String(rec.payment_status ?? ""),
+    };
+  } catch {
+    return { error: "Заказ не найден" };
+  }
+  if (order.payment_status !== "paid") return { error: "Заказ не оплачен онлайн" };
+  if (!order.alfa_order_id) return { error: "Нет идентификатора платежа" };
+
+  const res = await alfaRefund(
+    order.alfa_order_id,
+    String(Math.round(order.total * 100))
+  );
+  if (res.errorCode && res.errorCode !== "0") {
+    return { error: res.errorMessage || "Банк отклонил возврат" };
+  }
+
+  await pb.collection("orders").update(id, { payment_status: "refunded" }).catch(() => {});
+  revalidatePath("/admin/orders");
+  return { ok: true };
+}
+
 export async function updateReviewStatus(
   id: string,
   status: ReviewStatus

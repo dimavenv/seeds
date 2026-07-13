@@ -751,6 +751,22 @@
         "type": "date"
       },
       {
+        "name": "payment_status",
+        "type": "select",
+        "values": [
+          "unpaid",
+          "pending",
+          "paid",
+          "failed",
+          "refunded"
+        ],
+        "maxSelect": 1
+      },
+      {
+        "name": "alfa_order_id",
+        "type": "text"
+      },
+      {
         "hidden": false,
         "id": "autodate2990389176",
         "name": "created",

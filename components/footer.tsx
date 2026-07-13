@@ -34,10 +34,12 @@ export default function Footer({ categories }: { categories: Category[] }) {
           <ul className="space-y-1.5 text-sm text-brand-600">
             <li><Link href="/about" className="hover:text-brand-800">О нас</Link></li>
             <li><Link href="/delivery" className="hover:text-brand-800">Доставка и оплата</Link></li>
+            <li><Link href="/returns" className="hover:text-brand-800">Возврат товара</Link></li>
             <li><Link href="/reviews" className="hover:text-brand-800">Отзывы</Link></li>
             <li><Link href="/support" className="hover:text-brand-800">Поддержка</Link></li>
-            <li><Link href="/favorites" className="hover:text-brand-800">Избранное</Link></li>
+            <li><Link href="/offer" className="hover:text-brand-800">Публичная оферта</Link></li>
             <li><Link href="/privacy" className="hover:text-brand-800">Политика конфиденциальности</Link></li>
+            <li><Link href="/requisites" className="hover:text-brand-800">Реквизиты</Link></li>
           </ul>
         </div>
 

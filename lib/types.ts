@@ -41,6 +41,21 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: "Отменён",
 };
 
+export type PaymentStatus =
+  | "unpaid"
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded";
+
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  unpaid: "Без онлайн-оплаты",
+  pending: "Ожидает оплаты",
+  paid: "Оплачен",
+  failed: "Оплата не прошла",
+  refunded: "Возврат",
+};
+
 export type Order = {
   id: string;
   number: number;
@@ -54,6 +69,8 @@ export type Order = {
   delivery_method?: string | null;
   delivery_cost?: number | null;
   tracking_number?: string | null;
+  payment_status?: PaymentStatus;
+  alfa_order_id?: string | null;
   user_id: string | null;
   created_at: string;
   order_items?: OrderItem[];

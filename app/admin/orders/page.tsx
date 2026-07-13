@@ -5,6 +5,7 @@ import { deliveryMethodLabel } from "@/lib/delivery";
 import { decryptField } from "@/lib/crypto";
 import OrderStatusSelect from "@/components/admin/order-status-select";
 import OrderTrackingInput from "@/components/admin/order-tracking-input";
+import OrderPayment from "@/components/admin/order-payment";
 import type { Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export default async function AdminOrders() {
                   <span className="text-lg font-extrabold text-brand-700">
                     {formatPrice(o.total)}
                   </span>
+                  <OrderPayment id={o.id} status={o.payment_status ?? "unpaid"} />
                   <OrderStatusSelect id={o.id} status={o.status} />
                   <OrderTrackingInput id={o.id} tracking={o.tracking_number ?? null} />
                 </div>

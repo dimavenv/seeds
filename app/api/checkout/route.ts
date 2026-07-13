@@ -5,6 +5,7 @@ import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
 import { isValidRecordId } from "@/lib/data";
 import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
+import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 
 type IncomingItem = { id: string; qty: number };
 
@@ -126,6 +127,7 @@ export async function POST(request: Request) {
           delivery_cost: DELIVERY_COST,
           total,
           status: "new",
+          payment_status: "unpaid",
           user: userId ?? "",
           placed_at: new Date().toISOString(),
         });
@@ -149,6 +151,43 @@ export async function POST(request: Request) {
         { error: "Не удалось сохранить состав заказа" },
         { status: 500 }
       );
+    }
+
+    // Онлайн-оплата (если подключён Альфа-Банк). Иначе заказ остаётся без
+    // онлайн-оплаты (оплата при получении / по счёту), как и раньше.
+    if (isAlfaConfigured()) {
+      try {
+        const base = (process.env.SITE_URL || "https://tomatsemena.ru").replace(/\/+$/, "");
+        const reg = await alfaRegister({
+          orderNumber: order.id, // уникальный стабильный id записи заказа
+          amount: String(Math.round(total * 100)), // рубли → копейки
+          currency: "643", // RUB по ISO 4217
+          returnUrl: `${base}/order/${order.number}?paid=1`,
+          failUrl: `${base}/order/${order.number}?failed=1`,
+          description: `Заказ №${order.number}`,
+          language: "ru",
+          ...(email?.trim() ? { email: email.trim() } : {}),
+        });
+        if (reg.formUrl && reg.orderId) {
+          await pb.collection("orders").update(order.id, {
+            alfa_order_id: reg.orderId,
+            payment_status: "pending",
+          });
+          return NextResponse.json({ id: order.number, total, formUrl: reg.formUrl });
+        }
+        // Регистрация не удалась — заказ сохранён, вернём пометку.
+        return NextResponse.json({
+          id: order.number,
+          total,
+          paymentError: reg.errorMessage || "Не удалось создать оплату",
+        });
+      } catch {
+        return NextResponse.json({
+          id: order.number,
+          total,
+          paymentError: "Платёжный шлюз недоступен",
+        });
+      }
     }
 
     return NextResponse.json({ id: order.number, total });

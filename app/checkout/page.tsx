@@ -140,10 +140,19 @@ export default function CheckoutPage() {
         secureClear(PROFILE_KEY);
       }
       clearCart();
+
+      // Онлайн-оплата подключена — переходим на платёжную форму Альфа-Банка.
+      if (data.formUrl) {
+        window.location.href = data.formUrl;
+        return;
+      }
+
       const qs = new URLSearchParams({
         total: String(data.total),
         name: form.first_name || customer_name,
       });
+      // Если оплату не удалось создать — покажем заметку на странице заказа.
+      if (data.paymentError) qs.set("payerr", "1");
       router.push(`/order/${data.id}?${qs.toString()}`);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
