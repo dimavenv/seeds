@@ -102,11 +102,7 @@ export default function OfferPage() {
           </p>
         </div>
 
-        <p className="mt-6 text-sm text-brand-500">
-          Шаблон. Реквизиты Продавца заполните в{" "}
-          <code className="rounded bg-brand-100 px-1">app/requisites/page.tsx</code>{" "}
-          и проверьте текст оферты под свой магазин (при необходимости — с юристом).
-        </p>
+
       </div>
     </div>
   );
