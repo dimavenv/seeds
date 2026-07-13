@@ -1,7 +1,7 @@
 import type { Category, Product } from "@/lib/types";
 
-// Демо-данные (зеркало supabase/seed.sql). Используются, когда Supabase
-// не настроен — чтобы магазин работал «из коробки» для разработки/превью.
+// Демо-данные. Используются, когда PocketBase не настроен — чтобы магазин
+// работал «из коробки» для разработки/превью.
 
 // ID в демо-режиме — строковые (как в PocketBase); используем slug.
 export const demoCategories: Category[] = [

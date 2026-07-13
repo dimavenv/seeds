@@ -5,19 +5,15 @@ const nextConfig = {
   output: "standalone",
   images: {
     // Не оптимизируем картинки на сервере: на медленном канале серверный fetch
-    // к удалённым картинкам (picsum и т.п.) висел минутами и забивал dev-сервер.
-    // Браузер грузит src напрямую; реальные фото из Supabase Storage — тоже.
+    // к удалённым картинкам висел минутами и забивал dev-сервер.
+    // Браузер грузит src напрямую; реальные фото из PocketBase — тоже.
     unoptimized: true,
     remotePatterns: [
       // Фото товаров из PocketBase (свой сервер)
       { protocol: "https", hostname: "api.tomatsemena.ru" },
-      { protocol: "http", hostname: "**" }, // на время миграции: http://IP:8090
-      { protocol: "https", hostname: "**.supabase.co" }, // старые ссылки до переноса
+      { protocol: "http", hostname: "**" }, // до домена: http://IP:8090
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "picsum.photos" },
-      // Картинки товаров Ozon (режим импорта --link-images)
-      { protocol: "https", hostname: "**.ozone.ru" },
-      { protocol: "https", hostname: "**.ozon.ru" },
     ],
   },
 };

@@ -17,9 +17,9 @@
 - **Корзина и избранное** — в `localStorage` (работают без регистрации).
 - **Оформление заказа** (гостевой): заказ сохраняется в БД, без онлайн-оплаты
   (оплата при получении / по счёту). Итог считается на сервере по ценам из БД.
-- **Аккаунты:** вход/регистрация через Supabase Auth (опционально для покупателей,
+- **Аккаунты:** вход/регистрация через PocketBase (опционально для покупателей,
   обязательно для администратора).
-- **Админка `/admin`:** CRUD товаров с загрузкой фото в Supabase Storage, список
+- **Админка `/admin`:** CRUD товаров с загрузкой фото в PocketBase, список
   заказов со сменой статусов, дашборд.
 
 > Без настроенного PocketBase магазин работает в **демо-режиме** на встроенных
@@ -30,7 +30,7 @@
 
 ```bash
 npm install
-cp .env.local.example .env.local   # заполните ключами Supabase (или оставьте пустым для демо)
+cp .env.local.example .env.local   # заполните ключами PocketBase (или оставьте пустым для демо)
 npm run dev                        # http://localhost:3000
 ```
 
@@ -45,9 +45,7 @@ npm run dev                        # http://localhost:3000
    `NEXT_PUBLIC_PB_URL`, `PB_INTERNAL_URL`, `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD`.
 3. Импортируйте схему коллекций: `npm run db:schema`
    (файл схемы — `pocketbase/pb_schema.json`).
-4. Перенос данных со старого Supabase (разовая операция):
-   `npm run db:migrate -- --dry`, затем `npm run db:migrate` — товары, заказы,
-   отзывы и все фото переедут автоматически (подробно — SETUP-DB-RU.md, шаг 6).
+4. Создайте администратора: `node scripts/pb-make-admin.mjs you@example.com 'пароль'`.
 
 Суперпользователь PocketBase (`PB_ADMIN_*`) используется серверным роутом
 оформления заказа (`app/api/checkout/route.ts`) для записи заказа в обход
@@ -86,18 +84,11 @@ Node + pm2, nginx, платный TLS-сертификат, DNS, обновле�
 
 ```bash
 git clone <репозиторий> /var/www/seeds && cd /var/www/seeds
-nano .env.production   # ключи Supabase — ДО сборки (по образцу .env.local.example)
+nano .env.production   # ключи PocketBase — ДО сборки (по образцу .env.local.example)
 npm ci && npm run build
 cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
 pm2 start ecosystem.config.js   # сайт на 127.0.0.1:3000, наружу — через nginx
 ```
-
-## Деплой на Vercel (устаревший вариант)
-
-Раньше сайт жил на Vercel + Supabase — этот вариант больше не используется
-(магазин переехал на российский VPS, см. выше). Старая инструкция —
-[`SETUP-RU.md`](./SETUP-RU.md). Технически деплой на Vercel всё ещё возможен,
-но PocketBase должен быть доступен из интернета (`NEXT_PUBLIC_PB_URL`).
 
 ## Структура
 
@@ -118,8 +109,7 @@ lib/
 pocketbase/
   pb_schema.json           # схема коллекций (импорт: npm run db:schema)
 scripts/
-  pb-import-schema.mjs  migrate-from-supabase.mjs
-supabase/                  # SQL старой базы (история; не используется)
+  pb-import-schema.mjs  pb-make-admin.mjs
 ```
 
 ## Свои картинки (баннеры и категории)
@@ -148,18 +138,6 @@ supabase/                  # SQL старой базы (история; не и�
 **`/admin/products`** — каждый товар с несколькими фото, ценой, категорией,
 остатком и отметками «Новинка»/«Хит». Демо-товары можно удалить там же.
 
-### Массовый перенос с Ozon
-
-Чтобы не добавлять сотни товаров вручную, есть скрипт автоматического импорта
-через **Ozon Seller API** (названия, цены, описания и все фото).
-**Внимание:** скрипт пока пишет в старую базу Supabase; после переезда на
-PocketBase используйте его только через миграцию (импорт → `npm run db:migrate`)
-или попросите переписать его под PocketBase:
-
-```bash
-npm run import:ozon -- --dry   # проба без записи
-npm run import:ozon            # реальный импорт
-```
-
-Подробная инструкция (где взять ключи Ozon, опции, категории) —
-в [`IMPORT-OZON.md`](./IMPORT-OZON.md).
+> Массовый импорт с Ozon Seller API раньше работал через старую базу и был
+> удалён вместе с ней. При необходимости его можно переписать под PocketBase —
+> обратитесь к разработчику.
