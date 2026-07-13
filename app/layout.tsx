@@ -7,9 +7,15 @@ import VacationBanner from "@/components/vacation-banner";
 import { getCategories, getVacationUntil } from "@/lib/data";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://tomatsemena.ru"),
   title: "Tomat Semena — интернет-магазин семян",
   description:
     "Семена томатов, перцев, баклажанов, кукурузы, картофеля, дынь и арбузов с доставкой по России.",
+  openGraph: {
+    siteName: "Tomat Semena",
+    locale: "ru_RU",
+    type: "website",
+  },
 };
 
 export default async function RootLayout({

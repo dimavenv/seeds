@@ -138,9 +138,18 @@ cp -r public .next/standalone/
 
 pm2 start ecosystem.config.js
 pm2 save
-pm2 startup systemd -u dima --hp /home/dima
+pm2 startup systemd
 # ⬑ выполните команду, которую выведет pm2 startup — это автозапуск после перезагрузки
 ```
+
+> ⚠️ **Автозапуск должен быть настроен под ТЕМ ЖЕ пользователем, под которым
+> запущен pm2.** Если `pm2 ls` показывает процессы под root — выполняйте
+> `pm2 startup systemd` и `pm2 save` под root (иначе после перезагрузки сервера
+> сайт не поднимется). Проверка: `systemctl list-unit-files | grep pm2` — юнит
+> должен соответствовать пользователю из колонки `user` в `pm2 ls`.
+> Заодно проверьте, что swap переживает перезагрузку:
+> `grep swapfile /etc/fstab` — если пусто, добавьте:
+> `echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab`.
 
 Проверка:
 

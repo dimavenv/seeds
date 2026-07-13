@@ -92,6 +92,12 @@ export default async function OrderDetailPage({
             <span className="font-semibold text-brand-700">
               {ORDER_STATUS_LABELS[order.status]}
             </span>
+            {order.payment_status === "paid" && (
+              <span className="ml-2 badge bg-brand-600 text-white">Оплачен</span>
+            )}
+            {order.payment_status === "refunded" && (
+              <span className="ml-2 badge bg-brand-200 text-brand-700">Возврат оплаты</span>
+            )}
           </p>
         </div>
         <ReorderButton items={reorderItems} />
