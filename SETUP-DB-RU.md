@@ -202,16 +202,68 @@ curl http://127.0.0.1:3000/api/health    # {"ok":true,...} — сайт види
 ```bash
 sudo cp /var/www/seeds/seeds/deploy/pb-backup.sh /opt/pocketbase/pb-backup.sh
 sudo chmod +x /opt/pocketbase/pb-backup.sh
-sudo /opt/pocketbase/pb-backup.sh          # проверка: OK: /opt/pocketbase/backups/...
-sudo crontab -e                            # добавьте строку:
-# 0 3 * * * /opt/pocketbase/pb-backup.sh
+sudo /opt/pocketbase/pb-backup.sh          # проверка: OK (локально): ...
 ```
 
-Бэкап каждую ночь в 3:00, хранится 14 дней. **Настоятельно рекомендуется**
-оффсайт-копия (сервер один!): проще всего Яндекс Object Storage + rclone —
-раскомментируйте последнюю строку в `pb-backup.sh` и настройте
-`rclone config`. Плюс периодически скачивайте архив себе:
-`scp dima@ВАШ_IP:/opt/pocketbase/backups/pb_data_*.tar.gz .`
+Автозапуск каждую ночь в 3:00 (идемпотентно, с логом в /var/log/pb-backup.log):
+
+```bash
+( sudo crontab -l 2>/dev/null | grep -v pb-backup.sh; \
+  echo "0 3 * * * /opt/pocketbase/pb-backup.sh >> /var/log/pb-backup.log 2>&1" ) | sudo crontab -
+```
+
+Бэкап хранится 14 дней (и локально, и в облаке).
+
+### Оффсайт-копия в облако (Yandex Object Storage)
+
+Сервер один — держите копию вне его. Настройка (S3-совместимое хранилище):
+
+1. В [console.yandex.cloud](https://console.yandex.cloud) привяжите платёжный
+   аккаунт → **Object Storage** → создайте приватный бакет (напр.
+   `tomatsemena-backups`).
+2. **IAM → Сервисные аккаунты** → создайте `backup`, на каталоге выдайте роль
+   **`storage.editor`** (Права доступа → Настроить доступ) → **Создать ключ →
+   Статический ключ доступа** (сохраните Access Key ID и секрет).
+3. На сервере — rclone:
+   ```bash
+   sudo apt install -y rclone
+   mkdir -p /root/.config/rclone
+   cat > /root/.config/rclone/rclone.conf <<'EOF'
+   [yandex]
+   type = s3
+   provider = Other
+   access_key_id = ВАШ_ACCESS_KEY_ID
+   secret_access_key = ВАШ_СЕКРЕТ
+   endpoint = storage.yandexcloud.net
+   region = ru-central1
+   acl = private
+   EOF
+   chmod 600 /root/.config/rclone/rclone.conf
+   rclone lsd yandex:                        # должен показать бакет
+   ```
+4. Укажите бакет скрипту — и он будет выгружать каждую копию сам:
+   ```bash
+   echo 'RCLONE_REMOTE=yandex:tomatsemena-backups' > /opt/pocketbase/backup.conf
+   sudo /opt/pocketbase/pb-backup.sh          # OK (локально) + OK (облако)
+   ```
+
+### Восстановление из бэкапа
+
+Проверенное восстановление — часть бэкапа. Как развернуть копию:
+
+```bash
+# 1. Взять нужный архив: локально из /opt/pocketbase/backups/ или из облака:
+rclone copy yandex:tomatsemena-backups/pb_data_ДАТА.tar.gz /tmp/
+# 2. Остановить базу, отложить текущие данные, распаковать бэкап:
+sudo systemctl stop pocketbase
+sudo mv /opt/pocketbase/pb_data /opt/pocketbase/pb_data.old
+sudo tar xzf /tmp/pb_data_ДАТА.tar.gz -C /opt/pocketbase/
+sudo chown -R pocketbase:pocketbase /opt/pocketbase/pb_data
+# 3. Запустить:
+sudo systemctl start pocketbase && curl -s http://127.0.0.1:8090/api/health
+```
+
+Убедившись, что всё на месте, удалите `pb_data.old`.
 
 ## Шаг 9. Отключить Supabase
 
