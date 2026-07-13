@@ -21,6 +21,16 @@
 
 ---
 
+## Шаг 0. Подтянуть свежий код
+
+Файлы для этого этапа (служба PocketBase, скрипты переноса) появляются только
+после обновления кода — сделайте это первым:
+
+```bash
+cd /var/www/seeds/seeds
+git pull
+```
+
 ## Шаг 1. Установить PocketBase
 
 ```bash
@@ -106,8 +116,7 @@ sudo ufw allow 8090/tcp
 
 ```bash
 cd /var/www/seeds/seeds
-git pull                       # подтянуть код с PocketBase-версией сайта
-npm ci                         # обновить зависимости
+npm ci                         # обновить зависимости (код уже подтянут на шаге 0)
 node scripts/pb-import-schema.mjs
 ```
 
