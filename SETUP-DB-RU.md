@@ -280,32 +280,45 @@ sudo systemctl start pocketbase && curl -s http://127.0.0.1:8090/api/health
 2. Supabase → Project Settings → **Pause project** (или Delete, если уверены).
    Пока проект на паузе, данные там сохраняются — это ваша подстраховка.
 
-## Шаг 10 (после покупки домена). Красивый адрес для базы
+## Шаг 10 (после покупки домена). HTTPS и база за nginx
 
-Когда появится домен и сертификат (шаги 8–10 из SETUP-VPS-RU.md):
+Когда домен направлен на сервер (A-записи `@`, `www`, при желании `api` → IP)
+и есть SSL-сертификат. Здесь применён рабочий вариант: **один сертификат** на
+`tomatsemena.ru`, а база отдаётся с того же домена по пути **`/pb`** — так
+второй сертификат/поддомен не нужен.
 
-1. Добавьте A-запись `api` → IP сервера.
-2. В `/etc/nginx/sites-available/tomatsemena` раскомментируйте блок
-   `api.tomatsemena.ru` (заготовка уже в `deploy/nginx.conf`), получите
-   сертификат и на него, `sudo nginx -t && sudo systemctl reload nginx`.
-3. Верните PocketBase на localhost (теперь наружу отдаёт nginx):
+1. Положите файлы сертификата в `/etc/ssl/tomatsemena/`:
+   `certificate.crt`, `chain.crt` (корневой), `privkey.pem`. Соберите цепочку и
+   проверьте, что ключ подходит:
+   ```bash
+   cd /etc/ssl/tomatsemena
+   cat certificate.crt chain.crt > fullchain.pem && chmod 600 privkey.pem
+   diff <(openssl x509 -noout -modulus -in fullchain.pem | openssl md5) \
+        <(openssl rsa  -noout -modulus -in privkey.pem  | openssl md5) \
+        && echo "ключ подходит"
+   ```
+2. Перепропишите адреса фото в базе на новый (`https://ДОМЕН/pb`):
+   ```bash
+   sudo systemctl stop pocketbase
+   sudo sqlite3 /opt/pocketbase/pb_data/data.db "UPDATE products SET image_url=REPLACE(image_url,'http://ВАШ_IP:8090','https://tomatsemena.ru/pb'), images=REPLACE(images,'http://ВАШ_IP:8090','https://tomatsemena.ru/pb');"
+   sudo systemctl start pocketbase
+   ```
+3. В `.env.production`: `NEXT_PUBLIC_PB_URL=https://tomatsemena.ru/pb`
+   (`PB_INTERNAL_URL=http://127.0.0.1:8090` оставьте — сервер ходит в базу напрямую).
+4. Поставьте боевой nginx-конфиг (HTTPS + сайт + база на `/pb`):
+   ```bash
+   sudo cp deploy/nginx.conf /etc/nginx/sites-available/tomatsemena
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+5. Верните PocketBase на localhost и закройте прямой порт (теперь база за nginx):
    ```bash
    sudo sed -i 's|--http=0.0.0.0:8090|--http=127.0.0.1:8090|' /etc/systemd/system/pocketbase.service
    sudo systemctl daemon-reload && sudo systemctl restart pocketbase
+   sudo ufw delete allow 8090/tcp
    ```
-4. В `.env.production` поменяйте:
-   `NEXT_PUBLIC_PB_URL=https://api.tomatsemena.ru`
-5. Закройте прямой порт: `sudo ufw delete allow 8090/tcp`.
-6. Пересоберите: `bash deploy/update.sh`.
-
-> ⚠️ Фото, перекачанные на шаге 6, получили URL вида `http://IP:8090/...`.
-> После смены адреса выполните замену в товарах одной командой:
-> ```bash
-> sudo systemctl stop pocketbase
-> sudo -u pocketbase sqlite3 /opt/pocketbase/pb_data/data.db \
->   "UPDATE products SET images = REPLACE(images,'http://ВАШ_IP:8090','https://api.tomatsemena.ru'), image_url = REPLACE(image_url,'http://ВАШ_IP:8090','https://api.tomatsemena.ru');"
-> sudo systemctl start pocketbase
-> ```
+6. Пересоберите сайт: `bash deploy/update.sh`.
+7. Проверка: `https://tomatsemena.ru` (замок, фото, вход) и
+   `curl -s https://tomatsemena.ru/pb/api/health` → `API is healthy`.
 
 ## Если что-то пошло не так
 
