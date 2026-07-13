@@ -20,7 +20,7 @@ export default function RequisitesPage() {
               <tr><td>Наименование</td><td><strong>ИП Кутушева Вера Евгеньевна</strong></td></tr>
               <tr><td>ИНН</td><td>231214684650</td></tr>
               <tr><td>ОГРНИП</td><td>322237500354090</td></tr>
-              <tr><td>Адрес</td><td>[указать адрес регистрации]</td></tr>
+              <tr><td>Адрес</td><td>350000, Россия, Краснодарский край, г. Краснодар</td></tr>
               <tr><td>Телефон</td><td>+79034549010</td></tr>
               <tr><td>E-mail</td><td>info@tomatsemena.ru</td></tr>
               <tr><td>Режим работы</td><td>Пн–Вс: 9:00–20:00</td></tr>
