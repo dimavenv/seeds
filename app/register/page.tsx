@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { getPb } from "@/lib/pb/client";
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
@@ -18,25 +18,29 @@ export default function RegisterPage() {
     setMessage(null);
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
-      });
-      if (error) {
-        setError(error.message);
+      const pb = getPb();
+      try {
+        await pb.collection("users").create({
+          email,
+          password,
+          passwordConfirm: password,
+          name: fullName.trim(),
+        });
+      } catch (e) {
+        const data = (e as { response?: { data?: Record<string, { message?: string }> } })
+          ?.response?.data;
+        setError(
+          data?.email?.message
+            ? "Такой email уже зарегистрирован"
+            : data?.password?.message ?? "Не удалось зарегистрироваться"
+        );
         setLoading(false);
         return;
       }
-      if (data.session) {
-        window.location.assign("/account");
-      } else {
-        setMessage("Проверьте почту для подтверждения регистрации.");
-        setLoading(false);
-      }
+      await pb.collection("users").authWithPassword(email, password);
+      window.location.assign("/account");
     } catch {
-      setError("Supabase не настроен. Укажите ключи в .env.local");
+      setError("База данных недоступна. Проверьте /api/health.");
       setLoading(false);
     }
   }

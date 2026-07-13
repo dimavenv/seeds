@@ -111,7 +111,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
     });
   }, [products, tab, query]);
 
-  async function saveField(id: number, fields: { price?: number; stock?: number }) {
+  async function saveField(id: string, fields: { price?: number; stock?: number }) {
     await updateProductInline(id, fields);
     startTransition(() => router.refresh());
   }

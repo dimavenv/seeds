@@ -1,10 +1,11 @@
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getSession } from "@/lib/auth";
+import { getSessionPb } from "@/lib/auth";
+import { fetchOrdersWithItems } from "@/lib/orders";
+import { getProductsByIds } from "@/lib/data";
 import { formatPrice, formatDate } from "@/lib/format";
-import { ORDER_STATUS_LABELS, type Order, type OrderStatus, type Product } from "@/lib/types";
+import { ORDER_STATUS_LABELS, type Order, type OrderStatus } from "@/lib/types";
 import LogoutButton from "@/components/logout-button";
 import ThemeToggle from "@/components/theme-toggle";
 
@@ -19,7 +20,7 @@ const STATUS_BADGE: Record<OrderStatus, string> = {
 };
 
 export default async function AccountPage() {
-  const session = await getSession();
+  const { session, pb } = await getSessionPb();
 
   if (!session.configured) {
     return (
@@ -29,7 +30,8 @@ export default async function AccountPage() {
             Личный кабинет недоступен
           </h1>
           <p className="mt-2 text-brand-600">
-            Не настроен Supabase. Укажите ключи в <code className="rounded bg-brand-100 px-1">.env.local</code>.
+            Не настроена база данных (PocketBase). Укажите ключи в{" "}
+            <code className="rounded bg-brand-100 px-1">.env.production</code>.
           </p>
         </div>
       </div>
@@ -40,29 +42,25 @@ export default async function AccountPage() {
     redirect("/login");
   }
 
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("orders")
-    .select(
-      "id, total, status, tracking_number, created_at, order_items(id, product_id, name, price, qty)"
-    )
-    .eq("user_id", session.userId)
-    .order("created_at", { ascending: false });
-
-  const orders = (data ?? []) as Order[];
+  // Правила PocketBase позволяют видеть только свои заказы; фильтр — для явности.
+  let orders: Order[] = [];
+  try {
+    orders = await fetchOrdersWithItems(pb, {
+      ordersFilter: pb.filter("user = {:uid}", { uid: session.userId }),
+      itemsFilter: pb.filter("order.user = {:uid}", { uid: session.userId }),
+    });
+  } catch {
+    orders = [];
+  }
 
   // Картинки товаров для миниатюр в истории.
   const ids = orders
     .flatMap((o) => (o.order_items ?? []).map((i) => i.product_id))
-    .filter((x): x is number => !!x);
-  const imgMap = new Map<number, string | null>();
+    .filter((x): x is string => !!x);
+  const imgMap = new Map<string, string | null>();
   if (ids.length) {
-    const { data: prods } = await supabase
-      .from("products")
-      .select("id, image_url, images")
-      .in("id", Array.from(new Set(ids)));
-    for (const p of (prods ?? []) as Product[])
-      imgMap.set(p.id, p.image_url || p.images?.[0] || null);
+    const prods = await getProductsByIds(Array.from(new Set(ids)));
+    for (const p of prods) imgMap.set(p.id, p.image_url || p.images?.[0] || null);
   }
 
   return (
@@ -116,7 +114,7 @@ export default async function AccountPage() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold text-brand-800">Заказ #{o.id}</div>
+                    <div className="font-bold text-brand-800">Заказ #{o.number}</div>
                     <div className="text-sm text-brand-500">
                       {formatDate(o.created_at)} · {count} тов.
                     </div>

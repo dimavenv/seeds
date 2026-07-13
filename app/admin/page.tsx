@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createServerPb } from "@/lib/pb/server";
+import { mapOrder } from "@/lib/pb/shared";
 import { getVacationUntil } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import { ORDER_STATUS_LABELS, type Order } from "@/lib/types";
@@ -8,24 +9,23 @@ import VacationSetting from "@/components/admin/vacation-setting";
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const supabase = createClient();
+  const pb = createServerPb();
 
-  const [{ count: productsCount }, { count: ordersCount }, { data: recent }, vacationUntil] =
-    await Promise.all([
-      supabase.from("products").select("*", { count: "exact", head: true }),
-      supabase.from("orders").select("*", { count: "exact", head: true }),
-      supabase
-        .from("orders")
-        .select("id, customer_name, total, status, created_at")
-        .order("created_at", { ascending: false })
-        .limit(5),
-      getVacationUntil(),
-    ]);
+  // getList(1,1) заодно возвращает totalItems — так считаем количество.
+  const [productsPage, recentPage, vacationUntil] = await Promise.all([
+    pb.collection("products").getList(1, 1).catch(() => ({ totalItems: 0 })),
+    pb
+      .collection("orders")
+      .getList(1, 5, { sort: "-placed_at" })
+      .catch(() => ({ totalItems: 0, items: [] as never[] })),
+    getVacationUntil(),
+  ]);
 
-  const recentOrders = (recent ?? []) as Pick<
-    Order,
-    "id" | "customer_name" | "total" | "status" | "created_at"
-  >[];
+  const productsCount = productsPage.totalItems;
+  const ordersCount = recentPage.totalItems;
+  const recentOrders = (("items" in recentPage ? recentPage.items : []) as never[]).map(
+    (r) => mapOrder(r)
+  ) as Order[];
 
   return (
     <div className="space-y-6">
@@ -76,7 +76,7 @@ export default async function AdminDashboard() {
             <tbody>
               {recentOrders.map((o) => (
                 <tr key={o.id} className="border-t border-brand-100">
-                  <td className="py-2 font-semibold">#{o.id}</td>
+                  <td className="py-2 font-semibold">#{o.number}</td>
                   <td>{o.customer_name}</td>
                   <td>{formatPrice(o.total)}</td>
                   <td>{ORDER_STATUS_LABELS[o.status]}</td>

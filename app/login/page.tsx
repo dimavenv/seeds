@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { getPb } from "@/lib/pb/client";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
 
@@ -31,29 +31,24 @@ export default function LoginPage() {
     // Защита от вечного спиннера.
     const safety = setTimeout(() => {
       setError(
-        "Сервер Supabase не отвечает. Скорее всего проект на паузе — откройте дашборд Supabase и нажмите Restore."
+        "База данных не отвечает. Проверьте, запущен ли PocketBase на сервере (/api/health)."
       );
       setLoading(false);
     }, 10000);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const pb = getPb();
+      await pb.collection("users").authWithPassword(email, password);
       clearTimeout(safety);
-      if (error) {
-        setError("Неверный email или пароль");
-        setLoading(false);
-        return;
-      }
       // Жёсткий переход — надёжнее обновляет сессию.
       window.location.assign("/account");
-    } catch {
+    } catch (e) {
       clearTimeout(safety);
+      const status = (e as { status?: number })?.status;
       setError(
-        "Не удалось подключиться к базе. Проверьте, не на паузе ли проект Supabase, и ключи в .env.local."
+        status === 400
+          ? "Неверный email или пароль"
+          : "Не удалось подключиться к базе. Проверьте /api/health и настройки PocketBase."
       );
       setLoading(false);
     }
@@ -74,8 +69,8 @@ export default function LoginPage() {
             <strong>База данных недоступна.</strong>
             <div className="mt-1">
               {!health?.configured
-                ? "Не заданы ключи Supabase в .env.local."
-                : "Запрос к Supabase не прошёл. Чаще всего это значит, что проект на бесплатном тарифе поставлен на паузу — откройте дашборд Supabase и нажмите Restore. Также сверьте URL и ключи в .env.local."}
+                ? "Не задан NEXT_PUBLIC_PB_URL в .env.production."
+                : "Запрос к PocketBase не прошёл. Проверьте, что сервис запущен (systemctl status pocketbase) и адрес в .env.production верный."}
             </div>
           </div>
         )}

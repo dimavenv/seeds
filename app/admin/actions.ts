@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { getSession } from "@/lib/auth";
+import { pbAdmin } from "@/lib/pb/server";
+import { getSessionPb } from "@/lib/auth";
+import { isValidRecordId } from "@/lib/data";
 import type { OrderStatus, ReviewStatus } from "@/lib/types";
 
 function slugify(input: string): string {
@@ -23,22 +24,32 @@ function slugify(input: string): string {
     .slice(0, 60);
 }
 
+function errMessage(e: unknown): string {
+  const data = (e as { response?: { data?: Record<string, { message?: string }> } })
+    ?.response?.data;
+  if (data) {
+    const first = Object.entries(data)[0];
+    if (first?.[1]?.message) return `${first[0]}: ${first[1].message}`;
+  }
+  return e instanceof Error ? e.message : "Не удалось сохранить";
+}
+
 export type ProductFormState = { error?: string; ok?: boolean };
 
 export async function saveProduct(
   _prev: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  const session = await getSession();
+  const { session, pb } = await getSessionPb();
   if (!session.isAdmin) return { error: "Нет доступа" };
 
-  const id = formData.get("id") ? Number(formData.get("id")) : null;
+  const rawId = String(formData.get("id") ?? "");
+  const id = isValidRecordId(rawId) ? rawId : null;
   const name = String(formData.get("name") ?? "").trim();
   const price = Number(formData.get("price") ?? 0);
-  const categoryId = formData.get("category_id")
-    ? Number(formData.get("category_id"))
-    : null;
-  const description = String(formData.get("description") ?? "").trim() || null;
+  const rawCategory = String(formData.get("category_id") ?? "");
+  const categoryId = isValidRecordId(rawCategory) ? rawCategory : "";
+  const description = String(formData.get("description") ?? "").trim();
   // Несколько фото приходят JSON-массивом; image_url — первое (главное) фото.
   let images: string[] = [];
   try {
@@ -49,10 +60,10 @@ export async function saveProduct(
   } catch {
     images = [];
   }
-  const imageUrl = images[0] ?? null;
+  const imageUrl = images[0] ?? "";
   const stock = Number(formData.get("stock") ?? 0);
   const seedsRaw = String(formData.get("seeds_per_pack") ?? "").trim();
-  const seedsPerPack = seedsRaw ? Number(seedsRaw) : null;
+  const seedsPerPack = seedsRaw ? Number(seedsRaw) : 0;
   const isNew = formData.get("is_new") === "on";
   const isFeatured = formData.get("is_featured") === "on";
   let slug = String(formData.get("slug") ?? "").trim();
@@ -60,12 +71,11 @@ export async function saveProduct(
   if (!name) return { error: "Укажите название" };
   if (!slug) slug = slugify(name) || `tovar-${Date.now()}`;
 
-  const supabase = createClient();
   const payload = {
     name,
     slug,
     price,
-    category_id: categoryId,
+    category: categoryId,
     description,
     image_url: imageUrl,
     images,
@@ -75,11 +85,12 @@ export async function saveProduct(
     is_featured: isFeatured,
   };
 
-  const { error } = id
-    ? await supabase.from("products").update(payload).eq("id", id)
-    : await supabase.from("products").insert(payload);
-
-  if (error) return { error: error.message };
+  try {
+    if (id) await pb.collection("products").update(id, payload);
+    else await pb.collection("products").create(payload);
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
 
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
@@ -88,11 +99,12 @@ export async function saveProduct(
 }
 
 export async function updateProductInline(
-  id: number,
+  id: string,
   fields: { price?: number; stock?: number }
 ): Promise<{ ok?: boolean; error?: string }> {
-  const session = await getSession();
+  const { session, pb } = await getSessionPb();
   if (!session.isAdmin) return { error: "Нет доступа" };
+  if (!isValidRecordId(id)) return { error: "Некорректный товар" };
 
   const payload: { price?: number; stock?: number } = {};
   if (typeof fields.price === "number" && !Number.isNaN(fields.price)) {
@@ -103,9 +115,11 @@ export async function updateProductInline(
   }
   if (Object.keys(payload).length === 0) return { error: "Нечего сохранять" };
 
-  const supabase = createClient();
-  const { error } = await supabase.from("products").update(payload).eq("id", id);
-  if (error) return { error: error.message };
+  try {
+    await pb.collection("products").update(id, payload);
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
 
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
@@ -113,59 +127,61 @@ export async function updateProductInline(
   return { ok: true };
 }
 
-export async function deleteProduct(id: number): Promise<void> {
-  const session = await getSession();
-  if (!session.isAdmin) return;
-  const supabase = createClient();
-  await supabase.from("products").delete().eq("id", id);
+export async function deleteProduct(id: string): Promise<void> {
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return;
+  await pb.collection("products").delete(id).catch(() => {});
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
 }
 
 export async function updateOrderStatus(
-  id: number,
+  id: string,
   status: OrderStatus
 ): Promise<void> {
-  const session = await getSession();
-  if (!session.isAdmin) return;
-  const supabase = createClient();
-  await supabase.from("orders").update({ status }).eq("id", id);
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return;
+  await pb.collection("orders").update(id, { status }).catch(() => {});
   revalidatePath("/admin/orders");
 }
 
 export async function updateOrderTracking(
-  id: number,
+  id: string,
   tracking: string
 ): Promise<void> {
-  const session = await getSession();
-  if (!session.isAdmin) return;
-  const value = tracking.trim() || null;
-  const supabase = createClient();
-  await supabase.from("orders").update({ tracking_number: value }).eq("id", id);
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return;
+  await pb
+    .collection("orders")
+    .update(id, { tracking_number: tracking.trim() })
+    .catch(() => {});
   revalidatePath("/admin/orders");
 }
 
 export async function updateVacationUntil(date: string | null): Promise<void> {
-  const session = await getSession();
+  const { session } = await getSessionPb();
   if (!session.isAdmin) return;
-  const value = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
-  const supabase = createClient();
-  await supabase
-    .from("site_settings")
-    .update({ vacation_until: value, updated_at: new Date().toISOString() })
-    .eq("id", 1);
+  const value = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
+  // Единственную запись настроек создаёт/правит суперпользователь — так работает
+  // даже на свежей базе, где записи ещё нет.
+  const pb = await pbAdmin();
+  const page = await pb.collection("site_settings").getList(1, 1);
+  if (page.items[0]) {
+    await pb.collection("site_settings").update(page.items[0].id, { vacation_until: value });
+  } else {
+    await pb.collection("site_settings").create({ vacation_until: value });
+  }
   revalidatePath("/", "layout");
   revalidatePath("/admin");
 }
 
 export async function updateReviewStatus(
-  id: number,
+  id: string,
   status: ReviewStatus
 ): Promise<void> {
-  const session = await getSession();
-  if (!session.isAdmin) return;
-  const supabase = createClient();
-  await supabase.from("reviews").update({ status }).eq("id", id);
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return;
+  await pb.collection("reviews").update(id, { status }).catch(() => {});
   revalidatePath("/admin/reviews");
   revalidatePath("/reviews");
 }

@@ -1,17 +1,21 @@
+// ID записей — строки PocketBase (15 символов). У заказов дополнительно есть
+// человекочитаемый номер `number` (у перенесённых из Supabase заказов он
+// совпадает со старым числовым id).
+
 export type Category = {
-  id: number;
+  id: string;
   slug: string;
   name: string;
   sort_order: number;
 };
 
 export type Product = {
-  id: number;
+  id: string;
   slug: string;
   name: string;
   description: string | null;
   price: number;
-  category_id: number | null;
+  category_id: string | null;
   image_url: string | null;
   images?: string[] | null;
   stock: number;
@@ -38,7 +42,8 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 };
 
 export type Order = {
-  id: number;
+  id: string;
+  number: number;
   customer_name: string;
   phone: string;
   email: string | null;
@@ -55,7 +60,7 @@ export type Order = {
 };
 
 export type SupportRequest = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   subject: string;
@@ -66,9 +71,9 @@ export type SupportRequest = {
 };
 
 export type OrderItem = {
-  id: number;
-  order_id: number;
-  product_id: number | null;
+  id: string;
+  order_id: string;
+  product_id: string | null;
   name: string;
   price: number;
   qty: number;
@@ -77,9 +82,9 @@ export type OrderItem = {
 export type ReviewStatus = "pending" | "approved" | "rejected";
 
 export type Review = {
-  id: number;
+  id: string;
   user_id: string | null;
-  order_id: number | null;
+  order_id: string | null;
   author_name: string;
   rating: number;
   text: string;
@@ -89,7 +94,7 @@ export type Review = {
 };
 
 export type CartItem = {
-  id: number;
+  id: string;
   slug: string;
   name: string;
   price: number;

@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerPb } from "@/lib/pb/server";
+import { mapReview } from "@/lib/pb/shared";
 import { formatDate } from "@/lib/format";
 import Stars from "@/components/stars";
 import ReviewModeration from "@/components/admin/review-moderation";
@@ -19,13 +20,16 @@ const STATUS_LABEL: Record<ReviewStatus, string> = {
 };
 
 export default async function AdminReviews() {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("reviews")
-    .select("id, author_name, rating, text, status, source, created_at, order_id, user_id")
-    .order("created_at", { ascending: false });
-
-  const reviews = (data ?? []) as Review[];
+  const pb = createServerPb();
+  let reviews: Review[] = [];
+  try {
+    const list = await pb
+      .collection("reviews")
+      .getFullList({ sort: "-published_at" });
+    reviews = list.map(mapReview);
+  } catch {
+    reviews = [];
+  }
   reviews.sort(
     (a, b) =>
       (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1)
@@ -68,7 +72,7 @@ export default async function AdminReviews() {
                   </div>
                   <div className="text-xs text-brand-500">
                     {formatDate(r.created_at)}
-                    {r.order_id ? ` · заказ #${r.order_id}` : ""}
+                    {r.order_id ? " · по заказу" : ""}
                   </div>
                 </div>
                 <span className={`badge ${STATUS_BADGE[r.status]}`}>

@@ -1,0 +1,25 @@
+# Юнит systemd для PocketBase (база данных магазина).
+# Установка — SETUP-DB-RU.md, шаг 2. Кратко:
+#   sudo cp deploy/pocketbase.service /etc/systemd/system/pocketbase.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pocketbase
+
+[Unit]
+Description=PocketBase (Tomat Semena DB)
+After=network.target
+
+[Service]
+Type=simple
+User=pocketbase
+Group=pocketbase
+WorkingDirectory=/opt/pocketbase
+# Слушает только localhost — наружу отдаёт nginx (или порт 8090 на время миграции)
+ExecStart=/opt/pocketbase/pocketbase serve --http=127.0.0.1:8090 --dir /opt/pocketbase/pb_data
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=4096
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -8,7 +8,7 @@ export default function OrderTrackingInput({
   id,
   tracking,
 }: {
-  id: number;
+  id: string;
   tracking: string | null;
 }) {
   const [value, setValue] = useState(tracking ?? "");

@@ -7,16 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "import:ozon": "node scripts/import-ozon.mjs"
+    "import:ozon": "node scripts/import-ozon.mjs",
+    "db:schema": "node scripts/pb-import-schema.mjs",
+    "db:migrate": "node scripts/migrate-from-supabase.mjs"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.5.2",
-    "@supabase/supabase-js": "^2.45.4",
     "next": "14.2.35",
+    "pocketbase": "^0.27.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.110.2",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

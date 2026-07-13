@@ -16,8 +16,8 @@ export async function GET(request: Request) {
   const idsParam = searchParams.get("ids") ?? "";
   const ids = idsParam
     .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n > 0);
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const products = await getProductsByIds(ids);
   return NextResponse.json({ products });

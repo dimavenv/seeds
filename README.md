@@ -3,8 +3,9 @@
 Интернет-магазин семян в стиле садового центра **LETTO**: каталог по категориям,
 поиск/фильтры/сортировка, корзина, избранное, оформление заказа и админ-панель.
 
-Стек: **Next.js 14 (App Router) + TypeScript + Tailwind CSS + Supabase**
-(Postgres, Auth, Storage). Язык интерфейса — русский, валюта — ₽.
+Стек: **Next.js 14 (App Router) + TypeScript + Tailwind CSS + PocketBase**
+(база данных, аккаунты и файлы — на собственном VPS). Язык интерфейса —
+русский, валюта — ₽.
 
 ## Возможности
 
@@ -21,9 +22,9 @@
 - **Админка `/admin`:** CRUD товаров с загрузкой фото в Supabase Storage, список
   заказов со сменой статусов, дашборд.
 
-> Без настроенного Supabase магазин работает в **демо-режиме** на встроенных
+> Без настроенного PocketBase магазин работает в **демо-режиме** на встроенных
 > данных (`lib/demo-data.ts`) — каталог, корзина и оформление доступны для
-> просмотра. Админка и сохранение заказов требуют Supabase.
+> просмотра. Админка и сохранение заказов требуют PocketBase.
 
 ## Быстрый старт
 
@@ -33,36 +34,30 @@ cp .env.local.example .env.local   # заполните ключами Supabase 
 npm run dev                        # http://localhost:3000
 ```
 
-## Настройка Supabase
+## Настройка базы данных (PocketBase)
 
-1. Создайте проект на [supabase.com](https://supabase.com) (есть бесплатный тариф).
-2. В **SQL Editor** выполните по очереди все миграции из `supabase/migrations/`
-   по возрастанию номера:
-   - `0001_init.sql` — таблицы, RLS, триггеры, enum статусов;
-   - `0002_storage.sql` — bucket `product-images` и политики;
-   - `0003_support_and_delivery.sql` — заявки в поддержку + поля доставки;
-   - `0004_product_images.sql` — несколько фото на товар;
-   - `0005_user_store.sql` — корзина и избранное, привязанные к аккаунту;
-   - затем `supabase/seed.sql` — демо-категории и товары (необязательно).
+Магазин работает с [PocketBase](https://pocketbase.io) — лёгкой базой данных
+(SQLite + аккаунты + файлы), которая живёт на том же VPS, что и сайт.
 
-   > Можно вместо отдельных миграций один раз выполнить `supabase/setup.sql` —
-   > он содержит всю актуальную схему целиком.
-3. Скопируйте в `.env.local` (Project Settings → API):
+1. Установите PocketBase и создайте суперпользователя — шаги 1–3
+   [`SETUP-DB-RU.md`](./SETUP-DB-RU.md).
+2. Заполните `.env.production` (по образцу `.env.local.example`):
+   `NEXT_PUBLIC_PB_URL`, `PB_INTERNAL_URL`, `PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD`.
+3. Импортируйте схему коллекций: `npm run db:schema`
+   (файл схемы — `pocketbase/pb_schema.json`).
+4. Перенос данных со старого Supabase (разовая операция):
+   `npm run db:migrate -- --dry`, затем `npm run db:migrate` — товары, заказы,
+   отзывы и все фото переедут автоматически (подробно — SETUP-DB-RU.md, шаг 6).
 
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
-   SUPABASE_SERVICE_ROLE_KEY=<service role key>   # только сервер, не публиковать
-   ```
-
-   `SUPABASE_SERVICE_ROLE_KEY` используется серверным роутом оформления заказа
-   (`app/api/checkout/route.ts`) для надёжной записи заказа в обход RLS.
+Суперпользователь PocketBase (`PB_ADMIN_*`) используется серверным роутом
+оформления заказа (`app/api/checkout/route.ts`) для записи заказа в обход
+правил доступа — аналог прежнего service role key.
 
 ### Безопасность персональных данных
 
-Доступ к заказам и заявкам ограничен на уровне БД (RLS): покупатель видит только
-свои заказы, остальное — только администратор; трафик идёт по HTTPS, а Supabase
-шифрует данные на диске. Дополнительно можно включить **шифрование контактных
+Доступ к заказам и заявкам ограничен на уровне БД (API Rules PocketBase):
+покупатель видит только свои заказы, остальное — только администратор.
+Дополнительно можно включить **шифрование контактных
 полей** (телефон, email, адрес) в самих строках БД — задайте серверную
 переменную `DATA_ENCRYPTION_KEY` (`openssl rand -base64 32`). Тогда эти поля
 пишутся в зашифрованном виде (AES-256-GCM) и расшифровываются только на сервере
@@ -74,20 +69,11 @@ npm run dev                        # http://localhost:3000
 
 ### Создание администратора
 
-1. Зарегистрируйтесь на `/register` (или создайте пользователя в Supabase →
-   Authentication → Users). При регистрации профиль создаётся автоматически.
-2. Назначьте роль `admin` в **SQL Editor**:
-
-   ```sql
-   update public.profiles set role = 'admin'
-   where id = (select id from auth.users where email = 'you@example.com');
-   ```
-
-3. Войдите на `/login` и откройте `/admin`.
-
-> Для загрузки фото в админке отключите подтверждение email (Authentication →
-> Providers → Email → «Confirm email» off) либо подтвердите почту администратора —
-> загрузка в Storage требует активной сессии админа.
+1. Зарегистрируйтесь на `/register` (или создайте пользователя в админке
+   PocketBase: коллекция **users** → New record).
+2. В админке PocketBase (`/_/` через SSH-туннель, см. SETUP-DB-RU.md, шаг 6)
+   откройте свою запись в коллекции **users** и поставьте **role = admin**.
+3. Перезайдите на `/login` и откройте `/admin`.
 
 ## Деплой на российский VPS
 
@@ -106,19 +92,12 @@ cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
 pm2 start ecosystem.config.js   # сайт на 127.0.0.1:3000, наружу — через nginx
 ```
 
-## Деплой на Vercel
+## Деплой на Vercel (устаревший вариант)
 
-1. Запушьте репозиторий на GitHub и импортируйте его в [Vercel](https://vercel.com)
-   (**Add New… → Project → Import**). Framework (Next.js) определится сам.
-2. В **Environment Variables** добавьте переменные из `.env.local`
-   (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, при желании `NEXT_PUBLIC_DADATA_TOKEN`).
-3. **Deploy**. Затем в Supabase → Authentication → URL Configuration укажите
-   адрес с Vercel как **Site URL** (иначе вход на проде не работает).
-4. Каждый `git push` в основную ветку автоматически пересобирает сайт.
-
-📘 **Пошаговая инструкция для новичка** (со скриншот-шагами и нюансами) — в
-[`SETUP-RU.md`](./SETUP-RU.md), раздел «Шаг 7. Публикация сайта на Vercel».
+Раньше сайт жил на Vercel + Supabase — этот вариант больше не используется
+(магазин переехал на российский VPS, см. выше). Старая инструкция —
+[`SETUP-RU.md`](./SETUP-RU.md). Технически деплой на Vercel всё ещё возможен,
+но PocketBase должен быть доступен из интернета (`NEXT_PUBLIC_PB_URL`).
 
 ## Структура
 
@@ -133,11 +112,14 @@ app/
   api/                     # /api/products, /api/checkout
 components/                # Header, Footer, ProductCard, фильтры, формы админки
 lib/
-  supabase/{client,server}.ts
-  data.ts                  # выборка из Supabase с фолбэком на демо-данные
-  demo-data.ts  types.ts  format.ts  auth.ts
-supabase/
-  migrations/*.sql  seed.sql
+  pb/{client,server,shared}.ts   # клиенты PocketBase + маппинг записей
+  data.ts                  # выборка из PocketBase с фолбэком на демо-данные
+  demo-data.ts  types.ts  format.ts  auth.ts  orders.ts  crypto.ts
+pocketbase/
+  pb_schema.json           # схема коллекций (импорт: npm run db:schema)
+scripts/
+  pb-import-schema.mjs  migrate-from-supabase.mjs
+supabase/                  # SQL старой базы (история; не используется)
 ```
 
 ## Свои картинки (баннеры и категории)
@@ -169,7 +151,10 @@ supabase/
 ### Массовый перенос с Ozon
 
 Чтобы не добавлять сотни товаров вручную, есть скрипт автоматического импорта
-через **Ozon Seller API** (названия, цены, описания и все фото):
+через **Ozon Seller API** (названия, цены, описания и все фото).
+**Внимание:** скрипт пока пишет в старую базу Supabase; после переезда на
+PocketBase используйте его только через миграцию (импорт → `npm run db:migrate`)
+или попросите переписать его под PocketBase:
 
 ```bash
 npm run import:ozon -- --dry   # проба без записи

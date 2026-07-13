@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerPb } from "@/lib/pb/server";
+import { fetchOrdersWithItems } from "@/lib/orders";
 import { formatPrice, formatDate } from "@/lib/format";
 import { deliveryMethodLabel } from "@/lib/delivery";
 import { decryptField } from "@/lib/crypto";
@@ -9,15 +10,14 @@ import type { Order } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function AdminOrders() {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("orders")
-    .select(
-      "id, customer_name, phone, email, address, comment, status, total, delivery_method, delivery_cost, tracking_number, created_at, order_items(id, name, price, qty)"
-    )
-    .order("created_at", { ascending: false });
-
-  const orders = (data ?? []) as Order[];
+  // Клиент с токеном админа из cookie — правила PocketBase дают видеть всё.
+  const pb = createServerPb();
+  let orders: Order[] = [];
+  try {
+    orders = await fetchOrdersWithItems(pb);
+  } catch {
+    orders = [];
+  }
 
   return (
     <div>
@@ -36,7 +36,7 @@ export default async function AdminOrders() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-bold text-brand-800">
-                    Заказ #{o.id}
+                    Заказ #{o.number}
                   </div>
                   <div className="text-sm text-brand-500">
                     {formatDate(o.created_at)}

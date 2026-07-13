@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerPb } from "@/lib/pb/server";
+import { mapSupportRequest } from "@/lib/pb/shared";
 import { formatDate } from "@/lib/format";
 import { decryptField } from "@/lib/crypto";
 import type { SupportRequest } from "@/lib/types";
@@ -6,13 +7,16 @@ import type { SupportRequest } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export default async function AdminSupport() {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("support_requests")
-    .select("id, name, email, subject, message, status, user_id, created_at")
-    .order("created_at", { ascending: false });
-
-  const requests = (data ?? []) as SupportRequest[];
+  const pb = createServerPb();
+  let requests: SupportRequest[] = [];
+  try {
+    const list = await pb
+      .collection("support_requests")
+      .getFullList({ sort: "-created" });
+    requests = list.map(mapSupportRequest);
+  } catch {
+    requests = [];
+  }
 
   return (
     <div>

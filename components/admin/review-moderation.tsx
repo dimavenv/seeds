@@ -9,7 +9,7 @@ export default function ReviewModeration({
   id,
   status,
 }: {
-  id: number;
+  id: string;
   status: ReviewStatus;
 }) {
   const [pending, start] = useTransition();
