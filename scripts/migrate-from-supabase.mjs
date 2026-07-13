@@ -60,7 +60,33 @@ if (!process.env.PB_ADMIN_EMAIL || !process.env.PB_ADMIN_PASSWORD) {
   process.exit(1);
 }
 
-const sb = createClient(SB_URL, SB_KEY, { auth: { persistSession: false } });
+// Канал с российского VPS до Supabase бывает нестабильным (обрывы «terminated»),
+// а бесплатный проект может «просыпаться». Повторяем каждый HTTP-запрос с
+// нарастающей паузой и держим щедрый таймаут.
+async function retryFetch(input, init = {}, tries = 5) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: init.signal ?? AbortSignal.timeout(90000),
+      });
+    } catch (e) {
+      lastErr = e;
+      if (i < tries - 1) {
+        const wait = 1500 * 2 ** i;
+        console.warn(`  ↻ обрыв соединения с Supabase, повтор через ${wait / 1000}с…`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+const sb = createClient(SB_URL, SB_KEY, {
+  auth: { persistSession: false },
+  global: { fetch: retryFetch },
+});
 const pb = new PocketBase(PB_URL);
 pb.autoCancellation(false);
 await pb.collection("_superusers").authWithPassword(
@@ -72,17 +98,18 @@ const stats = {};
 const bump = (k, v = 1) => (stats[k] = (stats[k] ?? 0) + v);
 
 async function sbAll(table, orderCol = "id") {
-  // постранично, чтобы не упереться в лимит 1000 строк
+  // Небольшими страницами (легче для нестабильного канала) до конца таблицы.
+  const PAGE = 200;
   const out = [];
-  for (let from = 0; ; from += 1000) {
+  for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb
       .from(table)
       .select("*")
       .order(orderCol, { ascending: true })
-      .range(from, from + 999);
+      .range(from, from + PAGE - 1);
     if (error) throw new Error(`${table}: ${error.message}`);
     out.push(...(data ?? []));
-    if (!data || data.length < 1000) break;
+    if (!data || data.length < PAGE) break;
   }
   return out;
 }
