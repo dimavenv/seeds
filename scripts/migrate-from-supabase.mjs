@@ -99,14 +99,25 @@ const bump = (k, v = 1) => (stats[k] = (stats[k] ?? 0) + v);
 
 async function sbAll(table, orderCol = "id") {
   // Небольшими страницами (легче для нестабильного канала) до конца таблицы.
-  const PAGE = 200;
+  // Повтор вешаем на ВЕСЬ запрос: обрыв «terminated» случается при чтении тела
+  // ответа, поэтому одной обёртки над fetch мало — ретраим целиком.
+  const PAGE = 100;
   const out = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await sb
-      .from(table)
-      .select("*")
-      .order(orderCol, { ascending: true })
-      .range(from, from + PAGE - 1);
+    let data, error;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      ({ data, error } = await sb
+        .from(table)
+        .select("*")
+        .order(orderCol, { ascending: true })
+        .range(from, from + PAGE - 1));
+      if (!error) break;
+      if (attempt < 5) {
+        const wait = 1500 * 2 ** attempt;
+        console.warn(`  ↻ ${table} (строки ${from}+): ${error.message} — повтор через ${wait / 1000}с…`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
     if (error) throw new Error(`${table}: ${error.message}`);
     out.push(...(data ?? []));
     if (!data || data.length < PAGE) break;
@@ -144,14 +155,29 @@ for (const c of categories) {
 }
 
 // ---------- 2. Товары (с перекачкой фото) ----------
+// Скачать картинку целиком (с чтением тела) с повторами — обрыв ловится ретраем.
+async function downloadWithRetry(url, tries = 5) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = await res.arrayBuffer();
+      const type = res.headers.get("content-type")?.split(";")[0] || "image/jpeg";
+      return { buf, type };
+    } catch (e) {
+      lastErr = e;
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 1200 * 2 ** i));
+    }
+  }
+  throw lastErr;
+}
+
 async function rehostImage(url) {
   if (SKIP_IMAGES) return url;
   if (typeof url !== "string" || !/^https?:\/\//.test(url)) return url;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = await res.arrayBuffer();
-    const type = res.headers.get("content-type")?.split(";")[0] || "image/jpeg";
+    const { buf, type } = await downloadWithRetry(url);
     if (!type.startsWith("image/")) throw new Error(`не картинка: ${type}`);
     const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif" }[type] ?? "jpg";
     const name = crypto.createHash("sha1").update(url).digest("hex").slice(0, 16) + "." + ext;
