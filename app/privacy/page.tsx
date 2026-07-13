@@ -24,8 +24,9 @@ export default function PrivacyPage() {
           </h2>
           <p>
             Оператор: <strong>ИП Кутушева Вера Евгеньевна</strong>, ИНН{" "}
-            <strong>322237500354090</strong>, адрес:{" "}
-            <strong>350000, Россия, Краснодарский край, г. Краснодар</strong>. Контактный e-mail:{" "}
+            <strong>231214684650</strong>, адрес:{" "}
+            <strong>350000, Россия, Краснодарский край, г. Краснодар</strong>.
+            Контактный e-mail:{" "}
             <a
               href="mailto:info@tomatsemena.ru"
               className="font-semibold text-brand-700 underline hover:text-brand-800"

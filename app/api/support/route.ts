@@ -3,6 +3,7 @@ import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { encryptField } from "@/lib/crypto";
+import { verifyCaptcha } from "@/lib/captcha";
 
 // Привязка заявки к аккаунту — «по возможности» (не блокирует отправку).
 async function bestEffortUserId(): Promise<string | null> {
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
     email?: string;
     subject?: string;
     message?: string;
+    captchaToken?: string;
   };
   try {
     body = await request.json();
@@ -40,6 +42,14 @@ export async function POST(request: Request) {
   if (!name || !email || !subject || !message) {
     return NextResponse.json(
       { error: "Заполните имя, почту, тему и текст вопроса" },
+      { status: 400 }
+    );
+  }
+
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (!(await verifyCaptcha(body.captchaToken, ip))) {
+    return NextResponse.json(
+      { error: "Подтвердите, что вы не робот" },
       { status: 400 }
     );
   }

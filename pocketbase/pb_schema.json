@@ -3,7 +3,7 @@
     "id": "_pb_users_auth_",
     "listRule": "id = @request.auth.id || @request.auth.role = \"admin\"",
     "viewRule": "id = @request.auth.id || @request.auth.role = \"admin\"",
-    "createRule": "@request.body.role:isset = false",
+    "createRule": null,
     "updateRule": "(id = @request.auth.id && @request.body.role:isset = false) || @request.auth.role = \"admin\"",
     "deleteRule": "@request.auth.role = \"admin\"",
     "name": "users",
