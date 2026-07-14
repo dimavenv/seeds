@@ -116,13 +116,49 @@ ALFA_PASSWORD=БОЕВОЙ-ПАРОЛЬ
   это твой расход, СБП им не облагается. Уточни тариф у банка.
 - **Порог НДС для УСН на 2026** — уточни у бухгалтера, правильно укажи систему
   налогообложения в настройках кассы.
-- Диагностика: `/api/health` (база), логи — `pm2 logs seeds`.
+- Диагностика: `node scripts/check-alfa.mjs` (проверяет ключи и связь с банком
+  прямо с сервера и подсказывает, что чинить), `/api/health` (база),
+  `pm2 logs seeds` — туда пишутся точные ошибки банка при оплате.
+
+## Сертификаты Минцифры (ошибка «self-signed certificate»)
+
+Шлюзы Альфы — и тестовый `alfa.rbsuat.com`, и боевые — работают на
+TLS-сертификатах Минцифры («Russian Trusted CA»). В стандартном хранилище
+Ubuntu/Debian их нет, поэтому и `curl`, и сам сайт обрывают соединение с
+ошибкой вида `self-signed certificate in certificate chain`, а покупатель
+видит «Онлайн-оплата временно недоступна».
+
+Лечится один раз (от root; файлы — официальные, со страницы gosuslugi.ru/crt):
+
+```bash
+curl -fsSL https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt \
+  -o /usr/local/share/ca-certificates/russian_trusted_root_ca.crt
+curl -fsSL https://gu-st.ru/content/lending/russian_trusted_sub_ca_pem.crt \
+  -o /usr/local/share/ca-certificates/russian_trusted_sub_ca.crt
+update-ca-certificates
+```
+
+Node **не читает системное хранилище**, поэтому дополнительно в
+`.env.production` добавь:
+
+```
+NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+```
+
+и выполни `bash deploy/update.sh`. Проверка: `node scripts/check-alfa.mjs` —
+должен ответить «Всё работает». Отключать проверку сертификата
+(`NODE_TLS_REJECT_UNAUTHORIZED=0`) нельзя — платёжный трафик останется без
+защиты от подмены.
 
 ## Если что-то не так
+
+Первым делом: `node scripts/check-alfa.mjs` на сервере — он сам назовёт
+причину. Точные ошибки банка также видны в `pm2 logs seeds` (строки `[alfa]`).
 
 | Симптом | Что делать |
 |---------|-----------|
 | На оформлении нет перехода на оплату | Ключи `ALFA_*` не заданы или не пересобрал — проверь `.env.production` и `bash deploy/update.sh` |
-| «Платёжный шлюз недоступен» | Неверный `ALFA_GATEWAY` (тест vs боевой; `pay.` vs `payment.`) или логин/пароль |
+| «Платёжный шлюз недоступен» | Неверный `ALFA_GATEWAY` (тест vs боевой; `pay.` vs `payment.`) или логин/пароль; точная причина — в `pm2 logs seeds` |
+| `self-signed certificate in certificate chain` | Нет сертификатов Минцифры — см. раздел выше |
 | Заказ оплачен, но в админке «Ожидает оплаты» | Не настроен callback (шаг 5) или неверный `ALFA_CALLBACK_TOKEN` |
 | Возврат не проходит | Возврат возможен только для заказов в статусе «Оплачен»; проверь права логина у банка |

@@ -21,6 +21,17 @@ export function isAlfaConfigured(): boolean {
   );
 }
 
+// TLS-коды, которые почти всегда означают, что в системе нет корневых
+// сертификатов Минцифры: шлюзы Альфы работают на «Russian Trusted CA»
+// (см. SETUP-PAYMENTS-RU.md, раздел про сертификаты Минцифры).
+const TLS_CERT_CODES = new Set([
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "CERT_UNTRUSTED",
+]);
+
 async function alfa(
   method: string,
   params: Record<string, string>
@@ -30,13 +41,37 @@ async function alfa(
     password: process.env.ALFA_PASSWORD || "",
     ...params,
   });
-  const res = await fetch(`${GATEWAY}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-    signal: AbortSignal.timeout(15000),
-  });
-  return (await res.json()) as Record<string, unknown>;
+  try {
+    const res = await fetch(`${GATEWAY}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = (await res.json()) as Record<string, unknown>;
+    // Покупателю уходит нейтральное «оплата недоступна» — точная причина
+    // отказа банка видна только здесь, поэтому пишем её в лог (pm2 logs seeds).
+    if (data.errorCode && String(data.errorCode) !== "0") {
+      console.error(
+        `[alfa] ${method}: банк вернул ошибку ${data.errorCode} — ${
+          data.errorMessage ?? "без описания"
+        }`
+      );
+    }
+    return data;
+  } catch (e) {
+    const cause = (e as { cause?: { code?: string; message?: string } }).cause;
+    const code = cause?.code ?? "";
+    const hint = TLS_CERT_CODES.has(code)
+      ? " Похоже, на сервере нет сертификатов Минцифры — запусти `node scripts/check-alfa.mjs` и см. SETUP-PAYMENTS-RU.md."
+      : "";
+    console.error(
+      `[alfa] ${method}: запрос к шлюзу не прошёл — ${
+        code || cause?.message || (e as Error).message
+      }.${hint}`
+    );
+    throw e;
+  }
 }
 
 export type AlfaRegisterResult = {
