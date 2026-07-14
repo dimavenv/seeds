@@ -15,7 +15,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 function loadEnvFile(file) {
   try {
     for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
       if (m && !line.trim().startsWith("#") && !(m[1] in process.env)) {
         process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
       }

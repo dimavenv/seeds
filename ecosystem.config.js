@@ -11,7 +11,9 @@ function loadEnv(file) {
   const env = {};
   try {
     for (const line of fs.readFileSync(path.join(__dirname, file), "utf8").split("\n")) {
-      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      // (.*?) — лениво, чтобы \s*$ отрезал хвостовые пробелы и \r (CRLF):
+      // иначе невидимый символ попадает в значение (например, в пароль банка).
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
       if (m && !line.trim().startsWith("#")) {
         env[m[1]] = m[2].replace(/^["']|["']$/g, "");
       }
