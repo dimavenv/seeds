@@ -128,9 +128,10 @@ export default async function OrderDetailPage({
         </div>
       )}
 
+      {/* min-w-0 — чтобы грид мог ужать колонки под узкий экран. */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         {/* Товары */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <h2 className="mb-3 text-lg font-bold text-brand-800">
             Состав заказа
           </h2>
@@ -176,7 +177,7 @@ export default async function OrderDetailPage({
         </div>
 
         {/* Сводка и доставка */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <div className="card p-5">
             <h3 className="mb-3 font-bold text-brand-800">Оплата</h3>
             <div className="space-y-1.5 text-sm text-brand-700">

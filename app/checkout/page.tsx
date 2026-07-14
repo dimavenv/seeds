@@ -176,8 +176,10 @@ export default function CheckoutPage() {
   return (
     <div className="container-page py-6">
       <h1 className="mb-6 text-2xl font-bold text-brand-800">Оформление заказа</h1>
+      {/* min-w-0 на колонках: иначе грид не даёт им ужаться под узкий экран
+          и страницу распирает вбок (у грид-элементов min-width: auto). */}
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
-        <div className="card space-y-6 p-5 lg:col-span-2">
+        <div className="card min-w-0 space-y-6 p-5 lg:col-span-2">
           {/* ФИО */}
           <fieldset className="space-y-3">
             <legend className="text-base font-bold text-brand-800">
@@ -279,7 +281,7 @@ export default function CheckoutPage() {
           )}
         </div>
 
-        <div className="card h-fit p-5">
+        <div className="card h-fit min-w-0 p-5">
           <h2 className="text-lg font-bold text-brand-800">Ваш заказ</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {cart.map((i) => (

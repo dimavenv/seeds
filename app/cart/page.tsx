@@ -31,11 +31,15 @@ export default function CartPage() {
   return (
     <div className="container-page py-6">
       <h1 className="mb-6 text-2xl font-bold text-brand-800">Корзина</h1>
+      {/* min-w-0 на колонках: иначе грид не даёт им ужаться под узкий экран
+          и страницу распирает вбок (у грид-элементов min-width: auto). */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-3 lg:col-span-2">
+        <div className="min-w-0 space-y-3 lg:col-span-2">
           {cart.map((item) => (
-            <div key={item.id} className="card flex items-center gap-4 p-3">
-              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-brand-50">
+            // На телефоне строка складывается в два ряда: фото+название,
+            // ниже — количество/сумма/удалить. С sm — всё в один ряд.
+            <div key={item.id} className="card flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap sm:gap-4">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-brand-50 sm:h-20 sm:w-20">
                 {item.image_url && (
                   <Image
                     src={item.image_url}
@@ -46,7 +50,7 @@ export default function CartPage() {
                   />
                 )}
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-32">
                 <Link
                   href={`/product/${item.slug}`}
                   className="line-clamp-2 font-semibold text-brand-800 hover:text-brand-600"
@@ -57,40 +61,44 @@ export default function CartPage() {
                   {formatPrice(item.price)} / шт.
                 </div>
               </div>
-              <div className="flex items-center rounded-full border border-brand-200">
-                <button
-                  onClick={() => setQty(item.id, item.qty - 1)}
-                  className="px-3 py-1.5 text-brand-600"
-                  aria-label="Меньше"
-                >
-                  −
-                </button>
-                <span className="w-8 text-center text-sm font-semibold">
-                  {item.qty}
-                </span>
-                <button
-                  onClick={() => setQty(item.id, item.qty + 1)}
-                  className="px-3 py-1.5 text-brand-600"
-                  aria-label="Больше"
-                >
-                  +
-                </button>
+              <div className="flex w-full items-center justify-between gap-3 sm:ml-auto sm:w-auto">
+                <div className="flex shrink-0 items-center rounded-full border border-brand-200">
+                  <button
+                    onClick={() => setQty(item.id, item.qty - 1)}
+                    className="px-3 py-1.5 text-brand-600"
+                    aria-label="Меньше"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-sm font-semibold">
+                    {item.qty}
+                  </span>
+                  <button
+                    onClick={() => setQty(item.id, item.qty + 1)}
+                    className="px-3 py-1.5 text-brand-600"
+                    aria-label="Больше"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right font-bold text-brand-700 sm:w-24">
+                    {formatPrice(item.price * item.qty)}
+                  </div>
+                  <button
+                    onClick={() => removeFromCart(item.id)}
+                    className="text-sm text-brand-400 hover:text-accent-600"
+                    aria-label="Удалить"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              <div className="w-24 text-right font-bold text-brand-700">
-                {formatPrice(item.price * item.qty)}
-              </div>
-              <button
-                onClick={() => removeFromCart(item.id)}
-                className="text-sm text-brand-400 hover:text-accent-600"
-                aria-label="Удалить"
-              >
-                ✕
-              </button>
             </div>
           ))}
         </div>
 
-        <div className="card h-fit p-5">
+        <div className="card h-fit min-w-0 p-5">
           <h2 className="text-lg font-bold text-brand-800">Итого</h2>
           <div className="mt-4 flex justify-between text-brand-700">
             <span>Товары ({cart.reduce((s, i) => s + i.qty, 0)})</span>
