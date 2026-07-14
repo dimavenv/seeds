@@ -52,10 +52,14 @@ async function alfa(
     // Покупателю уходит нейтральное «оплата недоступна» — точная причина
     // отказа банка видна только здесь, поэтому пишем её в лог (pm2 logs seeds).
     if (data.errorCode && String(data.errorCode) !== "0") {
+      // Контекст (без самого пароля) — чтобы сверить, с чем реально ходил
+      // процесс сайта, если файл .env.production выглядит правильным.
+      const user = process.env.ALFA_USERNAME || "";
+      const passLen = (process.env.ALFA_PASSWORD || "").length;
       console.error(
         `[alfa] ${method}: банк вернул ошибку ${data.errorCode} — ${
           data.errorMessage ?? "без описания"
-        }`
+        } (шлюз ${GATEWAY}, логин ${user}, пароль ${passLen} симв.)`
       );
     }
     return data;
