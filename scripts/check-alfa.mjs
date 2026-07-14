@@ -47,8 +47,17 @@ if (fileEnv.NODE_EXTRA_CA_CERTS && !startedWithExtraCa && !process.env.__ALFA_CH
   });
   process.exit(r.status ?? 1);
 }
+// Значения из .env.production главнее унаследованных из шелла — сайт (pm2)
+// работает именно по файлу. Расхождение бывает после «source .env.production»
+// в той же SSH-сессии: в шелле остаются старые значения.
 for (const [k, v] of Object.entries(fileEnv)) {
-  if (!(k in process.env)) process.env[k] = v;
+  if (k in process.env && process.env[k] !== v) {
+    console.warn(
+      `⚠️  ${k}: в SSH-сессии осталось старое значение, в .env.production — новое. ` +
+        `Использую файл (как и сайт).`
+    );
+  }
+  process.env[k] = v;
 }
 
 const gateway = (process.env.ALFA_GATEWAY || "").replace(/\/+$/, "");
