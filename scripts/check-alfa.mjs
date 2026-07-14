@@ -136,7 +136,11 @@ try {
     console.log("Платёжная форма:", data.formUrl);
     console.log();
     console.log("Если сайт при этом пишет «Онлайн-оплата временно недоступна» —");
-    console.log("процесс сайта запущен со старыми переменными: bash deploy/update.sh");
+    console.log("процесс сайта запущен со старыми переменными:");
+    console.log("  1) bash deploy/update.sh");
+    console.log("  2) не помогло — жёсткий перезапуск (pm2 иногда не обновляет env при reload):");
+    console.log("       pm2 delete seeds && pm2 start ecosystem.config.js");
+    console.log("  3) точная причина отказа — в pm2 logs seeds (строки [alfa])");
   } else {
     console.error(
       `❌ Банк отказал: код ${data.errorCode ?? "?"} — ${data.errorMessage ?? "без описания"}`
