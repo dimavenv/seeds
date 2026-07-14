@@ -26,10 +26,6 @@ export default function RequisitesPage() {
               <tr><td>Режим работы</td><td>Пн–Вс: 9:00–20:00</td></tr>
             </tbody>
           </table>
-          <p className="pt-2 text-sm text-brand-500">
-            Расчётный счёт и данные банка указывать на сайте не обязательно —
-            они нужны банку-эквайеру, а не в публичном доступе.
-          </p>
         </div>
       </div>
     </div>
