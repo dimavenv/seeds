@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getPb } from "@/lib/pb/client";
+import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
 
@@ -12,6 +13,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   // Проверка доступности базы при загрузке страницы.
   useEffect(() => {
@@ -23,9 +26,20 @@ export default function LoginPage() {
       );
   }, []);
 
+  // Сброс одноразовой капчи после неудачной попытки входа.
+  function resetCaptcha() {
+    setCaptchaToken("");
+    setCaptchaReset((n) => n + 1);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (captchaEnabled && !captchaToken) {
+      setError("Подтвердите, что вы не робот");
+      return;
+    }
     setLoading(true);
 
     // Защита от вечного спиннера.
@@ -37,6 +51,23 @@ export default function LoginPage() {
     }, 10000);
 
     try {
+      // Сначала проверяем капчу на сервере, затем входим.
+      if (captchaEnabled) {
+        const guard = await fetch("/api/login-guard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ captchaToken }),
+        });
+        if (!guard.ok) {
+          clearTimeout(safety);
+          const data = await guard.json().catch(() => ({}));
+          setError(data.error ?? "Подтвердите, что вы не робот");
+          setLoading(false);
+          resetCaptcha();
+          return;
+        }
+      }
+
       const pb = getPb();
       await pb.collection("users").authWithPassword(email, password);
       clearTimeout(safety);
@@ -51,6 +82,7 @@ export default function LoginPage() {
           : "Не удалось подключиться к базе. Проверьте /api/health и настройки PocketBase."
       );
       setLoading(false);
+      resetCaptcha();
     }
   }
 
@@ -84,12 +116,18 @@ export default function LoginPage() {
             <span className="mb-1 block text-sm font-semibold text-brand-700">Пароль</span>
             <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
           </label>
+          <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+
           {error && (
             <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
               {error}
             </p>
           )}
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          <button
+            type="submit"
+            disabled={loading || (captchaEnabled && !captchaToken)}
+            className="btn-primary w-full"
+          >
             {loading ? "Входим…" : "Войти"}
           </button>
         </form>

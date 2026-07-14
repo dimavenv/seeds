@@ -7,6 +7,7 @@ import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
+import { verifyCaptcha } from "@/lib/captcha";
 
 type IncomingItem = { id: string; qty: number };
 
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
     comment?: string;
     delivery_method?: string;
     items?: IncomingItem[];
+    captchaToken?: string;
   };
   try {
     body = await request.json();
@@ -65,6 +67,15 @@ export async function POST(request: Request) {
   }
   if (items.length === 0) {
     return NextResponse.json({ error: "Корзина пуста" }, { status: 400 });
+  }
+
+  // Антибот-капча (если подключена) — до любых операций с базой.
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (!(await verifyCaptcha(body.captchaToken, ip))) {
+    return NextResponse.json(
+      { error: "Подтвердите, что вы не робот" },
+      { status: 400 }
+    );
   }
 
   // Демо-режим без PocketBase: цены проверить негде — отдаём псевдо-номер.

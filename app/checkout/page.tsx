@@ -16,6 +16,7 @@ import {
   secureClear,
 } from "@/lib/secure-store";
 import ConsentCheckbox from "@/components/consent-checkbox";
+import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 import DadataAddress, {
   emptyAddress,
   type AddressValue,
@@ -54,6 +55,8 @@ export default function CheckoutPage() {
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const grandTotal = cartTotal + DELIVERY_COST;
 
   // Подставить сохранённые («Запомнить меня») данные при загрузке.
@@ -101,6 +104,11 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (captchaEnabled && !captchaToken) {
+      setError("Подтвердите, что вы не робот");
+      return;
+    }
+
     const addressStr = [
       address.postal_code.trim(),
       address.region.trim(),
@@ -125,12 +133,16 @@ export default function CheckoutPage() {
           comment: form.comment,
           delivery_method: deliveryMethod,
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
+          captchaToken,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Ошибка оформления заказа");
         setSubmitting(false);
+        // Токен капчи одноразовый — сбрасываем виджет для повторной попытки.
+        setCaptchaToken("");
+        setCaptchaReset((n) => n + 1);
         return;
       }
       // «Запомнить меня»: сохранить зашифрованно или очистить.
@@ -158,6 +170,8 @@ export default function CheckoutPage() {
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setSubmitting(false);
+      setCaptchaToken("");
+      setCaptchaReset((n) => n + 1);
     }
   }
 
@@ -326,7 +340,13 @@ export default function CheckoutPage() {
             </label>
           </div>
 
-          <button type="submit" disabled={submitting || !consent} className="btn-accent mt-5 w-full">
+          <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+
+          <button
+            type="submit"
+            disabled={submitting || !consent || (captchaEnabled && !captchaToken)}
+            className="btn-accent mt-5 w-full"
+          >
             {submitting ? "Оформляем…" : "Подтвердить заказ"}
           </button>
         </div>

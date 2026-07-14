@@ -25,11 +25,15 @@ function siteTheme(): "light" | "dark" {
 }
 
 // Виджет Yandex SmartCaptcha. Если ключ не задан — ничего не рендерит и не
-// мешает форме (капча просто выключена).
+// мешает форме (капча просто выключена). resetSignal: при изменении значения
+// виджет сбрасывается, а токен обнуляется — нужно после неудачной отправки
+// формы (токен одноразовый), чтобы пользователь мог пройти проверку заново.
 export default function SmartCaptcha({
   onToken,
+  resetSignal,
 }: {
   onToken: (token: string) => void;
+  resetSignal?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const widgetId = useRef<number | null>(null);
@@ -91,6 +95,15 @@ export default function SmartCaptcha({
       }
     };
   }, []);
+
+  // Сброс виджета по сигналу извне (после неудачной отправки формы).
+  useEffect(() => {
+    if (resetSignal === undefined || resetSignal === 0) return;
+    if (widgetId.current !== null && window.smartCaptcha) {
+      window.smartCaptcha.reset(widgetId.current);
+      cb.current(""); // прошлый одноразовый токен больше не действителен
+    }
+  }, [resetSignal]);
 
   if (!SITE_KEY) return null;
   return <div ref={ref} className="mt-1" />;
