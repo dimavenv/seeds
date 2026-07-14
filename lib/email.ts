@@ -48,6 +48,14 @@ export async function sendMail(
       to,
       subject,
       html,
+      // Текстовая версия письма: почтовые фильтры хуже относятся к письмам,
+      // где есть только HTML.
+      text: html
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
     });
     return true;
   } catch (e) {
