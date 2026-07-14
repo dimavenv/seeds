@@ -16,8 +16,13 @@ npm run build
 cp -r .next/static .next/standalone/.next/
 cp -r public .next/standalone/
 
-echo "==> Перезапускаю через pm2 (reload — воркеры по одному, без простоя)..."
-pm2 reload ecosystem.config.js --update-env
+# Жёсткий перезапуск: pm2 reload НЕ обновляет переменные окружения работающих
+# воркеров (проверено: пароль банка оставался старым после reload --update-env).
+# Пара секунд простоя — зато .env.production гарантированно перечитан.
+echo "==> Перезапускаю через pm2 (жёстко, чтобы перечитался .env.production)..."
+pm2 delete seeds 2>/dev/null || true
+pm2 start ecosystem.config.js
+pm2 save >/dev/null 2>&1 || true
 
 echo "==> Проверяю здоровье сайта..."
 sleep 5
