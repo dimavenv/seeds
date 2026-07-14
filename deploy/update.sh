@@ -16,6 +16,14 @@ npm run build
 cp -r .next/static .next/standalone/.next/
 cp -r public .next/standalone/
 
+# ВАЖНО: next build копирует .env.production внутрь standalone, а сервер Next
+# при старте прогоняет значения через интерполяцию dotenv-expand: символ $ в
+# значении (например, в пароле банка) «раскрывается» как ссылка на переменную
+# и вырезается. Источник переменных — pm2 (ecosystem.config.js), поэтому
+# копии удаляем, чтобы значения доходили до процесса нетронутыми.
+rm -f .next/standalone/.env .next/standalone/.env.production \
+      .next/standalone/.env.local .next/standalone/.env.production.local
+
 # Жёсткий перезапуск: pm2 reload НЕ обновляет переменные окружения работающих
 # воркеров (проверено: пароль банка оставался старым после reload --update-env).
 # Пара секунд простоя — зато .env.production гарантированно перечитан.

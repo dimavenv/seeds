@@ -88,6 +88,13 @@ if (dirtyAlfa.length > 0) {
       "    Сайт подхватит исправленный парсер после: bash deploy/update.sh\n"
   );
 }
+if ((password.includes("$") || password.includes("\\")) ) {
+  console.warn(
+    "⚠️  В пароле есть символ $ или \\ — старые сборки сайта искажали такие значения\n" +
+      "    (интерполяция .env в standalone-сервере Next). Обнови deploy/update.sh (git pull)\n" +
+      "    и пересоберись, либо смени пароль API-логина на буквы/цифры.\n"
+  );
+}
 if (gateway.includes("rbsuat.com")) {
   console.log("ℹ️  Это ТЕСТОВЫЙ шлюз (песочница): оплата только тестовыми картами банка.");
 }
