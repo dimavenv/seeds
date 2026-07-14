@@ -6,6 +6,7 @@ import { isValidRecordId } from "@/lib/data";
 import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
+import { mailOrderPlaced } from "@/lib/order-mail";
 
 type IncomingItem = { id: string; qty: number };
 
@@ -151,6 +152,16 @@ export async function POST(request: Request) {
         { error: "Не удалось сохранить состав заказа" },
         { status: 500 }
       );
+    }
+
+    // Письмо «заказ принят» — и гостю, и зарегистрированному (почта из формы).
+    // Не ждём отправку, чтобы не задерживать переход к оплате.
+    if (email?.trim()) {
+      void mailOrderPlaced(
+        { to: email.trim(), number: order.number, name: customer_name.trim() },
+        lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
+        { total, deliveryCost: DELIVERY_COST, deliveryMethod: delivery_method }
+      ).catch(() => {});
     }
 
     // Онлайн-оплата (если подключён Альфа-Банк). Иначе заказ остаётся без

@@ -1,54 +1,64 @@
 import { NextResponse } from "next/server";
-import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
-import { isDbConfigured } from "@/lib/pb/shared";
-import { isRussianEmail, RU_EMAIL_HINT } from "@/lib/ru-email";
 import { verifyCaptcha } from "@/lib/captcha";
+import { isMailConfigured } from "@/lib/email";
+import { generateCode, issueTicket, allowAttempt } from "@/lib/email-code";
+import {
+  parseRegInput,
+  dbReady,
+  emailTaken,
+  createUser,
+  sendCodeEmail,
+} from "@/lib/registration";
 
 function bad(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
 }
 
-// Регистрация покупателя — только через этот роут (в PocketBase прямое создание
-// users закрыто). Здесь: проверка российской почты, антибот-капча, создание
-// аккаунта суперпользователем (без возможности задать роль admin).
+// Шаг 1 регистрации. Проверки: российская почта, антибот-капча, email свободен.
+// Если настроен SMTP — аккаунт НЕ создаётся сразу: на почту уходит 6-значный
+// код, клиент получает «билет» и завершает регистрацию через
+// /api/register/confirm. Без SMTP — прежнее поведение (создание сразу).
 export async function POST(request: Request) {
-  let body: { email?: string; password?: string; name?: string; captchaToken?: string };
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
     return bad("Некорректный запрос");
   }
 
-  const email = (body.email || "").trim().toLowerCase();
-  const password = String(body.password || "");
-  const name = String(body.name || "").trim().slice(0, 100);
-
-  if (!email || !password) return bad("Заполните email и пароль");
-  if (password.length < 6) return bad("Пароль минимум 6 символов");
-  if (!isRussianEmail(email)) return bad(RU_EMAIL_HINT);
+  const { input, error } = parseRegInput(body);
+  if (error) return bad(error);
 
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const human = await verifyCaptcha(body.captchaToken, ip);
+  const human = await verifyCaptcha(String(body.captchaToken ?? ""), ip);
   if (!human) return bad("Подтвердите, что вы не робот");
 
-  if (!isDbConfigured() || !hasAdminCredentials()) {
+  if (!dbReady()) return bad("Регистрация временно недоступна", 503);
+
+  try {
+    if (await emailTaken(input.email)) {
+      return bad("Такой email уже зарегистрирован");
+    }
+  } catch {
     return bad("Регистрация временно недоступна", 503);
   }
 
-  try {
-    const pb = await pbAdmin();
-    await pb.collection("users").create({
-      email,
-      password,
-      passwordConfirm: password,
-      name,
-      role: "", // покупатель; роль admin через регистрацию задать нельзя
-    });
+  // Почта не настроена — работаем по-старому, без кода.
+  if (!isMailConfigured()) {
+    const res = await createUser(input, false);
+    if (!res.ok) return bad(res.error, res.status);
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    const data = (e as { response?: { data?: Record<string, unknown> } })?.response?.data;
-    if (data && "email" in data) return bad("Такой email уже зарегистрирован");
-    if (data && "password" in data) return bad("Пароль слишком простой");
-    return bad("Не удалось зарегистрироваться, попробуйте ещё раз", 503);
   }
+
+  // Не даём заваливать один IP письмами: 5 отправок за 10 минут.
+  if (!allowAttempt(`start:${ip ?? "?"}`, 5, 10 * 60 * 1000)) {
+    return bad("Слишком много попыток — подождите несколько минут", 429);
+  }
+
+  const code = generateCode();
+  const sent = await sendCodeEmail(input.email, input.name, code);
+  if (!sent) {
+    return bad("Не удалось отправить письмо с кодом, попробуйте позже", 503);
+  }
+  return NextResponse.json({ needCode: true, ticket: issueTicket(input.email, code) });
 }

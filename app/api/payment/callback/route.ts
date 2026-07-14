@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { pbAdmin } from "@/lib/pb/server";
+import { decryptField } from "@/lib/crypto";
+import { mailPayment } from "@/lib/order-mail";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +45,36 @@ export async function GET(req: Request) {
   if (orderNumber) {
     try {
       const pb = await pbAdmin();
-      if (status === "1" && (operation === "deposited" || operation === "approved")) {
-        await pb.collection("orders").update(orderNumber, { payment_status: "paid" });
-        // Чек по 54-ФЗ шлёт банк, если подключена «Фискализация» в ЛК Альфы —
-        // отдельно вызывать кассу здесь не нужно.
-      } else if (operation === "reversed" || operation === "refunded") {
-        await pb.collection("orders").update(orderNumber, { payment_status: "refunded" });
-      } else if (operation === "declinedByTimeout" || status === "0") {
-        await pb.collection("orders").update(orderNumber, { payment_status: "failed" });
+      const next =
+        status === "1" && (operation === "deposited" || operation === "approved")
+          ? "paid"
+          : operation === "reversed" || operation === "refunded"
+          ? "refunded"
+          : operation === "declinedByTimeout" || status === "0"
+          ? "failed"
+          : null;
+
+      if (next) {
+        const prev = await pb.collection("orders").getOne(orderNumber);
+        if (prev.payment_status !== next) {
+          const rec = await pb
+            .collection("orders")
+            .update(orderNumber, { payment_status: next });
+          // Чек по 54-ФЗ шлёт банк («Фискализация» в ЛК Альфы) — кассу здесь
+          // вызывать не нужно. Письмо — только при реальной смене статуса
+          // (Альфа может повторять callback; возврат из админки шлёт своё).
+          if (next === "paid" || next === "refunded") {
+            void mailPayment(
+              {
+                to: decryptField(rec.email as string | null),
+                number: Number(rec.number),
+                name: rec.customer_name as string | null,
+              },
+              next,
+              next === "paid" ? Number(rec.total ?? 0) || undefined : undefined
+            ).catch(() => {});
+          }
+        }
       }
     } catch {
       // Не смогли обновить — Альфа повторит callback; отвечаем 200, чтобы не копить.

@@ -4,7 +4,34 @@ import { revalidatePath } from "next/cache";
 import { pbAdmin } from "@/lib/pb/server";
 import { getSessionPb } from "@/lib/auth";
 import { isValidRecordId } from "@/lib/data";
+import { decryptField } from "@/lib/crypto";
+import { mailOrderStatus, mailPayment, mailTracking } from "@/lib/order-mail";
 import type { OrderStatus, ReviewStatus } from "@/lib/types";
+
+// Данные заказа для письма покупателю (почта хранится зашифрованной).
+async function orderMailInfo(id: string): Promise<{
+  to: string | null;
+  number: number;
+  name: string | null;
+  status: string;
+  tracking: string | null;
+  deliveryMethod: string | null;
+} | null> {
+  try {
+    const pb = await pbAdmin();
+    const rec = await pb.collection("orders").getOne(id);
+    return {
+      to: decryptField((rec.email as string | null) ?? null),
+      number: Number(rec.number),
+      name: (rec.customer_name as string | null) ?? null,
+      status: String(rec.status ?? ""),
+      tracking: (rec.tracking_number as string | null) ?? null,
+      deliveryMethod: (rec.delivery_method as string | null) ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function slugify(input: string): string {
   const map: Record<string, string> = {
@@ -141,7 +168,19 @@ export async function updateOrderStatus(
 ): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
-  await pb.collection("orders").update(id, { status }).catch(() => {});
+  const before = await orderMailInfo(id);
+  try {
+    await pb.collection("orders").update(id, { status });
+  } catch {
+    return;
+  }
+  // Письмо покупателю — только если статус реально сменился.
+  if (before && before.status !== status) {
+    void mailOrderStatus({ to: before.to, number: before.number, name: before.name }, status, {
+      tracking: before.tracking,
+      deliveryMethod: before.deliveryMethod,
+    }).catch(() => {});
+  }
   revalidatePath("/admin/orders");
 }
 
@@ -151,10 +190,22 @@ export async function updateOrderTracking(
 ): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
-  await pb
-    .collection("orders")
-    .update(id, { tracking_number: tracking.trim() })
-    .catch(() => {});
+  const value = tracking.trim();
+  const before = await orderMailInfo(id);
+  try {
+    await pb.collection("orders").update(id, { tracking_number: value });
+  } catch {
+    return;
+  }
+  // Трек вписали после отправки — покупатель уже получил письмо «отправлен»
+  // без номера, досылаем номер отдельным письмом.
+  if (before && value && value !== (before.tracking ?? "") && before.status === "shipped") {
+    void mailTracking(
+      { to: before.to, number: before.number, name: before.name },
+      value,
+      before.deliveryMethod
+    ).catch(() => {});
+  }
   revalidatePath("/admin/orders");
 }
 
@@ -209,6 +260,12 @@ export async function refundOrder(
   }
 
   await pb.collection("orders").update(id, { payment_status: "refunded" }).catch(() => {});
+  const info = await orderMailInfo(id);
+  if (info) {
+    void mailPayment({ to: info.to, number: info.number, name: info.name }, "refunded").catch(
+      () => {}
+    );
+  }
   revalidatePath("/admin/orders");
   return { ok: true };
 }
