@@ -139,20 +139,21 @@ export default function CheckoutPage() {
       } else {
         secureClear(PROFILE_KEY);
       }
-      clearCart();
 
       // Онлайн-оплата подключена — переходим на платёжную форму Альфа-Банка.
+      // Корзину НЕ чистим: если оплата не пройдёт, товары останутся у
+      // покупателя (очистка — на странице заказа при возврате с ?paid=1).
       if (data.formUrl) {
         window.location.href = data.formUrl;
         return;
       }
 
+      // Заказ без онлайн-оплаты оформлен окончательно — корзину можно чистить.
+      clearCart();
       const qs = new URLSearchParams({
         total: String(data.total),
         name: form.first_name || customer_name,
       });
-      // Если оплату не удалось создать — покажем заметку на странице заказа.
-      if (data.paymentError) qs.set("payerr", "1");
       router.push(`/order/${data.id}?${qs.toString()}`);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");

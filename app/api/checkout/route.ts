@@ -154,22 +154,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Письмо «заказ принят» — и гостю, и зарегистрированному (почта из формы).
-    // Не ждём отправку, чтобы не задерживать переход к оплате.
-    if (email?.trim()) {
-      void mailOrderPlaced(
-        { to: email.trim(), number: order.number, name: customer_name.trim() },
-        lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
-        { total, deliveryCost: DELIVERY_COST, deliveryMethod: delivery_method }
-      ).catch(() => {});
-    }
-
-    // Онлайн-оплата (если подключён Альфа-Банк). Иначе заказ остаётся без
-    // онлайн-оплаты (оплата при получении / по счёту), как и раньше.
+    // Онлайн-оплата (если подключён Альфа-Банк). Если платёж создать не
+    // удалось — заказ УДАЛЯЕТСЯ, а покупателю возвращается ошибка: корзина у
+    // него остаётся, «неоплачиваемых» заказов в базе не копим.
     if (isAlfaConfigured()) {
+      let reg: Awaited<ReturnType<typeof alfaRegister>> | null = null;
       try {
         const base = (process.env.SITE_URL || "https://tomatsemena.ru").replace(/\/+$/, "");
-        const reg = await alfaRegister({
+        reg = await alfaRegister({
           orderNumber: order.id, // уникальный стабильный id записи заказа
           amount: String(Math.round(total * 100)), // рубли → копейки
           currency: "643", // RUB по ISO 4217
@@ -179,33 +171,54 @@ export async function POST(request: Request) {
           language: "ru",
           ...(email?.trim() ? { email: email.trim() } : {}),
         });
-        if (reg.formUrl && reg.orderId) {
-          try {
-            await pb.collection("orders").update(order.id, {
-              alfa_order_id: reg.orderId,
-              payment_status: "pending",
-            });
-          } catch (e) {
-            // Оплата в банке уже создана — ведём покупателя на форму, а сбой
-            // записи логируем (без alfa_order_id не сработает возврат из админки).
-            console.error(`[checkout] заказ №${order.number}: не записался alfa_order_id:`, e);
-          }
-          return NextResponse.json({ id: order.number, total, formUrl: reg.formUrl });
-        }
-        // Регистрация не удалась — заказ сохранён, вернём пометку.
-        return NextResponse.json({
-          id: order.number,
-          total,
-          paymentError: reg.errorMessage || "Не удалось создать оплату",
-        });
       } catch (e) {
         console.error(`[checkout] заказ №${order.number}: онлайн-оплата не создана:`, e);
-        return NextResponse.json({
-          id: order.number,
-          total,
-          paymentError: "Платёжный шлюз недоступен",
-        });
+        reg = null;
       }
+
+      if (reg?.formUrl && reg.orderId) {
+        try {
+          await pb.collection("orders").update(order.id, {
+            alfa_order_id: reg.orderId,
+            payment_status: "pending",
+          });
+        } catch (e) {
+          // Оплата в банке уже создана — ведём покупателя на форму, а сбой
+          // записи логируем (без alfa_order_id не сработает возврат из админки).
+          console.error(`[checkout] заказ №${order.number}: не записался alfa_order_id:`, e);
+        }
+        // Письмо «заказ принят» здесь не шлём: придёт «оплата получена»
+        // после успешной оплаты (callback), а неоплаченный заказ удалится.
+        return NextResponse.json({ id: order.number, total, formUrl: reg.formUrl });
+      }
+
+      // Платёж не создался — откатываем заказ целиком, корзина у покупателя цела.
+      if (reg?.errorMessage) {
+        console.error(`[checkout] заказ №${order.number}: банк отказал — ${reg.errorMessage}`);
+      }
+      for (const l of await pb
+        .collection("order_items")
+        .getFullList({ filter: pb.filter("order = {:id}", { id: order.id }), fields: "id" })
+        .catch(() => [] as { id: string }[])) {
+        await pb.collection("order_items").delete(l.id).catch(() => {});
+      }
+      await pb.collection("orders").delete(order.id).catch(() => {});
+      return NextResponse.json(
+        {
+          error:
+            "Онлайн-оплата сейчас недоступна — заказ не оформлен, товары остались в корзине. Попробуйте ещё раз через пару минут.",
+        },
+        { status: 502 }
+      );
+    }
+
+    // Без онлайн-оплаты заказ оформлен сразу — шлём «заказ принят».
+    if (email?.trim()) {
+      void mailOrderPlaced(
+        { to: email.trim(), number: order.number, name: customer_name.trim() },
+        lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
+        { total, deliveryCost: DELIVERY_COST, deliveryMethod: delivery_method }
+      ).catch(() => {});
     }
 
     return NextResponse.json({ id: order.number, total });

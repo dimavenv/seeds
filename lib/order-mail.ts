@@ -73,16 +73,31 @@ export async function mailOrderPlaced(
 export async function mailPayment(
   o: OrderInfo,
   kind: "paid" | "refunded",
-  total?: number
+  total?: number,
+  items?: { name: string; price: number; qty: number }[]
 ): Promise<void> {
   if (kind === "paid") {
+    const rows = (items ?? [])
+      .map(
+        (i) => `<tr>
+          <td style="padding:7px 0;border-bottom:1px solid #edf2ed;">${escapeHtml(i.name)}</td>
+          <td style="padding:7px 8px;border-bottom:1px solid #edf2ed;text-align:center;white-space:nowrap;">× ${i.qty}</td>
+          <td style="padding:7px 0;border-bottom:1px solid #edf2ed;text-align:right;white-space:nowrap;">${formatPrice(i.price * i.qty)}</td>
+        </tr>`
+      )
+      .join("");
     await send(
       o,
       "Оплата получена",
       `${orderTitle(o.number, "оплата получена")}
-      <p style="margin:0;">${hello(o.name)} Мы получили вашу оплату${
+      <p style="margin:0 0 ${rows ? "16px" : "0"};">${hello(o.name)} Мы получили вашу оплату${
         total ? ` на сумму <b>${formatPrice(total)}</b>` : ""
-      }. Заказ передан в сборку.</p>
+      }. Заказ передан в сборку — о смене статуса сообщим письмом.</p>
+      ${
+        rows
+          ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">${rows}</table>`
+          : ""
+      }
       ${note("Кассовый чек придёт отдельным письмом.")}`
     );
   } else {

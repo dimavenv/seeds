@@ -54,7 +54,24 @@ export async function GET(req: Request) {
           ? "failed"
           : null;
 
-      if (next) {
+      if (next === "failed") {
+        // Оплата окончательно не прошла. Неоплаченный «свежий» заказ удаляем
+        // целиком: корзина у покупателя осталась (мы её не чистим до оплаты),
+        // а «пустышки» в админке не нужны. Заказ, который админ уже взял в
+        // работу или который был оплачен, не трогаем.
+        const prev = await pb.collection("orders").getOne(orderNumber);
+        if (prev.status === "new" && (prev.payment_status === "pending" || prev.payment_status === "unpaid")) {
+          for (const l of await pb
+            .collection("order_items")
+            .getFullList({ filter: pb.filter("order = {:id}", { id: orderNumber }), fields: "id" })
+            .catch(() => [] as { id: string }[])) {
+            await pb.collection("order_items").delete(l.id).catch(() => {});
+          }
+          await pb.collection("orders").delete(orderNumber);
+        } else {
+          await pb.collection("orders").update(orderNumber, { payment_status: "failed" });
+        }
+      } else if (next) {
         const prev = await pb.collection("orders").getOne(orderNumber);
         if (prev.payment_status !== next) {
           const rec = await pb
@@ -64,6 +81,24 @@ export async function GET(req: Request) {
           // вызывать не нужно. Письмо — только при реальной смене статуса
           // (Альфа может повторять callback; возврат из админки шлёт своё).
           if (next === "paid" || next === "refunded") {
+            // Для письма об оплате — состав заказа (таблица в письме).
+            const items =
+              next === "paid"
+                ? await pb
+                    .collection("order_items")
+                    .getFullList({
+                      filter: pb.filter("order = {:id}", { id: orderNumber }),
+                      fields: "name,price,qty",
+                    })
+                    .then((ls) =>
+                      ls.map((l) => ({
+                        name: String(l.name),
+                        price: Number(l.price),
+                        qty: Number(l.qty),
+                      }))
+                    )
+                    .catch(() => undefined)
+                : undefined;
             void mailPayment(
               {
                 to: decryptField(rec.email as string | null),
@@ -71,7 +106,8 @@ export async function GET(req: Request) {
                 name: rec.customer_name as string | null,
               },
               next,
-              next === "paid" ? Number(rec.total ?? 0) || undefined : undefined
+              next === "paid" ? Number(rec.total ?? 0) || undefined : undefined,
+              items
             ).catch(() => {});
           }
         }
