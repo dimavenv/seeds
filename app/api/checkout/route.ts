@@ -169,10 +169,16 @@ export async function POST(request: Request) {
           ...(email?.trim() ? { email: email.trim() } : {}),
         });
         if (reg.formUrl && reg.orderId) {
-          await pb.collection("orders").update(order.id, {
-            alfa_order_id: reg.orderId,
-            payment_status: "pending",
-          });
+          try {
+            await pb.collection("orders").update(order.id, {
+              alfa_order_id: reg.orderId,
+              payment_status: "pending",
+            });
+          } catch (e) {
+            // Оплата в банке уже создана — ведём покупателя на форму, а сбой
+            // записи логируем (без alfa_order_id не сработает возврат из админки).
+            console.error(`[checkout] заказ №${order.number}: не записался alfa_order_id:`, e);
+          }
           return NextResponse.json({ id: order.number, total, formUrl: reg.formUrl });
         }
         // Регистрация не удалась — заказ сохранён, вернём пометку.
@@ -181,7 +187,8 @@ export async function POST(request: Request) {
           total,
           paymentError: reg.errorMessage || "Не удалось создать оплату",
         });
-      } catch {
+      } catch (e) {
+        console.error(`[checkout] заказ №${order.number}: онлайн-оплата не создана:`, e);
         return NextResponse.json({
           id: order.number,
           total,
