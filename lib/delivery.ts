@@ -1,5 +1,16 @@
 // Доставка фиксированная по России. Единый источник правды для checkout и API.
-export const DELIVERY_COST = 300;
+// По умолчанию 300 ₽. Для теста можно временно обнулить, задав в .env.production
+//   NEXT_PUBLIC_DELIVERY_COST=0
+// и пересобрав сайт (bash deploy/update.sh). Значение читается и на сервере
+// (расчёт суммы заказа), и в браузере (страница оформления) — префикс
+// NEXT_PUBLIC_ обязателен, иначе в браузер значение не попадёт. Чтобы вернуть
+// платную доставку — убери строку из .env.production и пересобери.
+function readDeliveryCost(): number {
+  const n = Number(process.env.NEXT_PUBLIC_DELIVERY_COST);
+  return Number.isFinite(n) && n >= 0 ? n : 300;
+}
+
+export const DELIVERY_COST = readDeliveryCost();
 
 export const DELIVERY_METHODS = [
   { id: "ozon", label: "Ozon" },
