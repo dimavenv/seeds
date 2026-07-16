@@ -142,7 +142,12 @@ export default async function AdminOrders({
             const qty = items.reduce((s, i) => s + i.qty, 0);
             const thumbs = items.slice(0, 3);
             const rest = items.length - thumbs.length;
-            const pay = PAYMENT_BADGE[o.payment_status ?? "unpaid"];
+            // Частичный возврат: заказ оплачен, но часть денег уже вернули.
+            const refunded = o.refunded_amount ?? 0;
+            const pay =
+              o.payment_status === "paid" && refunded > 0
+                ? { label: `↩ Возврат ${formatPrice(refunded)}`, cls: "bg-amber-100 text-amber-700" }
+                : PAYMENT_BADGE[o.payment_status ?? "unpaid"];
             return (
               <li key={o.id} className="relative">
                 {/* «Растянутая» ссылка: клик по строке открывает заказ,

@@ -88,6 +88,7 @@ export function mapOrder(r: R, items?: OrderItem[]): Order {
     tracking_number: s(r.tracking_number) || null,
     payment_status: (s(r.payment_status) || "unpaid") as Order["payment_status"],
     alfa_order_id: s(r.alfa_order_id) || null,
+    refunded_amount: n(r.refunded_amount),
     user_id: s(r.user) || null,
     // Дата оформления: placed_at (у перенесённых заказов — исходная), иначе created.
     created_at: s(r.placed_at) || s(r.created),
@@ -103,6 +104,7 @@ export function mapOrderItem(r: R): OrderItem {
     name: s(r.name),
     price: n(r.price),
     qty: n(r.qty) || 1,
+    refunded_qty: n(r.refunded_qty),
   };
 }
 

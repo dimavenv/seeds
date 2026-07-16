@@ -98,6 +98,14 @@ export type AlfaStatusResult = {
   amount?: number;
   errorCode?: string;
   errorMessage?: string;
+  // Суммы по заказу в КОПЕЙКАХ: depositedAmount — сколько реально списано,
+  // refundedAmount — сколько уже возвращено (частичные возвраты суммируются).
+  paymentAmountInfo?: {
+    paymentState?: string;
+    approvedAmount?: number;
+    depositedAmount?: number;
+    refundedAmount?: number;
+  };
 };
 
 export async function alfaStatus(orderId: string): Promise<AlfaStatusResult> {

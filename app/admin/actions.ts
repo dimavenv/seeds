@@ -226,48 +226,148 @@ export async function updateVacationUntil(date: string | null): Promise<void> {
   revalidatePath("/admin");
 }
 
-// Возврат оплаты через Альфа-Банк (полная сумма заказа).
+// Что возвращаем: весь заказ (остаток, включая доставку) или выбранные товары.
+export type RefundSelection =
+  | { mode: "full" }
+  | { mode: "items"; items: { id: string; qty: number }[] };
+
+// Возврат оплаты через Альфа-Банк — полный или частичный (по товарам).
+// Статус в базе меняется ТОЛЬКО после того, как банк принял возврат и
+// подтвердил его в статусе платежа — иначе (нет денег на счёте, сеть упала)
+// заказ остаётся «оплачен», а админ видит причину отказа.
 export async function refundOrder(
-  id: string
-): Promise<{ ok?: boolean; error?: string }> {
+  id: string,
+  selection: RefundSelection = { mode: "full" }
+): Promise<{ ok?: boolean; error?: string; refunded?: number; full?: boolean }> {
   const { session } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
 
-  const { isAlfaConfigured, alfaRefund } = await import("@/lib/alfa");
+  const { isAlfaConfigured, alfaRefund, alfaStatus } = await import("@/lib/alfa");
   if (!isAlfaConfigured()) return { error: "Онлайн-оплата не подключена" };
 
   const pb = await pbAdmin();
-  let order: { alfa_order_id: string; total: number; payment_status: string };
+  let order: {
+    alfa_order_id: string;
+    total: number;
+    payment_status: string;
+    refunded_amount: number;
+  };
+  let items: { id: string; name: string; price: number; qty: number; refunded_qty: number }[];
   try {
     const rec = await pb.collection("orders").getOne(id);
     order = {
       alfa_order_id: String(rec.alfa_order_id ?? ""),
       total: Number(rec.total ?? 0),
       payment_status: String(rec.payment_status ?? ""),
+      refunded_amount: Number(rec.refunded_amount ?? 0),
     };
+    items = (
+      await pb
+        .collection("order_items")
+        .getFullList({ filter: pb.filter("order = {:id}", { id }) })
+    ).map((l) => ({
+      id: l.id,
+      name: String(l.name ?? ""),
+      price: Number(l.price ?? 0),
+      qty: Number(l.qty ?? 0) || 1,
+      refunded_qty: Number(l.refunded_qty ?? 0),
+    }));
   } catch {
     return { error: "Заказ не найден" };
   }
   if (order.payment_status !== "paid") return { error: "Заказ не оплачен онлайн" };
   if (!order.alfa_order_id) return { error: "Нет идентификатора платежа" };
 
-  const res = await alfaRefund(
-    order.alfa_order_id,
-    String(Math.round(order.total * 100))
-  );
-  if (res.errorCode && res.errorCode !== "0") {
+  // Остаток, который вообще можно вернуть по этому платежу.
+  const remaining = Math.round((order.total - order.refunded_amount) * 100) / 100;
+  if (remaining <= 0) return { error: "По заказу уже всё возвращено" };
+
+  // Сумма возврата считается ТОЛЬКО по ценам из базы — клиенту не доверяем.
+  let amount: number; // в рублях
+  let refundedItems: { id: string; take: number; name: string; price: number; qty: number }[] = [];
+  if (selection.mode === "items") {
+    // Дубли одной позиции в выборке складываем, а не считаем дважды.
+    const wanted = new Map<string, number>();
+    for (const sel of selection.items) {
+      wanted.set(sel.id, (wanted.get(sel.id) ?? 0) + Math.max(0, Math.floor(sel.qty)));
+    }
+    for (const it of items) {
+      const req = wanted.get(it.id) ?? 0;
+      if (req <= 0) continue;
+      const take = Math.min(req, it.qty - it.refunded_qty);
+      if (take > 0) refundedItems.push({ id: it.id, take, name: it.name, price: it.price, qty: it.qty });
+    }
+    amount = refundedItems.reduce((s, r) => s + r.price * r.take, 0);
+    if (amount <= 0) return { error: "Не выбраны товары для возврата" };
+    // Не больше остатка по платежу (например, если доставка уже возвращена).
+    amount = Math.min(amount, remaining);
+  } else {
+    amount = remaining; // остаток целиком, включая доставку
+    refundedItems = items
+      .filter((it) => it.qty - it.refunded_qty > 0)
+      .map((it) => ({ id: it.id, take: it.qty - it.refunded_qty, name: it.name, price: it.price, qty: it.qty }));
+  }
+  const amountKopecks = Math.round(amount * 100);
+
+  let res: { errorCode?: string; errorMessage?: string };
+  try {
+    res = await alfaRefund(order.alfa_order_id, String(amountKopecks));
+  } catch {
+    return { error: "Банк недоступен — возврат не выполнен, попробуйте позже" };
+  }
+  if (res.errorCode && String(res.errorCode) !== "0") {
     return { error: res.errorMessage || "Банк отклонил возврат" };
   }
 
-  await pb.collection("orders").update(id, { payment_status: "refunded" }).catch(() => {});
+  // Банк ответил «ок» — сверяем со статусом платежа, что деньги действительно
+  // ушли в возврат (при нехватке средств на счёте операция не проводится).
+  try {
+    const st = await alfaStatus(order.alfa_order_id);
+    const refundedKopecks = st.paymentAmountInfo?.refundedAmount;
+    if (
+      typeof refundedKopecks === "number" &&
+      refundedKopecks < Math.round(order.refunded_amount * 100) + amountKopecks
+    ) {
+      return {
+        error:
+          "Банк не подтвердил возврат — возможно, на счёте не хватает средств. Статус заказа не изменён.",
+      };
+    }
+  } catch {
+    // Статус недоступен, но refund.do прошёл — считаем возврат выполненным.
+  }
+
+  // Возврат подтверждён — фиксируем в базе.
+  const newRefunded = Math.round((order.refunded_amount + amount) * 100) / 100;
+  const full = newRefunded >= order.total - 0.005;
+  for (const r of refundedItems) {
+    const it = items.find((x) => x.id === r.id);
+    await pb
+      .collection("order_items")
+      .update(r.id, { refunded_qty: (it?.refunded_qty ?? 0) + r.take })
+      .catch(() => {});
+  }
+  await pb
+    .collection("orders")
+    .update(id, {
+      refunded_amount: newRefunded,
+      payment_status: full ? "refunded" : "paid",
+    })
+    .catch(() => {});
+
   const info = await orderMailInfo(id);
   if (info) {
-    void mailPayment({ to: info.to, number: info.number, name: info.name }, "refunded").catch(
-      () => {}
-    );
+    void mailPayment(
+      { to: info.to, number: info.number, name: info.name },
+      "refunded",
+      amount,
+      refundedItems.map((r) => ({ name: r.name, price: r.price, qty: r.take })),
+      { partial: !full }
+    ).catch(() => {});
   }
   revalidatePath("/admin/orders");
-  return { ok: true };
+  revalidatePath("/account");
+  return { ok: true, refunded: amount, full };
 }
 
 // Удаление тестового/мусорного заказа вместе с составом. Необратимо —

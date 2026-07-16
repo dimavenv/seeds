@@ -45,12 +45,19 @@ export async function GET(req: Request) {
   if (orderNumber) {
     try {
       const pb = await pbAdmin();
+      const isPayment = operation === "deposited" || operation === "approved";
+      const isRefund = operation === "reversed" || operation === "refunded";
+      // ВАЖНО: возврат засчитываем только при status=1. Неудавшийся возврат
+      // (например, на счёте магазина не хватило средств) приходит как
+      // operation=refunded&status=0 — деньги остались у покупателя списанными,
+      // заказ должен остаться «оплачен». И «failed» ставим только по операциям
+      // ОПЛАТЫ: провал возврата не делает оплату неуспешной.
       const next =
-        status === "1" && (operation === "deposited" || operation === "approved")
+        status === "1" && isPayment
           ? "paid"
-          : operation === "reversed" || operation === "refunded"
+          : status === "1" && isRefund
           ? "refunded"
-          : operation === "declinedByTimeout" || status === "0"
+          : operation === "declinedByTimeout" || (status === "0" && isPayment)
           ? "failed"
           : null;
 
@@ -71,6 +78,57 @@ export async function GET(req: Request) {
         } else {
           await pb.collection("orders").update(orderNumber, { payment_status: "failed" });
         }
+      } else if (next === "refunded") {
+        // Возврат бывает частичным (из админки или из ЛК банка), а Альфа
+        // повторяет callback'и — поэтому сверяемся с банком, сколько всего
+        // возвращено, и закрываем заказ как «возврат» только когда возвращена
+        // вся сумма. Идемпотентно: повторный callback ничего не ломает.
+        const prev = await pb.collection("orders").getOne(orderNumber);
+        const total = Number(prev.total ?? 0);
+        let refunded: number | null = null; // рублей возвращено всего
+        try {
+          const { isAlfaConfigured, alfaStatus } = await import("@/lib/alfa");
+          const alfaOrderId = String(prev.alfa_order_id ?? "");
+          if (isAlfaConfigured() && alfaOrderId) {
+            const st = await alfaStatus(alfaOrderId);
+            const kop = st.paymentAmountInfo?.refundedAmount;
+            if (typeof kop === "number") refunded = kop / 100;
+          }
+        } catch {
+          /* статус недоступен — обработаем однозначные случаи по сумме ниже */
+        }
+        if (refunded === null) {
+          // Без сверки засчитываем только однозначный ПОЛНЫЙ возврат (сумма
+          // операции покрывает весь заказ); частичные фиксирует админка.
+          const amountKop = Number(params.get("amount") ?? 0);
+          if (amountKop >= Math.round(total * 100)) refunded = total;
+        }
+        if (refunded !== null && refunded > 0) {
+          const full = refunded >= total - 0.005;
+          const newAmount = Math.min(refunded, total);
+          if (
+            String(prev.payment_status) !== (full ? "refunded" : "paid") ||
+            Number(prev.refunded_amount ?? 0) !== newAmount
+          ) {
+            const rec = await pb.collection("orders").update(orderNumber, {
+              refunded_amount: newAmount,
+              payment_status: full ? "refunded" : "paid",
+            });
+            // Письмо — только при переходе в полный возврат: частичный возврат
+            // из админки шлёт своё письмо со списком возвращённых товаров.
+            if (full && prev.payment_status !== "refunded") {
+              void mailPayment(
+                {
+                  to: decryptField(rec.email as string | null),
+                  number: Number(rec.number),
+                  name: rec.customer_name as string | null,
+                },
+                "refunded",
+                newAmount
+              ).catch(() => {});
+            }
+          }
+        }
       } else if (next) {
         const prev = await pb.collection("orders").getOne(orderNumber);
         if (prev.payment_status !== next) {
@@ -79,26 +137,23 @@ export async function GET(req: Request) {
             .update(orderNumber, { payment_status: next });
           // Чек по 54-ФЗ шлёт банк («Фискализация» в ЛК Альфы) — кассу здесь
           // вызывать не нужно. Письмо — только при реальной смене статуса
-          // (Альфа может повторять callback; возврат из админки шлёт своё).
-          if (next === "paid" || next === "refunded") {
+          // (Альфа может повторять callback).
+          if (next === "paid") {
             // Для письма об оплате — состав заказа (таблица в письме).
-            const items =
-              next === "paid"
-                ? await pb
-                    .collection("order_items")
-                    .getFullList({
-                      filter: pb.filter("order = {:id}", { id: orderNumber }),
-                      fields: "name,price,qty",
-                    })
-                    .then((ls) =>
-                      ls.map((l) => ({
-                        name: String(l.name),
-                        price: Number(l.price),
-                        qty: Number(l.qty),
-                      }))
-                    )
-                    .catch(() => undefined)
-                : undefined;
+            const items = await pb
+              .collection("order_items")
+              .getFullList({
+                filter: pb.filter("order = {:id}", { id: orderNumber }),
+                fields: "name,price,qty",
+              })
+              .then((ls) =>
+                ls.map((l) => ({
+                  name: String(l.name),
+                  price: Number(l.price),
+                  qty: Number(l.qty),
+                }))
+              )
+              .catch(() => undefined);
             void mailPayment(
               {
                 to: decryptField(rec.email as string | null),
@@ -106,7 +161,7 @@ export async function GET(req: Request) {
                 name: rec.customer_name as string | null,
               },
               next,
-              next === "paid" ? Number(rec.total ?? 0) || undefined : undefined,
+              Number(rec.total ?? 0) || undefined,
               items
             ).catch(() => {});
           }

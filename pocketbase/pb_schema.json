@@ -767,6 +767,10 @@
         "type": "text"
       },
       {
+        "name": "refunded_amount",
+        "type": "number"
+      },
+      {
         "hidden": false,
         "id": "autodate2990389176",
         "name": "created",
@@ -886,6 +890,11 @@
         "presentable": false,
         "required": false,
         "system": false,
+        "type": "number"
+      },
+      {
+        "name": "refunded_qty",
+        "onlyInt": true,
         "type": "number"
       }
     ],
