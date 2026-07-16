@@ -46,8 +46,8 @@ export default function Footer({ categories }: { categories: Category[] }) {
         <div>
           <h3 className="mb-3 text-sm font-semibold text-brand-800">Контакты</h3>
           <ul className="space-y-1.5 text-sm text-brand-600">
-            <li>Доставка почтой по всей России</li>
-            <li>Пн–Вс: 9:00–20:00</li>
+            <li>Доставка по всей России</li>
+            <li>ИП Кутушева Вера Евгеньевна</li>
             <li>info@tomatsemena.ru</li>
           </ul>
         </div>
