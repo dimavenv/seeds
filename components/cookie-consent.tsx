@@ -38,9 +38,8 @@ export default function CookieConsent() {
     >
       <div className="card mx-auto flex max-w-3xl animate-fade-up flex-col items-start gap-3 p-4 shadow-xl sm:flex-row sm:items-center">
         <p className="text-sm leading-relaxed text-brand-700">
-          Мы используем cookies, чтобы работали вход в аккаунт, корзина и
-          обезличенная статистика посещаемости. Оставаясь на сайте, вы
-          соглашаетесь с{" "}
+          Мы используем cookies, чтобы работали вход в аккаунт и корзина.
+          Оставаясь на сайте, вы соглашаетесь с{" "}
           <Link
             href="/privacy"
             className="font-semibold underline hover:text-brand-800"
