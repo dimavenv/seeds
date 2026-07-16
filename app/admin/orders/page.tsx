@@ -6,6 +6,8 @@ import { getProductsByIds } from "@/lib/data";
 import { formatPrice, formatDate } from "@/lib/format";
 import type { Order, OrderStatus, PaymentStatus, Product } from "@/lib/types";
 import OrderStatusSelect from "@/components/admin/order-status-select";
+import DeleteButton from "@/components/admin/delete-button";
+import { deleteOrder } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -209,8 +211,13 @@ export default async function AdminOrders({
                     )}
                   </div>
 
-                  <div className="relative z-10">
+                  <div className="relative z-10 flex items-center gap-2">
                     <OrderStatusSelect id={o.id} status={o.status} />
+                    <DeleteButton
+                      action={deleteOrder.bind(null, o.id)}
+                      confirmText={`Точно удалить заказ #${o.number} вместе с составом из базы? Действие необратимо.`}
+                      title={`Удалить заказ #${o.number}`}
+                    />
                   </div>
 
                   <svg

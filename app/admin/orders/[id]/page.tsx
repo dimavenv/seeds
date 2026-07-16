@@ -12,6 +12,8 @@ import OrderStatusBadge from "@/components/admin/order-status-badge";
 import OrderStatusSelect from "@/components/admin/order-status-select";
 import OrderTrackingInput from "@/components/admin/order-tracking-input";
 import OrderPayment from "@/components/admin/order-payment";
+import DeleteButton from "@/components/admin/delete-button";
+import { deleteOrder } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +80,13 @@ export default async function AdminOrderDetail({
           <OrderPayment id={order.id} status={order.payment_status ?? "unpaid"} />
           <OrderStatusSelect id={order.id} status={order.status} />
           <OrderTrackingInput id={order.id} tracking={order.tracking_number ?? null} />
+          <DeleteButton
+            action={deleteOrder.bind(null, order.id)}
+            confirmText={`Точно удалить заказ #${order.number} вместе с составом из базы? Действие необратимо.`}
+            redirectTo="/admin/orders"
+          >
+            Удалить заказ
+          </DeleteButton>
         </div>
       </div>
 
