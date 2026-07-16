@@ -186,7 +186,9 @@ export default async function AdminOrders({
                     )}
                   </div>
 
-                  <div className="min-w-0 flex-1">
+                  {/* min-w заставляет блок переноситься на свою строку на
+                      узких экранах вместо усечения имени до пары букв. */}
+                  <div className="min-w-[10rem] flex-1">
                     <div className="truncate font-semibold text-brand-800">
                       {o.customer_name}
                     </div>
