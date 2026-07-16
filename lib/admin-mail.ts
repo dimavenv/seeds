@@ -200,6 +200,36 @@ export async function notifyNewReview(review: {
   );
 }
 
+// Ответ ПОКУПАТЕЛЮ на его вопрос — отправляется из админки (/admin/support).
+// Возвращает true, если письмо реально ушло (иначе ответ не сохраняем).
+export async function mailSupportReply(input: {
+  to: string;
+  name: string;
+  subject: string;
+  question: string;
+  reply: string;
+}): Promise<boolean> {
+  if (!isMailConfigured()) return false;
+  // Если покупатель ответит на письмо — ответ упадёт в служебный ящик.
+  const replyTo = (process.env.ADMIN_NOTIFY_EMAIL || "").split(",")[0]?.trim();
+  return sendMail(
+    input.to,
+    `Re: ${input.subject} — Томат Семена`,
+    mailLayout(`
+      ${tag("Ответ поддержки")}
+      ${h1("Ответ на ваш вопрос")}
+      <p style="margin:0 0 14px;">${escapeHtml(input.name)}, здравствуйте! Спасибо за обращение — вот наш ответ.</p>
+      <div style="background:#f7faf6;border-radius:12px;padding:12px 16px;font-size:13px;color:#5c6b5c;">
+        <div style="font-weight:bold;margin-bottom:6px;">Ваш вопрос · «${escapeHtml(input.subject)}»</div>
+        <div style="white-space:pre-wrap;">${escapeHtml(input.question)}</div>
+      </div>
+      <div style="margin:14px 0 0;background:#eef7ee;border-left:4px solid #2e7d32;border-radius:0 12px 12px 0;padding:14px 16px;font-size:15px;color:#26332a;white-space:pre-wrap;">${escapeHtml(input.reply)}</div>
+      <p style="margin:16px 0 0;color:#5c6b5c;font-size:13px;">Остались вопросы — просто ответьте на это письмо.</p>
+    `),
+    { ...mailOptsFor("support"), ...(replyTo ? { replyTo } : {}) }
+  );
+}
+
 // «Вопрос в поддержке» — тема, текст; «Ответить» в почте пишет сразу покупателю.
 export async function notifyNewSupport(req: {
   name: string;

@@ -131,6 +131,8 @@ export function mapSupportRequest(r: R): SupportRequest {
     subject: s(r.subject),
     message: s(r.message),
     status: s(r.status) || "new",
+    reply: s(r.reply) || null,
+    replied_at: s(r.replied_at) || null,
     user_id: s(r.user) || null,
     created_at: s(r.created),
   };

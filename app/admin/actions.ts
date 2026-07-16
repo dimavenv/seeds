@@ -422,6 +422,66 @@ export async function deleteSupportRequest(
   return { ok: true };
 }
 
+// Ответ на заявку в поддержку: письмо уходит покупателю на почту из заявки,
+// ответ сохраняется в базе (зашифрованным), заявка помечается «done».
+// Порядок важен: сначала письмо, потом запись — если письмо не ушло,
+// заявка остаётся без ответа и админ видит ошибку.
+export async function replySupportRequest(
+  id: string,
+  reply: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const { session } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
+
+  const text = reply.trim();
+  if (!text) return { error: "Напишите текст ответа" };
+  if (text.length > 5000) return { error: "Слишком длинный ответ (до 5000 символов)" };
+
+  const { isMailConfigured } = await import("@/lib/email");
+  if (!isMailConfigured()) {
+    return { error: "Почта не настроена — заполните SMTP_* в .env.production" };
+  }
+
+  const pb = await pbAdmin();
+  let req: { name: string; subject: string; email: string | null; message: string | null };
+  try {
+    const rec = await pb.collection("support_requests").getOne(id);
+    req = {
+      name: String(rec.name ?? ""),
+      subject: String(rec.subject ?? ""),
+      email: decryptField((rec.email as string | null) ?? null),
+      message: decryptField((rec.message as string | null) ?? null),
+    };
+  } catch {
+    return { error: "Заявка не найдена" };
+  }
+  if (!req.email) return { error: "В заявке нет почты для ответа" };
+
+  const { mailSupportReply } = await import("@/lib/admin-mail");
+  const sent = await mailSupportReply({
+    to: req.email,
+    name: req.name,
+    subject: req.subject,
+    question: req.message ?? "",
+    reply: text,
+  });
+  if (!sent) {
+    return { error: "Письмо не отправилось — проверьте почту: pm2 logs seeds (строки [mail])" };
+  }
+
+  const { encryptField } = await import("@/lib/crypto");
+  await pb
+    .collection("support_requests")
+    .update(id, {
+      reply: encryptField(text) ?? "",
+      replied_at: new Date().toISOString(),
+      status: "done",
+    })
+    .catch(() => {});
+  revalidatePath("/admin/support");
+  return { ok: true };
+}
+
 export async function updateReviewStatus(
   id: string,
   status: ReviewStatus

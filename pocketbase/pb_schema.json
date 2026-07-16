@@ -1005,6 +1005,14 @@
         ]
       },
       {
+        "name": "reply",
+        "type": "text"
+      },
+      {
+        "name": "replied_at",
+        "type": "date"
+      },
+      {
         "cascadeDelete": false,
         "collectionId": "_pb_users_auth_",
         "help": "",

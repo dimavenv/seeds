@@ -85,6 +85,9 @@ export type SupportRequest = {
   subject: string;
   message: string;
   status: string;
+  // Ответ продавца (зашифрован, как и message) и когда он отправлен.
+  reply?: string | null;
+  replied_at?: string | null;
   user_id: string | null;
   created_at: string;
 };
