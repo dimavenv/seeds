@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { pbAdmin } from "@/lib/pb/server";
 import { decryptField } from "@/lib/crypto";
 import { mailPayment } from "@/lib/order-mail";
+import { notifyNewOrder } from "@/lib/admin-mail";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +165,24 @@ export async function GET(req: Request) {
               Number(rec.total ?? 0) || undefined,
               items
             ).catch(() => {});
+            // Продавцу «у вас новый заказ»: при онлайн-оплате заказ считается
+            // состоявшимся именно сейчас (неоплаченные удаляются, см. выше).
+            void notifyNewOrder({
+              id: orderNumber,
+              number: Number(rec.number),
+              total: Number(rec.total ?? 0),
+              deliveryCost: Number(rec.delivery_cost ?? 0),
+              deliveryMethod: (rec.delivery_method as string | null) ?? null,
+              paid: true,
+              customer: {
+                name: String(rec.customer_name ?? ""),
+                phone: decryptField(rec.phone as string | null),
+                email: decryptField(rec.email as string | null),
+                address: decryptField(rec.address as string | null),
+                comment: (rec.comment as string | null) || null,
+              },
+              items: items ?? [],
+            }).catch(() => {});
           }
         }
       }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { pbAdmin } from "@/lib/pb/server";
 import { getSessionPb } from "@/lib/auth";
 import { isValidRecordId } from "@/lib/data";
+import { notifyNewReview } from "@/lib/admin-mail";
 
 export type ReviewFormState = { error?: string; ok?: boolean };
 
@@ -25,11 +26,12 @@ export async function submitReview(input: {
 
   // Заказ должен принадлежать пользователю (правила доступа дают видеть только
   // свои) и быть отправлен/получен.
-  let order: { id: string; status: string; customer_name: string };
+  let order: { id: string; number: number; status: string; customer_name: string };
   try {
     const rec = await pb.collection("orders").getOne(input.orderId);
     order = {
       id: rec.id,
+      number: Number(rec.number ?? 0),
       status: String(rec.status),
       customer_name: String(rec.customer_name ?? ""),
     };
@@ -53,14 +55,15 @@ export async function submitReview(input: {
     return { error: "Вы уже оставили отзыв на этот заказ" };
 
   // Создание — суперпользователем (прямое создание отзывов закрыто правилами).
+  const authorName = (input.authorName || order.customer_name || "Покупатель")
+    .trim()
+    .slice(0, 80);
   try {
     const admin = await pbAdmin();
     await admin.collection("reviews").create({
       user: session.userId,
       order: order.id,
-      author_name: (input.authorName || order.customer_name || "Покупатель")
-        .trim()
-        .slice(0, 80),
+      author_name: authorName,
       rating,
       text: text.slice(0, 2000),
       status: "pending",
@@ -69,6 +72,14 @@ export async function submitReview(input: {
   } catch {
     return { error: "Не удалось отправить отзыв" };
   }
+
+  // Продавцу «у вас новый отзыв» — чтобы модерация не залёживалась.
+  void notifyNewReview({
+    author: authorName,
+    rating,
+    text: text.slice(0, 2000),
+    orderNumber: order.number || null,
+  }).catch(() => {});
 
   revalidatePath(`/account/orders/${input.orderId}`);
   return { ok: true };

@@ -7,6 +7,7 @@ import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
+import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 
 type IncomingItem = { id: string; qty: number };
@@ -231,6 +232,24 @@ export async function POST(request: Request) {
         { total, deliveryCost: DELIVERY_COST, deliveryMethod: delivery_method }
       ).catch(() => {});
     }
+    // Уведомление продавцу «у вас новый заказ». При онлайн-оплате оно уходит
+    // из callback после успешной оплаты (см. app/api/payment/callback).
+    void notifyNewOrder({
+      id: order.id,
+      number: order.number,
+      total,
+      deliveryCost: DELIVERY_COST,
+      deliveryMethod: delivery_method,
+      paid: false,
+      customer: {
+        name: customer_name.trim(),
+        phone: phone.trim(),
+        email: email?.trim() || null,
+        address: address.trim(),
+        comment: comment?.trim() || null,
+      },
+      items: lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
+    }).catch(() => {});
 
     return NextResponse.json({ id: order.number, total });
   } catch (e) {

@@ -36,16 +36,23 @@ function transport(): Transporter {
 
 // Отправить письмо. Никогда не бросает: ошибки уходят в лог (pm2 logs seeds,
 // строки [mail]) — почта не должна ломать оформление заказа или регистрацию.
+// opts.from — переопределить отправителя (адрес должен быть разрешён у SMTP-
+// провайдера, обычно алиас основного ящика); opts.replyTo — куда пойдёт «Ответить».
 export async function sendMail(
   to: string,
   subject: string,
-  html: string
+  html: string,
+  opts: { from?: string; replyTo?: string } = {}
 ): Promise<boolean> {
   if (!isMailConfigured()) return false;
   try {
     await transport().sendMail({
-      from: process.env.MAIL_FROM || `"Томат Семена" <${process.env.SMTP_USER}>`,
+      from:
+        opts.from ||
+        process.env.MAIL_FROM ||
+        `"Томат Семена" <${process.env.SMTP_USER}>`,
       to,
+      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
       subject,
       html,
       // Текстовая версия письма: почтовые фильтры хуже относятся к письмам,
