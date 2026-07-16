@@ -77,7 +77,7 @@ export default function SupportReply({
           />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-brand-500">
-              Уйдёт письмом на <span className="font-semibold text-brand-700">{email}</span> с ящика поддержки
+              Уйдёт письмом на <span className="font-semibold text-brand-700">{email}</span> с основного ящика магазина
             </span>
             <div className="flex gap-2">
               <button

@@ -61,9 +61,38 @@ function mailOptsFor(cat: Category): {
 
   // Основной ящик: различаемся именем отправителя (или MAIL_FROM_* если задан).
   if (fromOverride) return { from: fromOverride };
-  const base = process.env.MAIL_FROM || process.env.SMTP_USER || "";
-  const addr = base.match(/<([^>]+)>/)?.[1] ?? base;
+  const addr = mainAddr();
   return addr ? { from: `"${FROM_NAME[cat]}" <${addr}>` } : {};
+}
+
+// Адрес основного ящика: из MAIL_FROM («Имя <addr>») или SMTP_USER.
+function mainAddr(): string {
+  const base = process.env.MAIL_FROM || process.env.SMTP_USER || "";
+  return base.match(/<([^>]+)>/)?.[1] ?? base;
+}
+
+// Отправка уведомления с подстраховкой: если отдельный ящик категории не
+// сработал (неверный пароль, провайдер отклонил) — дублируем с основного,
+// чтобы уведомление продавцу никогда не терялось молча.
+async function sendNotify(
+  cat: Category,
+  to: string,
+  subject: string,
+  html: string,
+  extra: { replyTo?: string } = {}
+): Promise<void> {
+  const opts = mailOptsFor(cat);
+  const ok = await sendMail(to, subject, html, { ...opts, ...extra });
+  if (!ok && opts.auth) {
+    console.error(
+      `[mail] ящик ${opts.auth.user} не сработал — отправляю «${subject}» с основного ящика`
+    );
+    const addr = mainAddr();
+    await sendMail(to, subject, html, {
+      ...(addr ? { from: `"${FROM_NAME[cat]}" <${addr}>` } : {}),
+      ...extra,
+    });
+  }
 }
 
 function siteBase(): string {
@@ -143,7 +172,8 @@ export async function notifyNewOrder(order: {
     ? `<span style="display:inline-block;background:#2e7d32;color:#fff;font-size:12px;font-weight:bold;padding:3px 10px;border-radius:999px;">✓ Оплачен онлайн</span>`
     : `<span style="display:inline-block;background:#fff3e0;color:#b45309;font-size:12px;font-weight:bold;padding:3px 10px;border-radius:999px;">Оплата при получении</span>`;
 
-  await sendMail(
+  await sendNotify(
+    "orders",
     to,
     `🛒 Новый заказ №${order.number} на ${formatPrice(order.total)}${order.paid ? " — оплачен" : ""}`,
     mailLayout(`
@@ -166,7 +196,7 @@ export async function notifyNewOrder(order: {
       ${dataCard(customerRows)}
       ${adminButton(`${siteBase()}/admin/orders/${order.id}`, "Открыть заказ в админке")}
     `),
-    { ...mailOptsFor("orders"), ...(c.email ? { replyTo: c.email } : {}) }
+    c.email ? { replyTo: c.email } : {}
   );
 }
 
@@ -185,7 +215,8 @@ export async function notifyNewReview(review: {
     `<span style="color:#f59e0b;font-size:18px;letter-spacing:2px;">${"★".repeat(rating)}</span>` +
     `<span style="color:#d6ddd4;font-size:18px;letter-spacing:2px;">${"☆".repeat(5 - rating)}</span>`;
 
-  await sendMail(
+  await sendNotify(
+    "reviews",
     to,
     `⭐ Новый отзыв ${rating}/5 от ${review.author}`,
     mailLayout(`
@@ -195,12 +226,15 @@ export async function notifyNewReview(review: {
       <div style="background:#f7faf6;border-left:4px solid #2e7d32;border-radius:0 12px 12px 0;padding:12px 16px;font-size:14px;color:#26332a;white-space:pre-wrap;">${escapeHtml(review.text)}</div>
       <p style="margin:14px 0 0;color:#5c6b5c;font-size:13px;">Отзыв появится на сайте после одобрения в админке.</p>
       ${adminButton(`${siteBase()}/admin/reviews`, "Проверить и опубликовать")}
-    `),
-    mailOptsFor("reviews")
+    `)
   );
 }
 
 // Ответ ПОКУПАТЕЛЮ на его вопрос — отправляется из админки (/admin/support).
+// ВАЖНО: это письмо видит покупатель, поэтому уходит оно с ОСНОВНОГО ящика
+// (info@, как и все письма о заказах) — служебные order@/review@/support@
+// остаются только для внутренних уведомлений продавцу. Ответ покупателя
+// на это письмо тоже придёт на основной ящик.
 // Возвращает true, если письмо реально ушло (иначе ответ не сохраняем).
 export async function mailSupportReply(input: {
   to: string;
@@ -210,8 +244,6 @@ export async function mailSupportReply(input: {
   reply: string;
 }): Promise<boolean> {
   if (!isMailConfigured()) return false;
-  // Если покупатель ответит на письмо — ответ упадёт в служебный ящик.
-  const replyTo = (process.env.ADMIN_NOTIFY_EMAIL || "").split(",")[0]?.trim();
   return sendMail(
     input.to,
     `Re: ${input.subject} — Томат Семена`,
@@ -225,8 +257,7 @@ export async function mailSupportReply(input: {
       </div>
       <div style="margin:14px 0 0;background:#eef7ee;border-left:4px solid #2e7d32;border-radius:0 12px 12px 0;padding:14px 16px;font-size:15px;color:#26332a;white-space:pre-wrap;">${escapeHtml(input.reply)}</div>
       <p style="margin:16px 0 0;color:#5c6b5c;font-size:13px;">Остались вопросы — просто ответьте на это письмо.</p>
-    `),
-    { ...mailOptsFor("support"), ...(replyTo ? { replyTo } : {}) }
+    `)
   );
 }
 
@@ -240,7 +271,8 @@ export async function notifyNewSupport(req: {
   const to = notifyTo();
   if (!to || !isMailConfigured()) return;
 
-  await sendMail(
+  await sendNotify(
+    "support",
     to,
     `💬 Вопрос в поддержке: ${req.subject}`,
     mailLayout(`
@@ -254,9 +286,6 @@ export async function notifyNewSupport(req: {
       <p style="margin:14px 0 0;color:#5c6b5c;font-size:13px;">Нажми «Ответить» — письмо уйдёт сразу покупателю.</p>
       ${adminButton(`${siteBase()}/admin/support`, "Открыть в админке")}
     `),
-    {
-      ...mailOptsFor("support"),
-      replyTo: `"${req.name.replace(/"/g, "")}" <${req.email}>`,
-    }
+    { replyTo: `"${req.name.replace(/"/g, "")}" <${req.email}>` }
   );
 }
