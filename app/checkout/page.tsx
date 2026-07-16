@@ -21,7 +21,9 @@ import DadataAddress, {
   emptyAddress,
   type AddressValue,
 } from "@/components/dadata-address";
-import OzonPvzField from "@/components/ozon-pvz-field";
+import OzonPvzField, {
+  type OzonPvzSelection,
+} from "@/components/ozon-pvz-field";
 
 const PROFILE_KEY = "checkout_profile";
 
@@ -35,7 +37,7 @@ type SavedProfile = {
     comment: string;
   };
   address: AddressValue;
-  pvz: string;
+  pvz: OzonPvzSelection | null;
   deliveryMethod: DeliveryMethodId;
 };
 
@@ -55,8 +57,8 @@ export default function CheckoutPage() {
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
-  // Однострочный адрес ПВЗ Ozon (для способа доставки «Ozon»).
-  const [pvz, setPvz] = useState("");
+  // Выбранный пункт выдачи Ozon (для способа доставки «Ozon»).
+  const [pvz, setPvz] = useState<OzonPvzSelection | null>(null);
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -103,11 +105,11 @@ export default function CheckoutPage() {
     // Почта — структурный адрес с индексом.
     let addressStr: string;
     if (deliveryMethod === "ozon") {
-      if (!pvz.trim()) {
-        setError("Укажите адрес пункта выдачи Ozon");
+      if (!pvz) {
+        setError("Выберите пункт выдачи Ozon на карте или в списке");
         return;
       }
-      addressStr = `Пункт выдачи Ozon: ${pvz.trim()}`;
+      addressStr = `Пункт выдачи Ozon [${pvz.code}]: ${pvz.address}`;
     } else {
       const missingAddress =
         !address.postal_code.trim() ||
@@ -374,7 +376,12 @@ export default function CheckoutPage() {
 
           <button
             type="submit"
-            disabled={submitting || !consent || (captchaEnabled && !captchaToken)}
+            disabled={
+              submitting ||
+              !consent ||
+              (captchaEnabled && !captchaToken) ||
+              (deliveryMethod === "ozon" && !pvz)
+            }
             className="btn-accent mt-5 w-full"
           >
             {submitting ? "Оформляем…" : "Подтвердить заказ"}
