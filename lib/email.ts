@@ -17,40 +17,50 @@ export function isMailConfigured(): boolean {
   );
 }
 
-let cached: Transporter | null = null;
+// Транспорты кешируются по логину: кроме основного ящика могут быть отдельные
+// (order@, review@, support@ — см. lib/admin-mail.ts), хост/порт у всех общий.
+const transports = new Map<string, Transporter>();
 
-function transport(): Transporter {
-  if (!cached) {
+function transport(auth: { user: string; pass: string }): Transporter {
+  let t = transports.get(auth.user);
+  if (!t) {
     const port = Number(process.env.SMTP_PORT || 465);
-    cached = nodemailer.createTransport({
+    t = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port,
       secure: port === 465, // 465 — SSL сразу; 587/25 — STARTTLS согласуется сам
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
+      auth: { user: auth.user, pass: auth.pass },
       connectionTimeout: 8000,
       socketTimeout: 15000,
     });
+    transports.set(auth.user, t);
   }
-  return cached;
+  return t;
 }
 
 // Отправить письмо. Никогда не бросает: ошибки уходят в лог (pm2 logs seeds,
 // строки [mail]) — почта не должна ломать оформление заказа или регистрацию.
-// opts.from — переопределить отправителя (адрес должен быть разрешён у SMTP-
-// провайдера, обычно алиас основного ящика); opts.replyTo — куда пойдёт «Ответить».
+// opts.auth — отправить с ДРУГОГО ящика того же SMTP-хоста (свой логин/пароль);
+// opts.from — заголовок «От кого» (адрес должен принадлежать ящику отправки);
+// opts.replyTo — куда пойдёт «Ответить».
 export async function sendMail(
   to: string,
   subject: string,
   html: string,
-  opts: { from?: string; replyTo?: string } = {}
+  opts: { from?: string; replyTo?: string; auth?: { user: string; pass: string } } = {}
 ): Promise<boolean> {
   if (!isMailConfigured()) return false;
+  const auth = opts.auth ?? {
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASSWORD || "",
+  };
   try {
-    await transport().sendMail({
+    await transport(auth).sendMail({
       from:
         opts.from ||
-        process.env.MAIL_FROM ||
-        `"Томат Семена" <${process.env.SMTP_USER}>`,
+        (opts.auth
+          ? `"Томат Семена" <${auth.user}>`
+          : process.env.MAIL_FROM || `"Томат Семена" <${process.env.SMTP_USER}>`),
       to,
       ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
       subject,

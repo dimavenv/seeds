@@ -7,24 +7,27 @@ import { formatPrice } from "@/lib/format";
 // Куда слать — ADMIN_NOTIFY_EMAIL в .env.production (например,
 // service@tomatsemena.ru; можно несколько адресов через запятую). Пока
 // переменная не задана — уведомления выключены, сайт работает как раньше.
+// Пароль от ящика-ПОЛУЧАТЕЛЯ сайту не нужен — он на него только шлёт.
 //
-// От кого приходят. По умолчанию — с основного ящика (SMTP_USER/MAIL_FROM),
-// но с разным ИМЕНЕМ отправителя («Заказы · Томат Семена», «Отзывы · …»,
-// «Поддержка · …») — во входящих такие письма сразу различимы и красиво
-// группируются фильтрами. Если завёл отдельные алиасы (order@, review@,
-// support@) — укажи их в MAIL_FROM_ORDERS / MAIL_FROM_REVIEWS /
-// MAIL_FROM_SUPPORT, и письма пойдут с них. ВАЖНО: адрес в MAIL_FROM_* должен
-// быть алиасом ящика SMTP_USER (настраивается у почтового провайдера), иначе
-// SMTP-сервер отклонит отправку.
+// От кого приходят — три варианта, от простого к «паутине»:
+// 1) Ничего не настраивать: письма идут с основного ящика (SMTP_USER), но с
+//    разным именем отправителя («Заказы · Томат Семена», «Отзывы · …»,
+//    «Поддержка · …») — во входящих различимы, фильтры настраиваются легко.
+// 2) Отдельные ЯЩИКИ order@/review@/support@ (как у рег.ру): каждому — свой
+//    логин и пароль в SMTP_USER_ORDERS/SMTP_PASSWORD_ORDERS,
+//    SMTP_USER_REVIEWS/SMTP_PASSWORD_REVIEWS, SMTP_USER_SUPPORT/
+//    SMTP_PASSWORD_SUPPORT. Хост и порт общие (SMTP_HOST/SMTP_PORT).
+// 3) MAIL_FROM_ORDERS/… — переопределить заголовок «От кого» (нужно, только
+//    если адрес — алиас, а не отдельный ящик, или хочется другое имя).
 //
 // Все функции «тихие»: не бросают, ошибки — в лог (lib/email.ts, строки [mail]).
 
 type Category = "orders" | "reviews" | "support";
 
-const FROM_ENV: Record<Category, string> = {
-  orders: "MAIL_FROM_ORDERS",
-  reviews: "MAIL_FROM_REVIEWS",
-  support: "MAIL_FROM_SUPPORT",
+const ENV_SUFFIX: Record<Category, string> = {
+  orders: "ORDERS",
+  reviews: "REVIEWS",
+  support: "SUPPORT",
 };
 
 const FROM_NAME: Record<Category, string> = {
@@ -38,13 +41,29 @@ function notifyTo(): string | null {
   return raw || null;
 }
 
-function fromFor(cat: Category): string | undefined {
-  const override = (process.env[FROM_ENV[cat]] || "").trim();
-  if (override) return override;
-  // Адрес основного ящика: из MAIL_FROM («Имя <addr>») или SMTP_USER.
+// Отправитель и (если задан) отдельный ящик для категории.
+function mailOptsFor(cat: Category): {
+  from?: string;
+  auth?: { user: string; pass: string };
+} {
+  const suffix = ENV_SUFFIX[cat];
+  const fromOverride = (process.env[`MAIL_FROM_${suffix}`] || "").trim();
+  const user = (process.env[`SMTP_USER_${suffix}`] || "").trim();
+  const pass = process.env[`SMTP_PASSWORD_${suffix}`] || "";
+
+  // Свой ящик категории: шлём с него, его же ставим в «От кого».
+  if (user && pass) {
+    return {
+      auth: { user, pass },
+      from: fromOverride || `"${FROM_NAME[cat]}" <${user}>`,
+    };
+  }
+
+  // Основной ящик: различаемся именем отправителя (или MAIL_FROM_* если задан).
+  if (fromOverride) return { from: fromOverride };
   const base = process.env.MAIL_FROM || process.env.SMTP_USER || "";
   const addr = base.match(/<([^>]+)>/)?.[1] ?? base;
-  return addr ? `"${FROM_NAME[cat]}" <${addr}>` : undefined;
+  return addr ? { from: `"${FROM_NAME[cat]}" <${addr}>` } : {};
 }
 
 function siteBase(): string {
@@ -147,7 +166,7 @@ export async function notifyNewOrder(order: {
       ${dataCard(customerRows)}
       ${adminButton(`${siteBase()}/admin/orders/${order.id}`, "Открыть заказ в админке")}
     `),
-    { from: fromFor("orders"), ...(c.email ? { replyTo: c.email } : {}) }
+    { ...mailOptsFor("orders"), ...(c.email ? { replyTo: c.email } : {}) }
   );
 }
 
@@ -177,7 +196,7 @@ export async function notifyNewReview(review: {
       <p style="margin:14px 0 0;color:#5c6b5c;font-size:13px;">Отзыв появится на сайте после одобрения в админке.</p>
       ${adminButton(`${siteBase()}/admin/reviews`, "Проверить и опубликовать")}
     `),
-    { from: fromFor("reviews") }
+    mailOptsFor("reviews")
   );
 }
 
@@ -205,6 +224,9 @@ export async function notifyNewSupport(req: {
       <p style="margin:14px 0 0;color:#5c6b5c;font-size:13px;">Нажми «Ответить» — письмо уйдёт сразу покупателю.</p>
       ${adminButton(`${siteBase()}/admin/support`, "Открыть в админке")}
     `),
-    { from: fromFor("support"), replyTo: `"${req.name.replace(/"/g, "")}" <${req.email}>` }
+    {
+      ...mailOptsFor("support"),
+      replyTo: `"${req.name.replace(/"/g, "")}" <${req.email}>`,
+    }
   );
 }
