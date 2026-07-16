@@ -17,7 +17,8 @@ function readEnvFile(file) {
     for (const line of fs.readFileSync(file, "utf8").split("\n")) {
       const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
       if (m && !line.trim().startsWith("#")) {
-        env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+        // Кавычки снимаем только парой — одиночная остаётся частью значения.
+        env[m[1]] = m[2].replace(/^(["'])([\s\S]*)\1$/, "$2");
       }
     }
   } catch {}
@@ -93,6 +94,13 @@ async function trySend(label, auth, from) {
   } catch (e) {
     const msg = e?.message || String(e);
     console.error(`❌ ${label}: не отправилось с ${auth.user} — ${msg}${explain(msg)}`);
+    if (/auth|535|Invalid login|credentials/i.test(msg)) {
+      const p = auth.pass || "";
+      const quoteHint = /^["']|["']$/.test(p)
+        ? " — начинается или заканчивается кавычкой! Если кавычка не часть пароля, уберите её; если часть — проще сменить пароль ящика на буквы+цифры"
+        : "";
+      console.error(`  Пароль, который реально ушёл на сервер: ${p.length} символов${quoteHint}.`);
+    }
     return false;
   }
 }
