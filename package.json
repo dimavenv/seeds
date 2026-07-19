@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
+    "pb:fetch": "node scripts/fetch-pocketbase.mjs",
     "db:schema": "node scripts/pb-import-schema.mjs"
   },
   "dependencies": {

@@ -1,5 +1,8 @@
 # dependencies
 /node_modules
+
+# бинарник PocketBase для интеграционных тестов (npm run pb:fetch)
+/.pb/
 /.pnp
 .pnp.js
 
