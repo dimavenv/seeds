@@ -89,3 +89,13 @@ body {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
 }
+
+/* Плашка cookies растянута прозрачной обёрткой на всю ширину низа экрана и
+   перехватывает клики даже в «пустых» местах — под ней кнопка «наверх» и
+   ссылки футера. Кликабельным оставляем только содержимое плашки. */
+[aria-label="Сообщение об использовании cookies"] {
+  pointer-events: none;
+}
+[aria-label="Сообщение об использовании cookies"] > * {
+  pointer-events: auto;
+}
