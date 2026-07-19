@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp } from "@/lib/client-ip";
 import { readTicket, codeMatches, allowAttempt } from "@/lib/email-code";
 import { parseRegInput, dbReady, createUser } from "@/lib/registration";
 
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
     return bad("Некорректный запрос");
   }
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = clientIp(request);
   // От перебора шестизначного кода: 10 попыток за 10 минут с IP.
   if (!allowAttempt(`confirm:${ip ?? "?"}`, 10, 10 * 60 * 1000)) {
     return bad("Слишком много попыток — подождите несколько минут", 429);

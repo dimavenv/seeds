@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp } from "@/lib/client-ip";
 import { verifyCaptcha } from "@/lib/captcha";
 import { isMailConfigured } from "@/lib/email";
 import { generateCode, issueTicket, allowAttempt } from "@/lib/email-code";
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   const { input, error } = parseRegInput(body);
   if (error) return bad(error);
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = clientIp(request);
   const human = await verifyCaptcha(String(body.captchaToken ?? ""), ip);
   if (!human) return bad("Подтвердите, что вы не робот");
 

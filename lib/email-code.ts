@@ -65,12 +65,19 @@ const buckets = new Map<string, { n: number; resetAt: number }>();
 
 export function allowAttempt(bucket: string, max: number, windowMs: number): boolean {
   const now = Date.now();
+  // Защита от разрастания: чистим только ИСТЁКШИЕ окна. Раньше здесь был
+  // clear() всей карты — он сбрасывал и активные лимиты, то есть поток
+  // мусорных ключей обнулял ограничения для всех.
+  if (buckets.size > 10_000) {
+    for (const [key, val] of buckets) {
+      if (now > val.resetAt) buckets.delete(key);
+    }
+  }
   const b = buckets.get(bucket);
   if (!b || now > b.resetAt) {
     buckets.set(bucket, { n: 1, resetAt: now + windowMs });
     return true;
   }
   b.n += 1;
-  if (buckets.size > 10_000) buckets.clear(); // защита от разрастания
   return b.n <= max;
 }

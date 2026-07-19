@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp } from "@/lib/client-ip";
 import { verifyCaptcha } from "@/lib/captcha";
 
 // Проверка антибот-капчи перед входом. Сам вход выполняет браузер напрямую
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
   }
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = clientIp(request);
   if (!(await verifyCaptcha(body.captchaToken, ip))) {
     return NextResponse.json(
       { error: "Подтвердите, что вы не робот" },

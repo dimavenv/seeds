@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp } from "@/lib/client-ip";
 import {
   readTicket,
   generateCode,
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     return bad("Некорректный запрос");
   }
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = clientIp(request);
   if (!allowAttempt(`resend:${ip ?? "?"}`, 3, 5 * 60 * 1000)) {
     return bad("Слишком часто — подождите пару минут", 429);
   }

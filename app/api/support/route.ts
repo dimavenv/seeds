@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp } from "@/lib/client-ip";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/pb/shared";
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = clientIp(request);
   if (!(await verifyCaptcha(body.captchaToken, ip))) {
     return NextResponse.json(
       { error: "Подтвердите, что вы не робот" },
