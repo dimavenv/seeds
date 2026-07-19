@@ -3,7 +3,7 @@ import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
 import { isValidRecordId } from "@/lib/data";
-import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
+import { deliveryCostFor, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
@@ -120,7 +120,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Товары не найдены" }, { status: 400 });
     }
 
-    const total = lines.reduce((s, l) => s + l.price * l.qty, 0) + DELIVERY_COST;
+    const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
+    // Стоимость доставки считаем НА СЕРВЕРЕ по тем же правилам, что и на
+    // странице оформления (Почта России бесплатно от порога) — клиенту не доверяем.
+    const deliveryCost = deliveryCostFor(delivery_method, subtotal);
+    const total = subtotal + deliveryCost;
 
     // Создание заказа: до 3 попыток на случай гонки за номер.
     let order: { id: string; number: number } | null = null;
@@ -136,7 +140,7 @@ export async function POST(request: Request) {
           address: encryptField(address.trim()),
           comment: comment?.trim() || "",
           delivery_method,
-          delivery_cost: DELIVERY_COST,
+          delivery_cost: deliveryCost,
           total,
           status: "new",
           payment_status: "unpaid",
@@ -228,7 +232,7 @@ export async function POST(request: Request) {
       void mailOrderPlaced(
         { to: email.trim(), number: order.number, name: customer_name.trim() },
         lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
-        { total, deliveryCost: DELIVERY_COST, deliveryMethod: delivery_method }
+        { total, deliveryCost, deliveryMethod: delivery_method }
       ).catch(() => {});
     }
 

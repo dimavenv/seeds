@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
-import { DELIVERY_COST } from "@/lib/delivery";
+import { DELIVERY_COST, FREE_DELIVERY_FROM } from "@/lib/delivery";
 import { CartIcon } from "@/components/icons";
 
 export default function CartPage() {
@@ -109,6 +109,18 @@ export default function CartPage() {
             <span>Доставка</span>
             <span>{formatPrice(DELIVERY_COST)}</span>
           </div>
+          {cartTotal >= FREE_DELIVERY_FROM ? (
+            <p className="mt-2 rounded-xl bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-600">
+              🎉 Почтой России доставка для вас бесплатна — выберите её при
+              оформлении, и сумма уменьшится на {formatPrice(DELIVERY_COST)}.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-brand-400">
+              Почтой России — бесплатно при заказе от{" "}
+              {formatPrice(FREE_DELIVERY_FROM)} (осталось{" "}
+              {formatPrice(FREE_DELIVERY_FROM - cartTotal)}).
+            </p>
+          )}
           <div className="mt-4 flex justify-between border-t border-brand-100 pt-4 text-lg font-extrabold text-brand-800">
             <span>К оплате</span>
             <span>{formatPrice(cartTotal + DELIVERY_COST)}</span>

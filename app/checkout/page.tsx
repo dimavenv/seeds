@@ -7,9 +7,11 @@ import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
 import {
   DELIVERY_COST,
-  DELIVERY_METHODS,
+  FREE_DELIVERY_FROM,
+  deliveryCostFor,
   type DeliveryMethodId,
 } from "@/lib/delivery";
+import DeliveryMethodCards from "@/components/delivery-method-cards";
 import {
   secureGet,
   secureSet,
@@ -63,7 +65,10 @@ export default function CheckoutPage() {
   const [remember, setRemember] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaReset, setCaptchaReset] = useState(0);
-  const grandTotal = cartTotal + DELIVERY_COST;
+  // Стоимость доставки зависит от способа: Почтой России — бесплатно от
+  // FREE_DELIVERY_FROM, Ozon — всегда DELIVERY_COST.
+  const deliveryCost = deliveryCostFor(deliveryMethod, cartTotal);
+  const grandTotal = cartTotal + deliveryCost;
 
   // Подставить сохранённые («Запомнить меня») данные при загрузке.
   useEffect(() => {
@@ -218,40 +223,11 @@ export default function CheckoutPage() {
             <legend className="text-base font-bold text-brand-800">
               Способ доставки
             </legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {DELIVERY_METHODS.map((m) => (
-                <label
-                  key={m.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition ${
-                    deliveryMethod === m.id
-                      ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
-                      : "border-brand-200 hover:bg-brand-50/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="delivery_method"
-                    value={m.id}
-                    checked={deliveryMethod === m.id}
-                    onChange={() => setDeliveryMethod(m.id)}
-                    className="mt-0.5 accent-brand-600"
-                  />
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className="font-semibold text-brand-800">
-                        {m.label}
-                      </span>
-                      <span className="text-sm text-brand-500">
-                        · {formatPrice(DELIVERY_COST)}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block text-xs text-brand-500">
-                      {m.hint}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
+            <DeliveryMethodCards
+              value={deliveryMethod}
+              subtotal={cartTotal}
+              onChange={setDeliveryMethod}
+            />
           </fieldset>
 
           {/* 2. Получатель */}
@@ -318,7 +294,8 @@ export default function CheckoutPage() {
           </label>
           <p className="text-xs text-brand-500">
             Оплата при получении. Доставка Ozon или Почтой России —{" "}
-            {formatPrice(DELIVERY_COST)} по всей России.
+            {formatPrice(DELIVERY_COST)} по всей России; Почтой России —
+            бесплатно при заказе от {formatPrice(FREE_DELIVERY_FROM)}.
           </p>
           {error && (
             <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
@@ -348,7 +325,11 @@ export default function CheckoutPage() {
             </div>
             <div className="flex justify-between">
               <span>Доставка</span>
-              <span>{formatPrice(DELIVERY_COST)}</span>
+              {deliveryCost === 0 ? (
+                <span className="font-semibold text-brand-600">бесплатно</span>
+              ) : (
+                <span>{formatPrice(deliveryCost)}</span>
+              )}
             </div>
           </div>
           <div className="mt-3 flex justify-between border-t border-brand-100 pt-3 text-lg font-extrabold text-brand-800">

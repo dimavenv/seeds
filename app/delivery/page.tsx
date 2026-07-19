@@ -142,11 +142,11 @@ export default function DeliveryPage() {
             </div>
             <div>
               <h3 className="font-bold text-brand-800">
-                Фиксированно — 300 ₽
+                300 ₽, от 3000 ₽ — бесплатно
               </h3>
               <p className="mt-1 text-[15px] leading-relaxed text-brand-600">
-                Единая стоимость для любого способа — как через Ozon, так и
-                Почтой России.
+                Доставка Ozon и Почтой России — 300 ₽. Почтой России при
+                заказе от 3000 ₽ — бесплатно.
               </p>
             </div>
           </div>
