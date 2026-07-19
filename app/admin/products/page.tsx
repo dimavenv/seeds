@@ -1,21 +1,25 @@
 import { createServerPb } from "@/lib/pb/server";
-import { mapProduct } from "@/lib/pb/shared";
+import { mapCategory, mapProduct } from "@/lib/pb/shared";
 import ProductsTable from "@/components/admin/products-table";
-import type { Product } from "@/lib/types";
+import type { Category, Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminProducts() {
   const pb = createServerPb();
   let products: Product[] = [];
+  let categories: Category[] = [];
   try {
-    const list = await pb
-      .collection("products")
-      .getFullList({ sort: "-created" });
+    const [list, cats] = await Promise.all([
+      pb.collection("products").getFullList({ sort: "-created" }),
+      pb.collection("categories").getFullList({ sort: "sort_order" }),
+    ]);
     products = list.map(mapProduct);
+    categories = cats.map(mapCategory);
   } catch {
     products = [];
+    categories = [];
   }
 
-  return <ProductsTable products={products} />;
+  return <ProductsTable products={products} categories={categories} />;
 }

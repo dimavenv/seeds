@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
+import { DELIVERY_COST } from "@/lib/delivery";
 import { CartIcon } from "@/components/icons";
 
 export default function CartPage() {
@@ -106,11 +107,11 @@ export default function CartPage() {
           </div>
           <div className="mt-2 flex justify-between text-sm text-brand-500">
             <span>Доставка</span>
-            <span>рассчитывается при оформлении</span>
+            <span>{formatPrice(DELIVERY_COST)}</span>
           </div>
           <div className="mt-4 flex justify-between border-t border-brand-100 pt-4 text-lg font-extrabold text-brand-800">
             <span>К оплате</span>
-            <span>{formatPrice(cartTotal)}</span>
+            <span>{formatPrice(cartTotal + DELIVERY_COST)}</span>
           </div>
           <Link href="/checkout" className="btn-accent mt-5 w-full">
             Оформить заказ

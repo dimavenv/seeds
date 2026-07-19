@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateProductInline, deleteProduct } from "@/app/admin/actions";
 import { formatPrice } from "@/lib/format";
-import type { Product } from "@/lib/types";
+import { getCategoryEmoji } from "@/lib/categories";
+import type { Category, Product } from "@/lib/types";
 
 type Tab = "on_sale" | "ready";
 
@@ -78,6 +79,14 @@ function InlineNumber({
   );
 }
 
+// Чип фильтра по категории — в том же стиле, что CategoryNav в каталоге.
+const catChip = (active: boolean) =>
+  `whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition ${
+    active
+      ? "bg-brand-600 text-white"
+      : "bg-brand-50 text-brand-700 hover:bg-brand-100"
+  }`;
+
 function StatusPill({ inStock }: { inStock: boolean }) {
   return inStock ? (
     <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
@@ -90,9 +99,16 @@ function StatusPill({ inStock }: { inStock: boolean }) {
   );
 }
 
-export default function ProductsTable({ products }: { products: Product[] }) {
+export default function ProductsTable({
+  products,
+  categories,
+}: {
+  products: Product[];
+  categories: Category[];
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("on_sale");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [, startTransition] = useTransition();
 
@@ -103,13 +119,14 @@ export default function ProductsTable({ products }: { products: Product[] }) {
     const q = query.trim().toLowerCase();
     return products.filter((p) => {
       const matchTab = tab === "on_sale" ? p.stock > 0 : p.stock <= 0;
+      const matchCategory = !categoryId || p.category_id === categoryId;
       const matchQuery =
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.slug.toLowerCase().includes(q);
-      return matchTab && matchQuery;
+      return matchTab && matchCategory && matchQuery;
     });
-  }, [products, tab, query]);
+  }, [products, tab, categoryId, query]);
 
   async function saveField(id: string, fields: { price?: number; stock?: number }) {
     await updateProductInline(id, fields);
@@ -155,6 +172,29 @@ export default function ProductsTable({ products }: { products: Product[] }) {
           </button>
         ))}
       </div>
+
+      {/* Категории — те же чипы, что и в каталоге */}
+      {categories.length > 0 && (
+        <nav className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setCategoryId(null)}
+            className={catChip(!categoryId)}
+          >
+            🌱 Все семена
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoryId(c.id)}
+              className={catChip(categoryId === c.id)}
+            >
+              {getCategoryEmoji(c.slug)} {c.name}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {/* Поиск */}
       <div className="mb-4">
@@ -234,6 +274,8 @@ export default function ProductsTable({ products }: { products: Product[] }) {
                 <td colSpan={6} className="p-6 text-center text-brand-500">
                   {query
                     ? "Ничего не найдено."
+                    : categoryId
+                    ? "В этой категории таких товаров нет."
                     : tab === "ready"
                     ? "Нет товаров, ожидающих пополнения."
                     : "Нет товаров в продаже."}
