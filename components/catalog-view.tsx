@@ -11,6 +11,15 @@ export type CatalogSearchParams = {
 
 const SORT_VALUES = ["new", "price_asc", "price_desc", "name"] as const;
 
+// Цена из query-строки: только конечное неотрицательное число, иначе фильтр
+// не применяем. Раньше ?min=abc давал NaN → запрос к PocketBase падал → сайт
+// показывал ДЕМО-товары вместо реального каталога.
+function parsePrice(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 export default async function CatalogView({
   title,
   categorySlug,
@@ -29,8 +38,8 @@ export default async function CatalogView({
       categorySlug,
       q: searchParams.q?.trim() || undefined,
       sort,
-      minPrice: searchParams.min ? Number(searchParams.min) : undefined,
-      maxPrice: searchParams.max ? Number(searchParams.max) : undefined,
+      minPrice: parsePrice(searchParams.min),
+      maxPrice: parsePrice(searchParams.max),
     }),
     getCategories(),
   ]);
