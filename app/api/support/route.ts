@@ -47,16 +47,20 @@ export async function POST(request: Request) {
     );
   }
 
+  // Формальные проверки — ДО капчи: токен капчи одноразовый, и тратить его
+  // на заявку с заведомо некорректной почтой нельзя (повторная отправка
+  // формы иначе требует новой капчи).
+  if (!EMAIL_RE.test(email)) {
+    return NextResponse.json(
+      { error: "Укажите корректный email для ответа" },
+      { status: 400 }
+    );
+  }
+
   const ip = clientIp(request);
   if (!(await verifyCaptcha(body.captchaToken, ip))) {
     return NextResponse.json(
       { error: "Подтвердите, что вы не робот" },
-      { status: 400 }
-    );
-  }
-  if (!EMAIL_RE.test(email)) {
-    return NextResponse.json(
-      { error: "Укажите корректный email для ответа" },
       { status: 400 }
     );
   }

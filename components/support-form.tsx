@@ -13,9 +13,17 @@ export default function SupportForm() {
   });
   const [consent, setConsent] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  // Токен капчи одноразовый: после неудачной отправки сбрасываем виджет,
+  // иначе повторная попытка невозможна без перезагрузки страницы.
+  function resetCaptcha() {
+    setCaptchaToken("");
+    setCaptchaReset((n) => n + 1);
+  }
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -44,12 +52,14 @@ export default function SupportForm() {
       if (!res.ok) {
         setError(data.error ?? "Не удалось отправить заявку");
         setSubmitting(false);
+        resetCaptcha();
         return;
       }
       setDone(true);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setSubmitting(false);
+      resetCaptcha();
     }
   }
 
@@ -97,13 +107,17 @@ export default function SupportForm() {
         <textarea required value={form.message} onChange={update("message")} className="input min-h-32" placeholder="Опишите ваш вопрос подробнее" />
       </label>
       <ConsentCheckbox checked={consent} onChange={setConsent} />
-      <SmartCaptcha onToken={setCaptchaToken} />
+      <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
       {error && (
         <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
           {error}
         </p>
       )}
-      <button type="submit" disabled={submitting || !consent} className="btn-accent w-full sm:w-auto">
+      <button
+        type="submit"
+        disabled={submitting || !consent || (captchaEnabled && !captchaToken)}
+        className="btn-accent w-full sm:w-auto"
+      >
         {submitting ? "Отправляем…" : "Отправить вопрос"}
       </button>
     </form>
