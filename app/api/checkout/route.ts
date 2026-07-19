@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
-import { isValidRecordId } from "@/lib/data";
+import { normalizeCheckoutItems, findStockIssues } from "@/lib/checkout";
+import { adjustStock } from "@/lib/stock";
 import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
@@ -55,9 +56,8 @@ export async function POST(request: Request) {
 
   const { customer_name, phone, address, email, comment } = body;
   const delivery_method = normalizeDeliveryMethod(body.delivery_method);
-  const items = (body.items ?? []).filter(
-    (i) => isValidRecordId(i.id) && Number.isFinite(i.qty) && i.qty > 0
-  );
+  // Целые количества, потолок на позицию и на число позиций, дубли слиты.
+  const items = normalizeCheckoutItems(body.items);
 
   if (!customer_name?.trim() || !phone?.trim() || !address?.trim()) {
     return NextResponse.json(
@@ -112,12 +112,35 @@ export async function POST(request: Request) {
       .map((i) => {
         const p = priceList.find((x) => x.id === i.id);
         if (!p) return null;
-        return { product: p.id, name: p.name, price: p.price, qty: i.qty };
+        return { product: p.id, name: p.name, price: p.price, qty: i.qty, stock: p.stock };
       })
-      .filter(Boolean) as { product: string; name: string; price: number; qty: number }[];
+      .filter(Boolean) as {
+      product: string;
+      name: string;
+      price: number;
+      qty: number;
+      stock: number;
+    }[];
 
     if (lines.length === 0) {
       return NextResponse.json({ error: "Товары не найдены" }, { status: 400 });
+    }
+
+    // Проверка наличия по свежим данным БД — количество в корзине могло
+    // устареть, а без проверки магазин продаёт больше, чем есть на складе.
+    const shortages = findStockIssues(lines);
+    if (shortages.length > 0) {
+      const detail = shortages
+        .map((s) =>
+          s.stock > 0
+            ? `«${s.name}» — в наличии только ${s.stock} шт.`
+            : `«${s.name}» — нет в наличии`
+        )
+        .join("; ");
+      return NextResponse.json(
+        { error: `Недостаточно товара: ${detail}. Обновите количество в корзине.` },
+        { status: 409 }
+      );
     }
 
     const total = lines.reduce((s, l) => s + l.price * l.qty, 0) + DELIVERY_COST;
@@ -154,7 +177,13 @@ export async function POST(request: Request) {
 
     try {
       for (const l of lines) {
-        await pb.collection("order_items").create({ ...l, order: order.id });
+        await pb.collection("order_items").create({
+          order: order.id,
+          product: l.product,
+          name: l.name,
+          price: l.price,
+          qty: l.qty,
+        });
       }
     } catch {
       // Состав не сохранился — откатываем заказ, чтобы не осталось «пустышки».
@@ -164,6 +193,11 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+
+    // Заказ с составом создан — резервируем товар (списываем остатки).
+    // При откате заказа ниже (или при неуспешной оплате в callback) остатки
+    // возвращаются обратно.
+    await adjustStock(pb, lines.map((l) => ({ productId: l.product, delta: -l.qty })));
 
     // Онлайн-оплата (если подключён Альфа-Банк). Если платёж создать не
     // удалось — заказ УДАЛЯЕТСЯ, а покупателю возвращается ошибка: корзина у
@@ -203,10 +237,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ id: order.number, total, formUrl: reg.formUrl });
       }
 
-      // Платёж не создался — откатываем заказ целиком, корзина у покупателя цела.
+      // Платёж не создался — откатываем заказ целиком, корзина у покупателя
+      // цела, зарезервированный товар возвращаем на склад.
       if (reg?.errorMessage) {
         console.error(`[checkout] заказ №${order.number}: банк отказал — ${reg.errorMessage}`);
       }
+      await adjustStock(pb, lines.map((l) => ({ productId: l.product, delta: l.qty })));
       for (const l of await pb
         .collection("order_items")
         .getFullList({ filter: pb.filter("order = {:id}", { id: order.id }), fields: "id" })

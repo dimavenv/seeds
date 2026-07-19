@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { pbAdmin } from "@/lib/pb/server";
 import { decryptField } from "@/lib/crypto";
+import { restockOrderItems } from "@/lib/stock";
 import { mailPayment } from "@/lib/order-mail";
 
 export const dynamic = "force-dynamic";
@@ -61,10 +62,9 @@ export async function GET(req: Request) {
         // работу или который был оплачен, не трогаем.
         const prev = await pb.collection("orders").getOne(orderNumber);
         if (prev.status === "new" && (prev.payment_status === "pending" || prev.payment_status === "unpaid")) {
-          for (const l of await pb
-            .collection("order_items")
-            .getFullList({ filter: pb.filter("order = {:id}", { id: orderNumber }), fields: "id" })
-            .catch(() => [] as { id: string }[])) {
+          // Зарезервированный при оформлении товар возвращаем на склад.
+          const itemIds = await restockOrderItems(pb, orderNumber);
+          for (const l of itemIds) {
             await pb.collection("order_items").delete(l.id).catch(() => {});
           }
           await pb.collection("orders").delete(orderNumber);
