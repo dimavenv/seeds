@@ -199,8 +199,10 @@ export default function RegisterPage() {
             <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" placeholder="you@yandex.ru" />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-brand-700">Пароль</span>
-            <input required minLength={6} type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
+            <span className="mb-1 block text-sm font-semibold text-brand-700">
+              Пароль <span className="font-normal text-brand-400">(минимум 8 символов)</span>
+            </span>
+            <input required minLength={8} type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
           </label>
 
           <SmartCaptcha onToken={setCaptchaToken} />

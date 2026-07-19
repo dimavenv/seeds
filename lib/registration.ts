@@ -17,8 +17,11 @@ export function parseRegInput(body: Record<string, unknown>): {
   const name = String(body.name ?? "").trim().slice(0, 100);
 
   let error: string | null = null;
+  // Минимум 8 символов — как в схеме PocketBase (поле password, min 8).
+  // При меньшем лимите пользователь проходил капчу и код из письма, а падал
+  // только на создании аккаунта с невнятной ошибкой.
   if (!email || !password) error = "Заполните email и пароль";
-  else if (password.length < 6) error = "Пароль минимум 6 символов";
+  else if (password.length < 8) error = "Пароль минимум 8 символов";
   else if (!isRussianEmail(email)) error = RU_EMAIL_HINT;
 
   return { input: { email, password, name }, error };
