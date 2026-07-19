@@ -23,7 +23,9 @@ export async function POST(request: Request) {
 
   const author_name = body.author_name?.trim();
   const text = body.text?.trim();
-  const rating = Number(body.rating);
+  // Поле rating в PocketBase целочисленное — дробное значение (например 4.5)
+  // раньше проходило проверку 1–5, но падало на записи с невнятной 503.
+  const rating = Math.round(Number(body.rating));
   const source = body.source?.trim() || "";
   // Дата отзыва (для перенесённых с Ozon и т.п.) — хранится в published_at.
   const publishedAt = body.created_at ? new Date(body.created_at) : new Date();

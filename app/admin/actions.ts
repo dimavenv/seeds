@@ -73,7 +73,7 @@ export async function saveProduct(
   const rawId = String(formData.get("id") ?? "");
   const id = isValidRecordId(rawId) ? rawId : null;
   const name = String(formData.get("name") ?? "").trim();
-  const price = Number(formData.get("price") ?? 0);
+  const price = Number(String(formData.get("price") ?? "").replace(",", "."));
   const rawCategory = String(formData.get("category_id") ?? "");
   const categoryId = isValidRecordId(rawCategory) ? rawCategory : "";
   const description = String(formData.get("description") ?? "").trim();
@@ -96,6 +96,17 @@ export async function saveProduct(
   let slug = String(formData.get("slug") ?? "").trim();
 
   if (!name) return { error: "Укажите название" };
+  // Числа проверяем явно: NaN/отрицательное раньше уходило в PocketBase как
+  // есть (NaN сериализуется в null) и молча обнуляло цену или остаток.
+  if (!Number.isFinite(price) || price < 0) {
+    return { error: "Укажите корректную цену (число не меньше 0)" };
+  }
+  if (!Number.isFinite(stock) || stock < 0) {
+    return { error: "Некорректный остаток" };
+  }
+  if (!Number.isFinite(seedsPerPack) || seedsPerPack < 0) {
+    return { error: "Некорректное число семян в пакетике" };
+  }
   if (!slug) slug = slugify(name) || `tovar-${Date.now()}`;
 
   const payload = {
@@ -106,8 +117,9 @@ export async function saveProduct(
     description,
     image_url: imageUrl,
     images,
-    stock,
-    seeds_per_pack: seedsPerPack,
+    // В схеме PocketBase эти поля целочисленные (onlyInt).
+    stock: Math.round(stock),
+    seeds_per_pack: Math.round(seedsPerPack),
     is_new: isNew,
     is_featured: isFeatured,
   };
