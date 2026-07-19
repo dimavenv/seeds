@@ -10,6 +10,7 @@ import {
 } from "react";
 import { getPb } from "@/lib/pb/client";
 import { MAX_QTY_PER_ITEM } from "@/lib/checkout";
+import { mergeCarts, sanitizeCartItems } from "@/lib/cart-merge";
 import type { CartItem, Product } from "@/lib/types";
 
 const CART_KEY = "sc_cart";
@@ -48,24 +49,6 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-// ID теперь строковые (PocketBase). Отбрасываем старые числовые id из
-// localStorage, оставшиеся после переезда с Supabase, — они больше не находятся.
-function onlyStringIds(items: CartItem[]): CartItem[] {
-  return items.filter((i) => typeof i.id === "string");
-}
-
-// Слить локальную и серверную корзины: объединяем по id, количество — большее.
-function mergeCarts(a: CartItem[], b: CartItem[]): CartItem[] {
-  const map = new Map<string, CartItem>();
-  for (const it of a) map.set(it.id, { ...it });
-  for (const it of b) {
-    const ex = map.get(it.id);
-    if (ex) ex.qty = Math.max(ex.qty, it.qty);
-    else map.set(it.id, { ...it });
-  }
-  return Array.from(map.values());
-}
-
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
@@ -80,7 +63,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // 1) Мгновенная загрузка из localStorage.
   useEffect(() => {
-    setCart(onlyStringIds(read<CartItem[]>(CART_KEY, [])));
+    setCart(sanitizeCartItems(read<CartItem[]>(CART_KEY, [])));
     setWishlist(read<unknown[]>(WISH_KEY, []).filter(
       (x): x is string => typeof x === "string"
     ));
@@ -116,9 +99,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         record = null; // записи ещё нет
       }
       if (!active) return;
-      const serverCart = onlyStringIds(
-        Array.isArray(record?.cart) ? (record!.cart as CartItem[]) : []
-      );
+      const serverCart = sanitizeCartItems(record?.cart);
       const serverWish = (Array.isArray(record?.wishlist) ? record!.wishlist : []
       ).filter((x): x is string => typeof x === "string");
       setStoreRecordId(record?.id ?? null);

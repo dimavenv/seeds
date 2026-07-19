@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { pbAdmin } from "@/lib/pb/server";
 import { decryptField } from "@/lib/crypto";
 import { restockOrderItems } from "@/lib/stock";
+import { restoreUserCart } from "@/lib/user-cart";
 import { mailPayment } from "@/lib/order-mail";
 
 export const dynamic = "force-dynamic";
@@ -63,8 +64,15 @@ export async function GET(req: Request) {
         const prev = await pb.collection("orders").getOne(orderNumber);
         if (prev.status === "new" && (prev.payment_status === "pending" || prev.payment_status === "unpaid")) {
           // Зарезервированный при оформлении товар возвращаем на склад.
-          const itemIds = await restockOrderItems(pb, orderNumber);
-          for (const l of itemIds) {
+          const items = await restockOrderItems(pb, orderNumber);
+          // Вошедшему покупателю возвращаем состав заказа в серверную
+          // корзину (user_store): если он успел побывать на ?paid=1, его
+          // корзина уже очищена — пусть товары не пропадают. У гостя корзина
+          // в localStorage и в этом сценарии сервером недостижима.
+          if (typeof prev.user === "string" && prev.user) {
+            await restoreUserCart(pb, prev.user, items);
+          }
+          for (const l of items) {
             await pb.collection("order_items").delete(l.id).catch(() => {});
           }
           await pb.collection("orders").delete(orderNumber);

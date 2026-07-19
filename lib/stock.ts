@@ -26,11 +26,14 @@ export async function adjustStock(
 }
 
 // Вернуть на склад состав заказа (перед удалением «несостоявшегося» заказа).
-// Возвращает записи состава — их же можно использовать для удаления.
+// Возвращает записи состава (id, товар, количество) — по ним же callback
+// удаляет позиции и восстанавливает корзину покупателя.
+export type RestockedItem = { id: string; product: string | null; qty: number };
+
 export async function restockOrderItems(
   pb: PocketBase,
   orderId: string
-): Promise<{ id: string }[]> {
+): Promise<RestockedItem[]> {
   const items = await pb
     .collection("order_items")
     .getFullList({
@@ -44,5 +47,9 @@ export async function restockOrderItems(
       .filter((i) => typeof i.product === "string" && i.product)
       .map((i) => ({ productId: String(i.product), delta: Number(i.qty) || 0 }))
   );
-  return items.map((i) => ({ id: i.id }));
+  return items.map((i) => ({
+    id: i.id,
+    product: typeof i.product === "string" && i.product ? i.product : null,
+    qty: Number(i.qty) || 0,
+  }));
 }
