@@ -13,8 +13,16 @@ function readDeliveryCost(): number {
 export const DELIVERY_COST = readDeliveryCost();
 
 export const DELIVERY_METHODS = [
-  { id: "ozon", label: "Ozon" },
-  { id: "post", label: "Почта России" },
+  {
+    id: "ozon",
+    label: "Ozon",
+    hint: "В пункт выдачи Ozon — быстро и удобно",
+  },
+  {
+    id: "post",
+    label: "Почта России",
+    hint: "Доставка на ваш домашний адрес",
+  },
 ] as const;
 
 export type DeliveryMethodId = (typeof DELIVERY_METHODS)[number]["id"];

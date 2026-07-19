@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { suggestAddress, hasDadata, type DadataSuggestion } from "@/lib/dadata";
+import AddressSuggestInput, {
+  FieldLabel,
+} from "@/components/address-suggest-input";
 
-// Структурированный адрес доставки. Собирается в строку на стороне checkout.
+// Структурированный адрес доставки (Почта России). Собирается в строку на
+// стороне checkout. Однострочный ПВЗ Ozon живёт в отдельном компоненте.
 export type AddressValue = {
   postal_code: string;
   region: string;
@@ -21,25 +26,7 @@ export const emptyAddress: AddressValue = {
   flat: "",
 };
 
-// Ответ DaData (suggestions API). Берём только нужные поля.
-type DadataData = {
-  postal_code: string | null;
-  region_with_type: string | null;
-  city_with_type: string | null;
-  settlement_with_type: string | null;
-  street_with_type: string | null;
-  house: string | null;
-  city_fias_id: string | null;
-  settlement_fias_id: string | null;
-  street_fias_id: string | null;
-};
-type DadataSuggestion = { value: string; data: DadataData };
-
-const TOKEN = process.env.NEXT_PUBLIC_DADATA_TOKEN;
-const SUGGEST_URL =
-  "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address";
-
-// Какие поля поддерживают подсказки и как ограничивать выдачу DaData.
+// Уровни, на которых подсказки ограничивают выдачу DaData.
 type Level = "city" | "street" | "house";
 
 // Определить индекс по свободно введённому адресу (когда подсказку не выбирали).
@@ -47,24 +34,8 @@ async function fetchAddressZip(
   query: string,
   signal?: AbortSignal
 ): Promise<string | null> {
-  if (!TOKEN) return null;
-  try {
-    const res = await fetch(SUGGEST_URL, {
-      method: "POST",
-      signal,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Token ${TOKEN}`,
-      },
-      body: JSON.stringify({ query, count: 1 }),
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { suggestions?: DadataSuggestion[] };
-    return json.suggestions?.[0]?.data.postal_code ?? null;
-  } catch {
-    return null;
-  }
+  const list = await suggestAddress({ query, count: 1, signal });
+  return list[0]?.data.postal_code ?? null;
 }
 
 export default function DadataAddress({
@@ -115,7 +86,7 @@ export default function DadataAddress({
   // Автоопределение индекса при ручном вводе адреса (без выбора подсказки):
   // как только заполнены Город+Улица+Дом, запрашиваем индекс по полному адресу.
   useEffect(() => {
-    if (!TOKEN) return;
+    if (!hasDadata) return;
     const city = value.city.trim();
     const street = value.street.trim();
     const house = value.house.trim();
@@ -149,10 +120,9 @@ export default function DadataAddress({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <SuggestField
+      <AddressSuggestInput
         label="Город / населённый пункт"
         required
-        level="city"
         fromBound="city"
         toBound="settlement"
         locations={locationsFor("city")}
@@ -169,10 +139,9 @@ export default function DadataAddress({
         placeholder="Московская обл."
         className="sm:col-span-2"
       />
-      <SuggestField
+      <AddressSuggestInput
         label="Улица"
         required
-        level="street"
         fromBound="street"
         toBound="street"
         locations={locationsFor("street")}
@@ -182,10 +151,9 @@ export default function DadataAddress({
         placeholder="ул. Ленина"
         className="sm:col-span-2"
       />
-      <SuggestField
+      <AddressSuggestInput
         label="Дом"
         required
-        level="house"
         fromBound="house"
         toBound="house"
         locations={locationsFor("house")}
@@ -219,20 +187,6 @@ export default function DadataAddress({
   );
 }
 
-function FieldLabel({
-  label,
-  required,
-}: {
-  label: string;
-  required?: boolean;
-}) {
-  return (
-    <span className="mb-1 block text-sm font-semibold text-brand-700">
-      {label} {required && "*"}
-    </span>
-  );
-}
-
 // Обычное поле без подсказок (Регион, Квартира, Индекс).
 function PlainField({
   label,
@@ -263,158 +217,5 @@ function PlainField({
         inputMode={inputMode}
       />
     </label>
-  );
-}
-
-// Поле с подсказками DaData. Если токена/уровня нет — ведёт себя как обычное.
-function SuggestField({
-  label,
-  value,
-  onChange,
-  onPick,
-  level,
-  fromBound,
-  toBound,
-  locations,
-  placeholder,
-  className,
-  required,
-  inputMode,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  onPick?: (s: DadataSuggestion) => void;
-  level?: Level;
-  fromBound?: string;
-  toBound?: string;
-  locations?: object[];
-  placeholder?: string;
-  className?: string;
-  required?: boolean;
-  inputMode?: "numeric" | "text";
-}) {
-  const [items, setItems] = useState<DadataSuggestion[]>([]);
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(-1);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const canSuggest = Boolean(TOKEN && level && onPick);
-
-  // Закрытие выпадашки по клику вне поля.
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
-
-  // Запрос подсказок с дебаунсом.
-  useEffect(() => {
-    if (!canSuggest || !value.trim() || value.trim().length < 2) {
-      setItems([]);
-      return;
-    }
-    const t = setTimeout(async () => {
-      abortRef.current?.abort();
-      const ctrl = new AbortController();
-      abortRef.current = ctrl;
-      try {
-        const res = await fetch(SUGGEST_URL, {
-          method: "POST",
-          signal: ctrl.signal,
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Token ${TOKEN}`,
-          },
-          body: JSON.stringify({
-            query: value,
-            count: 7,
-            from_bound: fromBound ? { value: fromBound } : undefined,
-            to_bound: toBound ? { value: toBound } : undefined,
-            locations: locations,
-            restrict_value: Boolean(locations),
-          }),
-        });
-        if (!res.ok) return;
-        const json = (await res.json()) as { suggestions?: DadataSuggestion[] };
-        setItems(json.suggestions ?? []);
-        setActive(-1);
-      } catch {
-        /* отменённый/сетевой запрос — игнорируем */
-      }
-    }, 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, canSuggest]);
-
-  function pick(s: DadataSuggestion) {
-    onPick?.(s);
-    setOpen(false);
-    setItems([]);
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (!open || items.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActive((i) => Math.min(i + 1, items.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActive((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && active >= 0) {
-      e.preventDefault();
-      pick(items[active]);
-    } else if (e.key === "Escape") {
-      setOpen(false);
-    }
-  }
-
-  return (
-    <div ref={boxRef} className={`relative block ${className ?? ""}`}>
-      <FieldLabel label={label} required={required} />
-      <input
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        className="input"
-        placeholder={placeholder}
-        required={required}
-        inputMode={inputMode}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={open && items.length > 0}
-      />
-      {canSuggest && open && items.length > 0 && (
-        <ul
-          role="listbox"
-          className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-brand-200 bg-surface py-1 shadow-lg"
-        >
-          {items.map((s, i) => (
-            <li key={`${s.value}-${i}`} role="option" aria-selected={i === active}>
-              <button
-                type="button"
-                onMouseEnter={() => setActive(i)}
-                onClick={() => pick(s)}
-                className={`block w-full px-4 py-2 text-left text-sm ${
-                  i === active ? "bg-brand-50 text-brand-800" : "text-brand-700"
-                }`}
-              >
-                {s.value}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }

@@ -21,6 +21,9 @@ import DadataAddress, {
   emptyAddress,
   type AddressValue,
 } from "@/components/dadata-address";
+import OzonPvzField, {
+  type OzonPvzSelection,
+} from "@/components/ozon-pvz-field";
 
 const PROFILE_KEY = "checkout_profile";
 
@@ -34,6 +37,7 @@ type SavedProfile = {
     comment: string;
   };
   address: AddressValue;
+  pvz: OzonPvzSelection | null;
   deliveryMethod: DeliveryMethodId;
 };
 
@@ -53,6 +57,8 @@ export default function CheckoutPage() {
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
+  // Выбранный пункт выдачи Ozon (для способа доставки «Ozon»).
+  const [pvz, setPvz] = useState<OzonPvzSelection | null>(null);
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -66,6 +72,7 @@ export default function CheckoutPage() {
       if (cancelled || !saved) return;
       if (saved.form) setForm(saved.form);
       if (saved.address) setAddress(saved.address);
+      if (saved.pvz) setPvz(saved.pvz);
       if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
       setRemember(true);
     });
@@ -94,31 +101,43 @@ export default function CheckoutPage() {
       .filter(Boolean)
       .join(" ");
 
-    const missingAddress =
-      !address.postal_code.trim() ||
-      !address.city.trim() ||
-      !address.street.trim() ||
-      !address.house.trim();
-    if (missingAddress) {
-      setError("Заполните индекс, город, улицу и дом");
-      return;
+    // Адрес зависит от способа доставки: Ozon — одна строка (адрес ПВЗ),
+    // Почта — структурный адрес с индексом.
+    let addressStr: string;
+    if (deliveryMethod === "ozon") {
+      if (!pvz) {
+        setError("Выберите пункт выдачи Ozon на карте или в списке");
+        return;
+      }
+      addressStr = `Пункт выдачи Ozon [${pvz.code}]: ${pvz.address}`;
+    } else {
+      const missingAddress =
+        !address.postal_code.trim() ||
+        !address.city.trim() ||
+        !address.street.trim() ||
+        !address.house.trim();
+      if (missingAddress) {
+        setError("Заполните индекс, город, улицу и дом");
+        return;
+      }
+      // Улицу пишем как есть — подсказки DaData уже дают её с типом («ул Баумана»),
+      // повторный префикс «ул.» дал бы «ул. ул Баумана».
+      addressStr = [
+        address.postal_code.trim(),
+        address.region.trim(),
+        address.city.trim(),
+        address.street.trim(),
+        address.house.trim() && `д. ${address.house.trim()}`,
+        address.flat.trim() && `кв. ${address.flat.trim()}`,
+      ]
+        .filter(Boolean)
+        .join(", ");
     }
 
     if (captchaEnabled && !captchaToken) {
       setError("Подтвердите, что вы не робот");
       return;
     }
-
-    const addressStr = [
-      address.postal_code.trim(),
-      address.region.trim(),
-      address.city.trim(),
-      address.street.trim() && `ул. ${address.street.trim()}`,
-      address.house.trim() && `д. ${address.house.trim()}`,
-      address.flat.trim() && `кв. ${address.flat.trim()}`,
-    ]
-      .filter(Boolean)
-      .join(", ");
 
     setSubmitting(true);
     try {
@@ -147,7 +166,7 @@ export default function CheckoutPage() {
       }
       // «Запомнить меня»: сохранить зашифрованно или очистить.
       if (remember) {
-        secureSet(PROFILE_KEY, { form, address, deliveryMethod });
+        secureSet(PROFILE_KEY, { form, address, pvz, deliveryMethod });
       } else {
         secureClear(PROFILE_KEY);
       }
@@ -194,7 +213,48 @@ export default function CheckoutPage() {
           и страницу распирает вбок (у грид-элементов min-width: auto). */}
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
         <div className="card min-w-0 space-y-6 p-5 lg:col-span-2">
-          {/* ФИО */}
+          {/* 1. Способ доставки — выбираем первым, от него зависит адрес */}
+          <fieldset className="space-y-3">
+            <legend className="text-base font-bold text-brand-800">
+              Способ доставки
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {DELIVERY_METHODS.map((m) => (
+                <label
+                  key={m.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition ${
+                    deliveryMethod === m.id
+                      ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
+                      : "border-brand-200 hover:bg-brand-50/50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="delivery_method"
+                    value={m.id}
+                    checked={deliveryMethod === m.id}
+                    onChange={() => setDeliveryMethod(m.id)}
+                    className="mt-0.5 accent-brand-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold text-brand-800">
+                        {m.label}
+                      </span>
+                      <span className="text-sm text-brand-500">
+                        · {formatPrice(DELIVERY_COST)}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-xs text-brand-500">
+                      {m.hint}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {/* 2. Получатель */}
           <fieldset className="space-y-3">
             <legend className="text-base font-bold text-brand-800">
               Получатель
@@ -238,44 +298,16 @@ export default function CheckoutPage() {
             </div>
           </fieldset>
 
-          {/* Адрес доставки */}
+          {/* 3. Адрес — зависит от способа доставки */}
           <fieldset className="space-y-3">
             <legend className="text-base font-bold text-brand-800">
-              Адрес доставки
+              {deliveryMethod === "ozon" ? "Пункт выдачи" : "Адрес доставки"}
             </legend>
-            <DadataAddress value={address} onChange={setAddress} />
-          </fieldset>
-
-          {/* Способ доставки */}
-          <fieldset className="space-y-3">
-            <legend className="text-base font-bold text-brand-800">
-              Способ доставки
-            </legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {DELIVERY_METHODS.map((m) => (
-                <label
-                  key={m.id}
-                  className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 ${
-                    deliveryMethod === m.id
-                      ? "border-brand-600 bg-brand-50"
-                      : "border-brand-200 hover:bg-brand-50/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="delivery_method"
-                    value={m.id}
-                    checked={deliveryMethod === m.id}
-                    onChange={() => setDeliveryMethod(m.id)}
-                    className="accent-brand-600"
-                  />
-                  <span className="font-semibold text-brand-800">{m.label}</span>
-                  <span className="ml-auto text-sm text-brand-500">
-                    {formatPrice(DELIVERY_COST)}
-                  </span>
-                </label>
-              ))}
-            </div>
+            {deliveryMethod === "ozon" ? (
+              <OzonPvzField value={pvz} onChange={setPvz} />
+            ) : (
+              <DadataAddress value={address} onChange={setAddress} />
+            )}
           </fieldset>
 
           <label className="block">
@@ -344,7 +376,12 @@ export default function CheckoutPage() {
 
           <button
             type="submit"
-            disabled={submitting || !consent || (captchaEnabled && !captchaToken)}
+            disabled={
+              submitting ||
+              !consent ||
+              (captchaEnabled && !captchaToken) ||
+              (deliveryMethod === "ozon" && !pvz)
+            }
             className="btn-accent mt-5 w-full"
           >
             {submitting ? "Оформляем…" : "Подтвердить заказ"}
