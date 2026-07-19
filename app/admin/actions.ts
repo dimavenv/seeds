@@ -6,6 +6,7 @@ import { getSessionPb } from "@/lib/auth";
 import { isValidRecordId } from "@/lib/data";
 import { decryptField } from "@/lib/crypto";
 import { mailOrderStatus, mailPayment, mailTracking } from "@/lib/order-mail";
+import { adjustStockForOrder } from "@/lib/stock";
 import type { OrderStatus, ReviewStatus } from "@/lib/types";
 
 // Данные заказа для письма покупателю (почта хранится зашифрованной).
@@ -260,6 +261,11 @@ export async function refundOrder(
   }
 
   await pb.collection("orders").update(id, { payment_status: "refunded" }).catch(() => {});
+  // Заказ был оплачен (проверено выше) и списан со склада — возвращаем остаток.
+  // Callback банка о возврате продублировать это не сможет: статус уже refunded.
+  await adjustStockForOrder(pb, id, +1).catch((e) =>
+    console.error(`[stock] возврат ${id}: остаток не вернулся:`, e)
+  );
   const info = await orderMailInfo(id);
   if (info) {
     void mailPayment({ to: info.to, number: info.number, name: info.name }, "refunded").catch(

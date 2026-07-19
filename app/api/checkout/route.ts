@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
 import { isValidRecordId } from "@/lib/data";
 import { deliveryCostFor, normalizeDeliveryMethod } from "@/lib/delivery";
+import { adjustStockForOrder } from "@/lib/stock";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
@@ -283,6 +284,12 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
+
+    // Без онлайн-оплаты заказ оформлен окончательно прямо сейчас — списываем
+    // товар со склада сразу (момента «оплата прошла» у такого заказа нет).
+    await adjustStockForOrder(pb, order.id, -1).catch((e) =>
+      console.error(`[stock] заказ №${order.number}: не списалось:`, e)
+    );
 
     // Без онлайн-оплаты заказ оформлен сразу — шлём «заказ принят».
     if (email?.trim()) {

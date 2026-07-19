@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { pbAdmin } from "@/lib/pb/server";
 import { decryptField } from "@/lib/crypto";
 import { mailPayment } from "@/lib/order-mail";
+import { adjustStockForOrder } from "@/lib/stock";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,18 @@ export async function GET(req: Request) {
           const rec = await pb
             .collection("orders")
             .update(orderNumber, { payment_status: next });
+          // Остатки: оплата получена — списываем товар со склада; деньги
+          // вернулись по ОПЛАЧЕННОМУ заказу — возвращаем остаток. Повторные
+          // callback'и сюда не попадают (статус уже сменился выше).
+          if (next === "paid") {
+            await adjustStockForOrder(pb, orderNumber, -1).catch((e) =>
+              console.error(`[stock] заказ ${orderNumber}: не списалось:`, e)
+            );
+          } else if (next === "refunded" && prev.payment_status === "paid") {
+            await adjustStockForOrder(pb, orderNumber, +1).catch((e) =>
+              console.error(`[stock] заказ ${orderNumber}: не вернулось:`, e)
+            );
+          }
           // Чек по 54-ФЗ шлёт банк («Фискализация» в ЛК Альфы) — кассу здесь
           // вызывать не нужно. Письмо — только при реальной смене статуса
           // (Альфа может повторять callback; возврат из админки шлёт своё).
