@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { getPb } from "@/lib/pb/client";
+import ScrollToTop from "@/components/scroll-to-top";
 import type { CartItem, Product } from "@/lib/types";
 
 const CART_KEY = "sc_cart";
@@ -208,7 +209,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [cart, wishlist, ready]);
 
   return (
-    <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+    <StoreContext.Provider value={value}>
+      {children}
+      {/* Глобальная кнопка «наверх» — провайдер обёрнут вокруг всех страниц.
+          Монтируем здесь, а не в layout.tsx, чтобы не пересекаться с правками
+          layout в параллельных ветках. */}
+      <ScrollToTop />
+    </StoreContext.Provider>
   );
 }
 
