@@ -9,9 +9,6 @@ import {
 import { demoCategories, demoProducts } from "@/lib/demo-data";
 import type { Category, Product } from "@/lib/types";
 
-// Обратная совместимость со старым именем (использовалось до переезда на PB).
-export { isDbConfigured as isSupabaseConfigured };
-
 // Категории почти не меняются, но запрашиваются в футере на КАЖДОЙ странице.
 // Кэшируем на 10 минут, чтобы не дёргать базу на каждую загрузку.
 const getCategoriesCached = unstable_cache(

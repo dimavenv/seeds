@@ -14,10 +14,12 @@ type Tab = "on_sale" | "ready";
 function InlineNumber({
   value,
   suffix,
+  label,
   onSave,
 }: {
   value: number;
   suffix?: string;
+  label: string;
   onSave: (v: number) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -62,6 +64,7 @@ function InlineNumber({
       autoFocus
       type="number"
       min={0}
+      aria-label={label}
       value={draft}
       disabled={saving}
       onChange={(e) => setDraft(e.target.value)}
@@ -200,6 +203,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
                   <InlineNumber
                     value={p.price}
                     suffix="₽"
+                    label={`Цена: ${p.name}`}
                     onSave={(v) => saveField(p.id, { price: v })}
                   />
                 </td>
@@ -207,6 +211,7 @@ export default function ProductsTable({ products }: { products: Product[] }) {
                   <InlineNumber
                     value={p.stock}
                     suffix="шт"
+                    label={`Остаток: ${p.name}`}
                     onSave={(v) => saveField(p.id, { stock: v })}
                   />
                 </td>

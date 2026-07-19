@@ -9,6 +9,12 @@ import type { Review } from "@/lib/types";
 export const metadata: Metadata = { title: "Отзывы — Tomat Semena" };
 export const dynamic = "force-dynamic";
 
+// «на основе 1 отзыва / 5 отзывов / 21 отзыва» — прежний вариант давал
+// «21 отзывов» и содержал две одинаковые ветви тернарника.
+function reviewsWord(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? "отзыва" : "отзывов";
+}
+
 export default async function ReviewsPage() {
   let reviews: Review[] = [];
   if (isDbConfigured()) {
@@ -48,7 +54,7 @@ export default async function ReviewsPage() {
             <div className="text-5xl font-black text-brand-800">{avg}</div>
             <Stars value={Math.round(Number(avg))} className="mt-2 text-2xl" />
             <p className="mt-2 text-sm text-brand-500">
-              на основе {reviews.length} отзыв{reviews.length === 1 ? "а" : reviews.length < 5 ? "ов" : "ов"}
+              на основе {reviews.length} {reviewsWord(reviews.length)}
             </p>
             <div className="mt-4 w-full space-y-1.5">
               {dist.map(({ n, count }) => (
