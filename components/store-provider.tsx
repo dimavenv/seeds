@@ -9,11 +9,19 @@ import {
   type ReactNode,
 } from "react";
 import { getPb } from "@/lib/pb/client";
+import { MAX_QTY_PER_ITEM } from "@/lib/checkout";
 import type { CartItem, Product } from "@/lib/types";
 
 const CART_KEY = "sc_cart";
 const WISH_KEY = "sc_wishlist";
 const CONFIGURED = !!process.env.NEXT_PUBLIC_PB_URL;
+
+// Количество позиции: целое от 1 до потолка сервера (тот же лимит проверяет
+// /api/checkout — здесь просто не даём корзине разрастись до абсурда).
+function clampQty(qty: number): number {
+  if (!Number.isFinite(qty)) return 1;
+  return Math.min(MAX_QTY_PER_ITEM, Math.max(1, Math.floor(qty)));
+}
 
 type StoreContextValue = {
   cart: CartItem[];
@@ -173,7 +181,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const found = prev.find((i) => i.id === product.id);
           if (found) {
             return prev.map((i) =>
-              i.id === product.id ? { ...i, qty: i.qty + qty } : i
+              i.id === product.id ? { ...i, qty: clampQty(i.qty + qty) } : i
             );
           }
           return [
@@ -184,15 +192,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               name: product.name,
               price: product.price,
               image_url: product.image_url,
-              qty,
+              qty: clampQty(qty),
             },
           ];
         }),
       setQty: (id, qty) =>
         setCart((prev) =>
-          prev
-            .map((i) => (i.id === id ? { ...i, qty: Math.max(1, qty) } : i))
-            .filter((i) => i.qty > 0)
+          prev.map((i) => (i.id === id ? { ...i, qty: clampQty(qty) } : i))
         ),
       removeFromCart: (id) =>
         setCart((prev) => prev.filter((i) => i.id !== id)),

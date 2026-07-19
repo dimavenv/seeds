@@ -1,6 +1,11 @@
 import { unstable_cache } from "next/cache";
 import { createPublicPb } from "@/lib/pb/server";
-import { isDbConfigured, mapCategory, mapProduct } from "@/lib/pb/shared";
+import {
+  isDbConfigured,
+  isValidRecordId,
+  mapCategory,
+  mapProduct,
+} from "@/lib/pb/shared";
 import { demoCategories, demoProducts } from "@/lib/demo-data";
 import type { Category, Product } from "@/lib/types";
 
@@ -161,10 +166,9 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   }
 }
 
-// ID записей PocketBase: строка из букв/цифр (стандартно 15 символов).
-export function isValidRecordId(id: unknown): id is string {
-  return typeof id === "string" && /^[a-z0-9]{8,32}$/i.test(id);
-}
+// Переехало в lib/pb/shared (нужно и клиенту); реэкспорт — для существующих
+// серверных импортов.
+export { isValidRecordId };
 
 export async function getProductsByIds(ids: string[]): Promise<Product[]> {
   const valid = Array.from(new Set(ids.filter(isValidRecordId))).slice(0, 100);

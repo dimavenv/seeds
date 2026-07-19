@@ -1,4 +1,4 @@
-import { isValidRecordId } from "@/lib/data";
+import { isValidRecordId } from "@/lib/pb/shared";
 
 // Нормализация состава заказа из запроса оформления. Чистая функция — легко
 // тестировать и переиспользовать. Правила:

@@ -26,7 +26,7 @@ export default function AddToCart({ product }: { product: Product }) {
             </button>
             <span className="w-10 text-center font-semibold">{qty}</span>
             <button
-              onClick={() => setQty((q) => q + 1)}
+              onClick={() => setQty((q) => Math.min(product.stock, q + 1))}
               className="px-4 py-2 text-lg text-brand-600"
               aria-label="Больше"
             >

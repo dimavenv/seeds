@@ -11,6 +11,12 @@ import type {
 
 export const PB_COOKIE = "pb_auth";
 
+// ID записей PocketBase: строка из букв/цифр (стандартно 15 символов).
+// Живёт здесь (а не в lib/data), чтобы был доступен и клиентскому коду.
+export function isValidRecordId(id: unknown): id is string {
+  return typeof id === "string" && /^[a-z0-9]{8,32}$/i.test(id);
+}
+
 // Настроен ли PocketBase. NEXT_PUBLIC_PB_URL вшивается в клиентский бандл на
 // этапе сборки; на сервере берётся из окружения (его передаёт pm2).
 export function isDbConfigured(): boolean {
