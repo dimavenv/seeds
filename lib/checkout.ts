@@ -36,3 +36,18 @@ export function findStockIssues(
 ): { name: string; qty: number; stock: number }[] {
   return lines.filter((l) => l.qty > Math.max(0, l.stock));
 }
+
+// Текст ошибки 409 «недостаточно товара» — единый для предпроверки и для
+// конфликта атомарного резервирования.
+export function stockShortageMessage(
+  shortages: { name: string; stock: number }[]
+): string {
+  const detail = shortages
+    .map((s) =>
+      s.stock > 0
+        ? `«${s.name}» — в наличии только ${s.stock} шт.`
+        : `«${s.name}» — нет в наличии`
+    )
+    .join("; ");
+  return `Недостаточно товара: ${detail}. Обновите количество в корзине.`;
+}

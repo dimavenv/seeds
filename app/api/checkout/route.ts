@@ -3,8 +3,8 @@ import { clientIp } from "@/lib/client-ip";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
-import { normalizeCheckoutItems, findStockIssues } from "@/lib/checkout";
-import { adjustStock } from "@/lib/stock";
+import { normalizeCheckoutItems, findStockIssues, stockShortageMessage } from "@/lib/checkout";
+import { reserveStock, releaseStock } from "@/lib/stock";
 import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
@@ -127,19 +127,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Товары не найдены" }, { status: 400 });
     }
 
-    // Проверка наличия по свежим данным БД — количество в корзине могло
-    // устареть, а без проверки магазин продаёт больше, чем есть на складе.
+    // Предпроверка наличия по свежим данным БД — чтобы в типовом случае
+    // (устаревшая корзина) вернуть понятное пер-товарное сообщение.
     const shortages = findStockIssues(lines);
     if (shortages.length > 0) {
-      const detail = shortages
-        .map((s) =>
-          s.stock > 0
-            ? `«${s.name}» — в наличии только ${s.stock} шт.`
-            : `«${s.name}» — нет в наличии`
-        )
-        .join("; ");
       return NextResponse.json(
-        { error: `Недостаточно товара: ${detail}. Обновите количество в корзине.` },
+        { error: stockShortageMessage(shortages) },
+        { status: 409 }
+      );
+    }
+
+    // Атомарное резервирование: списание всех позиций одной транзакцией
+    // PocketBase (min: 0 на stock не даст уйти в минус). Именно здесь
+    // закрывается гонка «двое покупают последний пакетик»: предпроверку выше
+    // могли пройти оба, но транзакция спишет остаток только одному.
+    const reserveLines = lines.map((l) => ({ productId: l.product, qty: l.qty }));
+    if ((await reserveStock(pb, reserveLines)) === "conflict") {
+      // Кто-то успел выкупить остаток между предпроверкой и списанием.
+      // Перечитываем остатки ради точного сообщения.
+      const fresh = await pb
+        .collection("products")
+        .getFullList({ filter: pb.filter(or.join(" || "), params), fields: "id,name,stock" })
+        .catch(() => null);
+      const freshShortages = fresh
+        ? findStockIssues(
+            lines.map((l) => {
+              const f = fresh.find((x) => x.id === l.product);
+              return { name: l.name, qty: l.qty, stock: f ? Number(f.stock) || 0 : 0 };
+            })
+          )
+        : [];
+      return NextResponse.json(
+        {
+          error:
+            freshShortages.length > 0
+              ? stockShortageMessage(freshShortages)
+              : "Не получилось зарезервировать товар — остатки только что изменились. Попробуйте ещё раз.",
+        },
         { status: 409 }
       );
     }
@@ -173,6 +197,8 @@ export async function POST(request: Request) {
       }
     }
     if (!order) {
+      // Заказ не создался — возвращаем зарезервированный товар.
+      await releaseStock(pb, reserveLines);
       throw lastError ?? new Error("order create failed");
     }
 
@@ -187,18 +213,15 @@ export async function POST(request: Request) {
         });
       }
     } catch {
-      // Состав не сохранился — откатываем заказ, чтобы не осталось «пустышки».
+      // Состав не сохранился — откатываем заказ и возвращаем резерв,
+      // чтобы не осталось «пустышки» с зависшим списанием.
+      await releaseStock(pb, reserveLines);
       await pb.collection("orders").delete(order.id).catch(() => {});
       return NextResponse.json(
         { error: "Не удалось сохранить состав заказа" },
         { status: 500 }
       );
     }
-
-    // Заказ с составом создан — резервируем товар (списываем остатки).
-    // При откате заказа ниже (или при неуспешной оплате в callback) остатки
-    // возвращаются обратно.
-    await adjustStock(pb, lines.map((l) => ({ productId: l.product, delta: -l.qty })));
 
     // Онлайн-оплата (если подключён Альфа-Банк). Если платёж создать не
     // удалось — заказ УДАЛЯЕТСЯ, а покупателю возвращается ошибка: корзина у
@@ -243,7 +266,7 @@ export async function POST(request: Request) {
       if (reg?.errorMessage) {
         console.error(`[checkout] заказ №${order.number}: банк отказал — ${reg.errorMessage}`);
       }
-      await adjustStock(pb, lines.map((l) => ({ productId: l.product, delta: l.qty })));
+      await releaseStock(pb, reserveLines);
       for (const l of await pb
         .collection("order_items")
         .getFullList({ filter: pb.filter("order = {:id}", { id: order.id }), fields: "id" })
