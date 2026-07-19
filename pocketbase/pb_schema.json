@@ -451,11 +451,11 @@
         "type": "json"
       },
       {
-        "help": "",
+        "help": "Остаток не может уйти в минус: атомарное списание при оформлении заказа опирается на этот минимум (см. lib/stock.ts).",
         "hidden": false,
         "id": "number1261852256",
         "max": null,
-        "min": null,
+        "min": 0,
         "name": "stock",
         "onlyInt": true,
         "presentable": false,

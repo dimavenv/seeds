@@ -63,4 +63,26 @@ if (!importRes.ok) {
   process.exit(1);
 }
 console.log(`Схема импортирована: ${schema.map((c) => c.name).join(", ")}`);
+
+// Batch API нужен для атомарного списания остатков при оформлении заказа
+// (lib/stock.ts): несколько обновлений выполняются одной транзакцией, и
+// попытка увести stock ниже нуля откатывает её целиком. Без включённого
+// Batch API сайт продолжает работать, но списание неатомарное (старый путь).
+const settingsRes = await fetch(`${PB_URL}/api/settings`, {
+  method: "PATCH",
+  headers: { "Content-Type": "application/json", Authorization: token },
+  body: JSON.stringify({
+    batch: { enabled: true, maxRequests: 200, timeout: 10, maxBodySize: 0 },
+  }),
+});
+if (settingsRes.ok) {
+  console.log("Batch API включён (атомарное списание остатков).");
+} else {
+  console.error(
+    "Не удалось включить Batch API:",
+    settingsRes.status,
+    await settingsRes.text()
+  );
+  console.error("Включите вручную: админка PocketBase → Settings → Application → Batch API.");
+}
 console.log("Готово. Откройте админку PocketBase и убедитесь, что коллекции на месте.");
