@@ -111,7 +111,8 @@ export default function DeliveryMethodCards({
             )}
 
             <span className="text-sm text-brand-500">
-              Срок доставки: <span className="font-semibold text-brand-700">{m.days}</span>
+              Срок обработки и отправки заказа:{" "}
+              <span className="font-semibold text-brand-700">{m.days}</span>
             </span>
           </label>
         );

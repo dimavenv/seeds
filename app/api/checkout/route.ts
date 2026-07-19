@@ -36,6 +36,37 @@ async function nextOrderNumber(pb: Awaited<ReturnType<typeof pbAdmin>>): Promise
   return max + 1;
 }
 
+// Зависшие неоплаченные заказы: покупатель ушёл с платёжной формы и callback
+// от банка так и не пришёл. Такие «пустышки» (новые, ждут оплаты дольше TTL)
+// удаляем при следующем оформлении — чтобы неоплаченные заказы не копились.
+// Оплаченные и взятые админом в работу заказы фильтр не задевает.
+const PENDING_ORDER_TTL_MS = 2 * 60 * 60 * 1000; // 2 часа
+
+async function cleanupStalePendingOrders(
+  pb: Awaited<ReturnType<typeof pbAdmin>>
+): Promise<void> {
+  const cutoff = new Date(Date.now() - PENDING_ORDER_TTL_MS)
+    .toISOString()
+    .replace("T", " "); // формат дат PocketBase
+  const stale = await pb.collection("orders").getFullList({
+    filter: pb.filter(
+      'status = "new" && payment_status = "pending" && placed_at < {:cutoff}',
+      { cutoff }
+    ),
+    fields: "id",
+  });
+  for (const o of stale) {
+    const lines = await pb
+      .collection("order_items")
+      .getFullList({ filter: pb.filter("order = {:id}", { id: o.id }), fields: "id" })
+      .catch(() => [] as { id: string }[]);
+    for (const l of lines) {
+      await pb.collection("order_items").delete(l.id).catch(() => {});
+    }
+    await pb.collection("orders").delete(o.id).catch(() => {});
+  }
+}
+
 export async function POST(request: Request) {
   let body: {
     customer_name?: string;
@@ -108,6 +139,28 @@ export async function POST(request: Request) {
     ]);
 
     const priceList = productRecords.map(mapProduct);
+
+    // Проверка наличия ПРЯМО в момент подтверждения заказа — по свежим
+    // остаткам из базы, а не по тому, что видел покупатель при добавлении.
+    const outOfStock = items
+      .map((i) => ({ req: i, p: priceList.find((x) => x.id === i.id) }))
+      .filter(({ req, p }) => p && p.stock < req.qty);
+    if (outOfStock.length > 0) {
+      const details = outOfStock
+        .map(({ req, p }) =>
+          p!.stock > 0
+            ? `«${p!.name}» — осталось ${p!.stock} шт. (в заказе ${req.qty})`
+            : `«${p!.name}» — закончился`
+        )
+        .join("; ");
+      return NextResponse.json(
+        {
+          error: `Недостаточно товара в наличии: ${details}. Обновите количество в корзине.`,
+        },
+        { status: 409 }
+      );
+    }
+
     const lines = items
       .map((i) => {
         const p = priceList.find((x) => x.id === i.id);
@@ -155,6 +208,10 @@ export async function POST(request: Request) {
     if (!order) {
       throw lastError ?? new Error("order create failed");
     }
+
+    // Фоновая уборка старых зависших неоплаченных заказов — не задерживает
+    // текущее оформление и не роняет его при ошибке.
+    void cleanupStalePendingOrders(pb).catch(() => {});
 
     try {
       for (const l of lines) {

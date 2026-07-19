@@ -9,6 +9,7 @@ import { CartIcon } from "@/components/icons";
 
 export default function CartPage() {
   const { cart, cartTotal, setQty, removeFromCart, ready } = useStore();
+  const deliveryFree = cartTotal >= FREE_DELIVERY_FROM;
 
   if (!ready) {
     return <div className="container-page py-10 text-brand-500">Загрузка…</div>;
@@ -76,8 +77,16 @@ export default function CartPage() {
                   </span>
                   <button
                     onClick={() => setQty(item.id, item.qty + 1)}
-                    className="px-3 py-1.5 text-brand-600"
+                    disabled={
+                      typeof item.stock === "number" && item.qty >= item.stock
+                    }
+                    className="px-3 py-1.5 text-brand-600 disabled:opacity-40"
                     aria-label="Больше"
+                    title={
+                      typeof item.stock === "number" && item.qty >= item.stock
+                        ? "Больше нет в наличии"
+                        : undefined
+                    }
                   >
                     +
                   </button>
@@ -107,23 +116,28 @@ export default function CartPage() {
           </div>
           <div className="mt-2 flex justify-between text-sm text-brand-500">
             <span>Доставка</span>
-            <span>{formatPrice(DELIVERY_COST)}</span>
+            {deliveryFree ? (
+              <span className="font-semibold text-brand-600">бесплатно</span>
+            ) : (
+              <span>{formatPrice(DELIVERY_COST)}</span>
+            )}
           </div>
-          {cartTotal >= FREE_DELIVERY_FROM ? (
+          {deliveryFree ? (
             <p className="mt-2 rounded-xl bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-600">
-              🎉 Почтой России доставка для вас бесплатна — выберите её при
-              оформлении, и сумма уменьшится на {formatPrice(DELIVERY_COST)}.
+              🎉 Доставка для вас бесплатна — заказ от{" "}
+              {formatPrice(FREE_DELIVERY_FROM)}.
             </p>
           ) : (
             <p className="mt-2 text-xs text-brand-400">
-              Почтой России — бесплатно при заказе от{" "}
-              {formatPrice(FREE_DELIVERY_FROM)} (осталось{" "}
-              {formatPrice(FREE_DELIVERY_FROM - cartTotal)}).
+              Доставка бесплатно при заказе от {formatPrice(FREE_DELIVERY_FROM)}{" "}
+              (осталось {formatPrice(FREE_DELIVERY_FROM - cartTotal)}).
             </p>
           )}
           <div className="mt-4 flex justify-between border-t border-brand-100 pt-4 text-lg font-extrabold text-brand-800">
             <span>К оплате</span>
-            <span>{formatPrice(cartTotal + DELIVERY_COST)}</span>
+            <span>
+              {formatPrice(cartTotal + (deliveryFree ? 0 : DELIVERY_COST))}
+            </span>
           </div>
           <Link href="/checkout" className="btn-accent mt-5 w-full">
             Оформить заказ

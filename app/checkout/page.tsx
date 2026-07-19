@@ -293,9 +293,9 @@ export default function CheckoutPage() {
             <textarea value={form.comment} onChange={update("comment")} className="input min-h-24" />
           </label>
           <p className="text-xs text-brand-500">
-            Оплата при получении. Доставка Ozon или Почтой России —{" "}
-            {formatPrice(DELIVERY_COST)} по всей России; Почтой России —
-            бесплатно при заказе от {formatPrice(FREE_DELIVERY_FROM)}.
+            Доставка Ozon или Почтой России — {formatPrice(DELIVERY_COST)} по
+            всей России; при заказе от {formatPrice(FREE_DELIVERY_FROM)} —
+            бесплатно.
           </p>
           {error && (
             <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">

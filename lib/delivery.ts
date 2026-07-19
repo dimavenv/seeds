@@ -16,7 +16,7 @@ export const DELIVERY_COST = readEnvNumber(
   300
 );
 
-// От какой суммы товаров доставка Почтой России бесплатна.
+// От какой суммы товаров доставка бесплатна (любым способом).
 export const FREE_DELIVERY_FROM = readEnvNumber(
   process.env.NEXT_PUBLIC_FREE_DELIVERY_FROM,
   3000
@@ -30,8 +30,8 @@ export const DELIVERY_METHODS = [
     subtitle: "В пункт выдачи",
     hint: "В пункт выдачи Ozon — быстро и удобно",
     icon: "/dostavka-ozon.png",
-    days: "примерно 2–4 дня",
-    freeFrom: null,
+    days: "2–5 дней",
+    freeFrom: FREE_DELIVERY_FROM,
   },
   {
     id: "post",
@@ -40,7 +40,7 @@ export const DELIVERY_METHODS = [
     subtitle: "В отделение",
     hint: "Доставка на ваш домашний адрес",
     icon: "/dostavka-pochta.png",
-    days: "примерно 6 дней",
+    days: "2–5 дней",
     freeFrom: FREE_DELIVERY_FROM,
   },
 ] as const;
