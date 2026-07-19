@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/data";
+import { createPublicPb } from "@/lib/pb/server";
+import { isDbConfigured, mapReview } from "@/lib/pb/shared";
 import Stars from "@/components/stars";
 import ReviewCard from "@/components/review-card";
 import type { Review } from "@/lib/types";
@@ -11,15 +11,17 @@ export const dynamic = "force-dynamic";
 
 export default async function ReviewsPage() {
   let reviews: Review[] = [];
-  if (isSupabaseConfigured()) {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("reviews")
-      .select("id, author_name, rating, text, status, source, created_at, order_id, user_id")
-      .eq("status", "approved")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    reviews = (data ?? []) as Review[];
+  if (isDbConfigured()) {
+    try {
+      const pb = createPublicPb();
+      const page = await pb.collection("reviews").getList(1, 100, {
+        filter: 'status = "approved"',
+        sort: "-published_at",
+      });
+      reviews = page.items.map(mapReview);
+    } catch {
+      reviews = [];
+    }
   }
 
   const avg =

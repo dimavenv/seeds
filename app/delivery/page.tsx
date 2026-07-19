@@ -28,12 +28,12 @@ const STEPS: { title: string; body: React.ReactNode }[] = [
         <ul className="list-disc space-y-2 pl-5">
           <li>
             Через{" "}
-            <span className="font-semibold text-brand-800">Ozon:</span> точный
+            <span className="font-semibold text-accent-600">Ozon:</span> точный
             адрес нужного вам пункта выдачи заказов (ПВЗ). Вы должны быть
             зарегистрированы на Ozon и иметь приложение на смартфоне.
           </li>
           <li>
-            <span className="font-semibold text-brand-800">
+            <span className="font-semibold text-accent-600">
               Почтой России:
             </span>{" "}
             ваш полный домашний адрес и почтовый индекс.
@@ -100,8 +100,8 @@ export default function DeliveryPage() {
         Как оформить и оплатить заказ
       </p>
 
-      {/* Шаги оформления */}
-      <div className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-3">
+      {/* Шаги оформления: средняя колонка с деталями адресов шире крайних */}
+      <div className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-[3fr_4fr_3fr]">
         {STEPS.map((s, i) => (
           <div
             key={s.title}
@@ -142,11 +142,11 @@ export default function DeliveryPage() {
             </div>
             <div>
               <h3 className="font-bold text-brand-800">
-                Фиксированно — 300 ₽
+                300 ₽, от 3000 ₽ — бесплатно
               </h3>
               <p className="mt-1 text-[15px] leading-relaxed text-brand-600">
-                Единая стоимость для любого способа — как через Ozon, так и
-                Почтой России.
+                Доставка Ozon и Почтой России — 300 ₽. При заказе от 3000 ₽
+                доставка любым способом бесплатна.
               </p>
             </div>
           </div>

@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/data";
+import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
+import { getSession } from "@/lib/auth";
+import { isDbConfigured } from "@/lib/pb/shared";
 import { encryptField } from "@/lib/crypto";
+import { verifyCaptcha } from "@/lib/captcha";
 
 // Привязка заявки к аккаунту — «по возможности» (не блокирует отправку).
 async function bestEffortUserId(): Promise<string | null> {
   try {
-    const authed = createClient();
     const result = await Promise.race([
-      authed.auth.getUser(),
+      getSession(),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
     ]);
-    if (!result) return null;
-    return result.data?.user?.id ?? null;
+    return result?.userId ?? null;
   } catch {
     return null;
   }
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     email?: string;
     subject?: string;
     message?: string;
+    captchaToken?: string;
   };
   try {
     body = await request.json();
@@ -44,6 +45,14 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (!(await verifyCaptcha(body.captchaToken, ip))) {
+    return NextResponse.json(
+      { error: "Подтвердите, что вы не робот" },
+      { status: 400 }
+    );
+  }
   if (!EMAIL_RE.test(email)) {
     return NextResponse.json(
       { error: "Укажите корректный email для ответа" },
@@ -51,8 +60,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // Демо-режим без Supabase: заявку сохранить негде — отвечаем как успех.
-  if (!isSupabaseConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  // Демо-режим без PocketBase: заявку сохранить негде — отвечаем как успех.
+  if (!isDbConfigured() || !hasAdminCredentials()) {
     return NextResponse.json({ ok: true, demo: true });
   }
 
@@ -62,24 +71,17 @@ export async function POST(request: Request) {
   };
 
   try {
-    const supabase = createServiceClient();
+    const pb = await pbAdmin();
     const userId = await bestEffortUserId();
 
-    const { error } = await supabase.from("support_requests").insert({
+    await pb.collection("support_requests").create({
       name,
       email: encryptField(email),
       subject,
       message: encryptField(message),
       status: "new",
-      user_id: userId,
+      user: userId ?? "",
     });
-
-    if (error) {
-      return NextResponse.json(
-        { error: "Не удалось отправить заявку, попробуйте ещё раз" },
-        { status: 503 }
-      );
-    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {

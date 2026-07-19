@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ConsentCheckbox from "@/components/consent-checkbox";
+import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 
 export default function SupportForm() {
   const [form, setForm] = useState({
@@ -11,6 +12,7 @@ export default function SupportForm() {
     message: "",
   });
   const [consent, setConsent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -27,12 +29,16 @@ export default function SupportForm() {
       setError("Подтвердите согласие на обработку персональных данных");
       return;
     }
+    if (captchaEnabled && !captchaToken) {
+      setError("Подтвердите, что вы не робот");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/support", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, captchaToken }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -91,6 +97,7 @@ export default function SupportForm() {
         <textarea required value={form.message} onChange={update("message")} className="input min-h-32" placeholder="Опишите ваш вопрос подробнее" />
       </label>
       <ConsentCheckbox checked={consent} onChange={setConsent} />
+      <SmartCaptcha onToken={setCaptchaToken} />
       {error && (
         <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
           {error}

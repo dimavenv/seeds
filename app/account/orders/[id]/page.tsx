@@ -1,12 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getSession } from "@/lib/auth";
+import { getSessionPb } from "@/lib/auth";
+import { getProductsByIds, isValidRecordId } from "@/lib/data";
+import { mapOrder, mapOrderItem, mapReview } from "@/lib/pb/shared";
 import { formatPrice, formatDate } from "@/lib/format";
 import { deliveryMethodLabel } from "@/lib/delivery";
 import { decryptField } from "@/lib/crypto";
-import { ORDER_STATUS_LABELS, type Order, type Product, type Review } from "@/lib/types";
+import { ORDER_STATUS_LABELS, type Product, type Review } from "@/lib/types";
 import OrderStatusSteps from "@/components/order-status-steps";
 import ReorderButton from "@/components/reorder-button";
 import LeaveReview from "@/components/leave-review";
@@ -18,36 +19,34 @@ export default async function OrderDetailPage({
 }: {
   params: { id: string };
 }) {
-  const session = await getSession();
+  const { session, pb } = await getSessionPb();
   if (!session.configured) redirect("/login");
   if (!session.userId) redirect("/login");
+  if (!isValidRecordId(params.id)) notFound();
 
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("orders")
-    .select(
-      "id, customer_name, phone, email, address, comment, status, total, delivery_method, delivery_cost, tracking_number, created_at, order_items(id, product_id, name, price, qty)"
-    )
-    .eq("id", Number(params.id))
-    .eq("user_id", session.userId)
-    .maybeSingle();
+  // Правила PocketBase отдают заказ только владельцу/админу.
+  const record = await pb
+    .collection("orders")
+    .getOne(params.id)
+    .catch(() => null);
+  if (!record || record.user !== session.userId) notFound();
 
-  if (!data) notFound();
-  const order = data as Order;
+  const itemRecords = await pb
+    .collection("order_items")
+    .getFullList({ filter: pb.filter("order = {:id}", { id: record.id }) })
+    .catch(() => []);
+  const order = mapOrder(record, itemRecords.map(mapOrderItem));
   const items = order.order_items ?? [];
 
   // Текущие товары (для картинок и кнопки «заказать ещё раз»).
-  const ids = items.map((i) => i.product_id).filter((x): x is number => !!x);
-  const productMap = new Map<number, Product>();
+  const ids = items.map((i) => i.product_id).filter((x): x is string => !!x);
+  const productMap = new Map<string, Product>();
   if (ids.length) {
-    const { data: prods } = await supabase
-      .from("products")
-      .select("id, slug, name, price, image_url, images")
-      .in("id", ids);
-    for (const p of (prods ?? []) as Product[]) productMap.set(p.id, p);
+    const prods = await getProductsByIds(ids);
+    for (const p of prods) productMap.set(p.id, p);
   }
 
-  const imgOf = (pid: number | null) => {
+  const imgOf = (pid: string | null) => {
     const p = pid ? productMap.get(pid) : null;
     return p?.image_url || p?.images?.[0] || null;
   };
@@ -55,12 +54,16 @@ export default async function OrderDetailPage({
   const delivery = order.delivery_cost ?? Math.max(0, order.total - goods);
 
   // Отзыв к этому заказу (если уже оставлен).
-  const { data: myReview } = await supabase
-    .from("reviews")
-    .select("id, user_id, order_id, author_name, rating, text, status, created_at")
-    .eq("order_id", order.id)
-    .eq("user_id", session.userId)
-    .maybeSingle();
+  const reviewRecord = await pb
+    .collection("reviews")
+    .getFirstListItem(
+      pb.filter("order = {:order} && user = {:user}", {
+        order: order.id,
+        user: session.userId,
+      })
+    )
+    .catch(() => null);
+  const myReview: Review | null = reviewRecord ? mapReview(reviewRecord) : null;
   const canReview = order.status === "shipped" || order.status === "done";
 
   const reorderItems = items
@@ -78,17 +81,23 @@ export default async function OrderDetailPage({
           Личный кабинет
         </Link>
         <span className="mx-1.5">/</span>
-        <span className="text-brand-700">Заказ #{order.id}</span>
+        <span className="text-brand-700">Заказ #{order.number}</span>
       </nav>
 
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-brand-800">Заказ #{order.id}</h1>
+          <h1 className="text-2xl font-bold text-brand-800">Заказ #{order.number}</h1>
           <p className="text-sm text-brand-500">
             от {formatDate(order.created_at)} ·{" "}
             <span className="font-semibold text-brand-700">
               {ORDER_STATUS_LABELS[order.status]}
             </span>
+            {order.payment_status === "paid" && (
+              <span className="ml-2 badge bg-brand-600 text-white">Оплачен</span>
+            )}
+            {order.payment_status === "refunded" && (
+              <span className="ml-2 badge bg-brand-200 text-brand-700">Возврат оплаты</span>
+            )}
           </p>
         </div>
         <ReorderButton items={reorderItems} />
@@ -119,9 +128,10 @@ export default async function OrderDetailPage({
         </div>
       )}
 
+      {/* min-w-0 — чтобы грид мог ужать колонки под узкий экран. */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         {/* Товары */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <h2 className="mb-3 text-lg font-bold text-brand-800">
             Состав заказа
           </h2>
@@ -167,7 +177,7 @@ export default async function OrderDetailPage({
         </div>
 
         {/* Сводка и доставка */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <div className="card p-5">
             <h3 className="mb-3 font-bold text-brand-800">Оплата</h3>
             <div className="space-y-1.5 text-sm text-brand-700">
@@ -204,7 +214,7 @@ export default async function OrderDetailPage({
           orderId={order.id}
           canReview={canReview}
           defaultName={order.customer_name}
-          existing={(myReview as Review) ?? null}
+          existing={myReview}
         />
       </div>
     </div>

@@ -7,19 +7,25 @@ import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
 import {
   DELIVERY_COST,
-  DELIVERY_METHODS,
+  FREE_DELIVERY_FROM,
+  deliveryCostFor,
   type DeliveryMethodId,
 } from "@/lib/delivery";
+import DeliveryMethodCards from "@/components/delivery-method-cards";
 import {
   secureGet,
   secureSet,
   secureClear,
 } from "@/lib/secure-store";
 import ConsentCheckbox from "@/components/consent-checkbox";
+import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 import DadataAddress, {
   emptyAddress,
   type AddressValue,
 } from "@/components/dadata-address";
+import OzonPvzField, {
+  type OzonPvzSelection,
+} from "@/components/ozon-pvz-field";
 
 const PROFILE_KEY = "checkout_profile";
 
@@ -33,6 +39,7 @@ type SavedProfile = {
     comment: string;
   };
   address: AddressValue;
+  pvz: OzonPvzSelection | null;
   deliveryMethod: DeliveryMethodId;
 };
 
@@ -52,9 +59,16 @@ export default function CheckoutPage() {
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
+  // Выбранный пункт выдачи Ozon (для способа доставки «Ozon»).
+  const [pvz, setPvz] = useState<OzonPvzSelection | null>(null);
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
-  const grandTotal = cartTotal + DELIVERY_COST;
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+  // Стоимость доставки зависит от способа: Почтой России — бесплатно от
+  // FREE_DELIVERY_FROM, Ozon — всегда DELIVERY_COST.
+  const deliveryCost = deliveryCostFor(deliveryMethod, cartTotal);
+  const grandTotal = cartTotal + deliveryCost;
 
   // Подставить сохранённые («Запомнить меня») данные при загрузке.
   useEffect(() => {
@@ -63,6 +77,7 @@ export default function CheckoutPage() {
       if (cancelled || !saved) return;
       if (saved.form) setForm(saved.form);
       if (saved.address) setAddress(saved.address);
+      if (saved.pvz) setPvz(saved.pvz);
       if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
       setRemember(true);
     });
@@ -91,26 +106,43 @@ export default function CheckoutPage() {
       .filter(Boolean)
       .join(" ");
 
-    const missingAddress =
-      !address.postal_code.trim() ||
-      !address.city.trim() ||
-      !address.street.trim() ||
-      !address.house.trim();
-    if (missingAddress) {
-      setError("Заполните индекс, город, улицу и дом");
-      return;
+    // Адрес зависит от способа доставки: Ozon — одна строка (адрес ПВЗ),
+    // Почта — структурный адрес с индексом.
+    let addressStr: string;
+    if (deliveryMethod === "ozon") {
+      if (!pvz) {
+        setError("Выберите пункт выдачи Ozon на карте или в списке");
+        return;
+      }
+      addressStr = `Пункт выдачи Ozon [${pvz.code}]: ${pvz.address}`;
+    } else {
+      const missingAddress =
+        !address.postal_code.trim() ||
+        !address.city.trim() ||
+        !address.street.trim() ||
+        !address.house.trim();
+      if (missingAddress) {
+        setError("Заполните индекс, город, улицу и дом");
+        return;
+      }
+      // Улицу пишем как есть — подсказки DaData уже дают её с типом («ул Баумана»),
+      // повторный префикс «ул.» дал бы «ул. ул Баумана».
+      addressStr = [
+        address.postal_code.trim(),
+        address.region.trim(),
+        address.city.trim(),
+        address.street.trim(),
+        address.house.trim() && `д. ${address.house.trim()}`,
+        address.flat.trim() && `кв. ${address.flat.trim()}`,
+      ]
+        .filter(Boolean)
+        .join(", ");
     }
 
-    const addressStr = [
-      address.postal_code.trim(),
-      address.region.trim(),
-      address.city.trim(),
-      address.street.trim() && `ул. ${address.street.trim()}`,
-      address.house.trim() && `д. ${address.house.trim()}`,
-      address.flat.trim() && `кв. ${address.flat.trim()}`,
-    ]
-      .filter(Boolean)
-      .join(", ");
+    if (captchaEnabled && !captchaToken) {
+      setError("Подтвердите, что вы не робот");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -125,20 +157,34 @@ export default function CheckoutPage() {
           comment: form.comment,
           delivery_method: deliveryMethod,
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
+          captchaToken,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Ошибка оформления заказа");
         setSubmitting(false);
+        // Токен капчи одноразовый — сбрасываем виджет для повторной попытки.
+        setCaptchaToken("");
+        setCaptchaReset((n) => n + 1);
         return;
       }
       // «Запомнить меня»: сохранить зашифрованно или очистить.
       if (remember) {
-        secureSet(PROFILE_KEY, { form, address, deliveryMethod });
+        secureSet(PROFILE_KEY, { form, address, pvz, deliveryMethod });
       } else {
         secureClear(PROFILE_KEY);
       }
+
+      // Онлайн-оплата подключена — переходим на платёжную форму Альфа-Банка.
+      // Корзину НЕ чистим: если оплата не пройдёт, товары останутся у
+      // покупателя (очистка — на странице заказа при возврате с ?paid=1).
+      if (data.formUrl) {
+        window.location.href = data.formUrl;
+        return;
+      }
+
+      // Заказ без онлайн-оплаты оформлен окончательно — корзину можно чистить.
       clearCart();
       const qs = new URLSearchParams({
         total: String(data.total),
@@ -148,6 +194,8 @@ export default function CheckoutPage() {
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setSubmitting(false);
+      setCaptchaToken("");
+      setCaptchaReset((n) => n + 1);
     }
   }
 
@@ -166,9 +214,23 @@ export default function CheckoutPage() {
   return (
     <div className="container-page py-6">
       <h1 className="mb-6 text-2xl font-bold text-brand-800">Оформление заказа</h1>
+      {/* min-w-0 на колонках: иначе грид не даёт им ужаться под узкий экран
+          и страницу распирает вбок (у грид-элементов min-width: auto). */}
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
-        <div className="card space-y-6 p-5 lg:col-span-2">
-          {/* ФИО */}
+        <div className="card min-w-0 space-y-6 p-5 lg:col-span-2">
+          {/* 1. Способ доставки — выбираем первым, от него зависит адрес */}
+          <fieldset className="space-y-3">
+            <legend className="text-base font-bold text-brand-800">
+              Способ доставки
+            </legend>
+            <DeliveryMethodCards
+              value={deliveryMethod}
+              subtotal={cartTotal}
+              onChange={setDeliveryMethod}
+            />
+          </fieldset>
+
+          {/* 2. Получатель */}
           <fieldset className="space-y-3">
             <legend className="text-base font-bold text-brand-800">
               Получатель
@@ -212,44 +274,16 @@ export default function CheckoutPage() {
             </div>
           </fieldset>
 
-          {/* Адрес доставки */}
+          {/* 3. Адрес — зависит от способа доставки */}
           <fieldset className="space-y-3">
             <legend className="text-base font-bold text-brand-800">
-              Адрес доставки
+              {deliveryMethod === "ozon" ? "Пункт выдачи" : "Адрес доставки"}
             </legend>
-            <DadataAddress value={address} onChange={setAddress} />
-          </fieldset>
-
-          {/* Способ доставки */}
-          <fieldset className="space-y-3">
-            <legend className="text-base font-bold text-brand-800">
-              Способ доставки
-            </legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {DELIVERY_METHODS.map((m) => (
-                <label
-                  key={m.id}
-                  className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 ${
-                    deliveryMethod === m.id
-                      ? "border-brand-600 bg-brand-50"
-                      : "border-brand-200 hover:bg-brand-50/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="delivery_method"
-                    value={m.id}
-                    checked={deliveryMethod === m.id}
-                    onChange={() => setDeliveryMethod(m.id)}
-                    className="accent-brand-600"
-                  />
-                  <span className="font-semibold text-brand-800">{m.label}</span>
-                  <span className="ml-auto text-sm text-brand-500">
-                    {formatPrice(DELIVERY_COST)}
-                  </span>
-                </label>
-              ))}
-            </div>
+            {deliveryMethod === "ozon" ? (
+              <OzonPvzField value={pvz} onChange={setPvz} />
+            ) : (
+              <DadataAddress value={address} onChange={setAddress} />
+            )}
           </fieldset>
 
           <label className="block">
@@ -259,8 +293,9 @@ export default function CheckoutPage() {
             <textarea value={form.comment} onChange={update("comment")} className="input min-h-24" />
           </label>
           <p className="text-xs text-brand-500">
-            Оплата при получении. Доставка Ozon или Почтой России —{" "}
-            {formatPrice(DELIVERY_COST)} по всей России.
+            Доставка Ozon или Почтой России — {formatPrice(DELIVERY_COST)} по
+            всей России; при заказе от {formatPrice(FREE_DELIVERY_FROM)} —
+            бесплатно.
           </p>
           {error && (
             <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
@@ -269,7 +304,7 @@ export default function CheckoutPage() {
           )}
         </div>
 
-        <div className="card h-fit p-5">
+        <div className="card h-fit min-w-0 p-5">
           <h2 className="text-lg font-bold text-brand-800">Ваш заказ</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {cart.map((i) => (
@@ -290,7 +325,11 @@ export default function CheckoutPage() {
             </div>
             <div className="flex justify-between">
               <span>Доставка</span>
-              <span>{formatPrice(DELIVERY_COST)}</span>
+              {deliveryCost === 0 ? (
+                <span className="font-semibold text-brand-600">бесплатно</span>
+              ) : (
+                <span>{formatPrice(deliveryCost)}</span>
+              )}
             </div>
           </div>
           <div className="mt-3 flex justify-between border-t border-brand-100 pt-3 text-lg font-extrabold text-brand-800">
@@ -314,7 +353,18 @@ export default function CheckoutPage() {
             </label>
           </div>
 
-          <button type="submit" disabled={submitting || !consent} className="btn-accent mt-5 w-full">
+          <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+
+          <button
+            type="submit"
+            disabled={
+              submitting ||
+              !consent ||
+              (captchaEnabled && !captchaToken) ||
+              (deliveryMethod === "ozon" && !pvz)
+            }
+            className="btn-accent mt-5 w-full"
+          >
             {submitting ? "Оформляем…" : "Подтвердить заказ"}
           </button>
         </div>

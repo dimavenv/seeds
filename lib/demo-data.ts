@@ -1,17 +1,18 @@
 import type { Category, Product } from "@/lib/types";
 
-// Демо-данные (зеркало supabase/seed.sql). Используются, когда Supabase
-// не настроен — чтобы магазин работал «из коробки» для разработки/превью.
+// Демо-данные. Используются, когда PocketBase не настроен — чтобы магазин
+// работал «из коробки» для разработки/превью.
 
+// ID в демо-режиме — строковые (как в PocketBase); используем slug.
 export const demoCategories: Category[] = [
-  { id: 1, slug: "tomaty", name: "Томаты", sort_order: 10 },
-  { id: 2, slug: "perec-sladkiy", name: "Перец сладкий", sort_order: 20 },
-  { id: 3, slug: "perec-chili", name: "Перец чили", sort_order: 30 },
-  { id: 4, slug: "baklazhany", name: "Баклажаны", sort_order: 40 },
-  { id: 5, slug: "kukuruza", name: "Кукуруза", sort_order: 50 },
-  { id: 6, slug: "kartofel", name: "Картофель", sort_order: 60 },
-  { id: 7, slug: "dynya", name: "Дыня", sort_order: 70 },
-  { id: 8, slug: "arbuz", name: "Арбуз", sort_order: 80 },
+  { id: "tomaty", slug: "tomaty", name: "Томаты", sort_order: 10 },
+  { id: "perec-sladkiy", slug: "perec-sladkiy", name: "Перец сладкий", sort_order: 20 },
+  { id: "perec-chili", slug: "perec-chili", name: "Перец чили", sort_order: 30 },
+  { id: "baklazhany", slug: "baklazhany", name: "Баклажаны", sort_order: 40 },
+  { id: "kukuruza", slug: "kukuruza", name: "Кукуруза", sort_order: 50 },
+  { id: "kartofel", slug: "kartofel", name: "Картофель", sort_order: 60 },
+  { id: "dynya", slug: "dynya", name: "Дыня", sort_order: 70 },
+  { id: "arbuz", slug: "arbuz", name: "Арбуз", sort_order: 80 },
 ];
 
 const raw: Array<
@@ -47,7 +48,7 @@ const raw: Array<
 export const demoProducts: Product[] = raw.map((r, i) => {
   const cat = demoCategories.find((c) => c.slug === r[4])!;
   return {
-    id: i + 1,
+    id: r[0],
     slug: r[0],
     name: r[1],
     description: r[2],

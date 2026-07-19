@@ -20,7 +20,15 @@ export default function ConsentCheckbox({
         className="mt-0.5 h-4 w-4 accent-brand-600"
       />
       <span>
-        Я согласен на обработку персональных данных в соответствии с{" "}
+        Я принимаю условия{" "}
+        <Link
+          href="/offer"
+          target="_blank"
+          className="font-semibold text-brand-700 underline hover:text-brand-800"
+        >
+          Публичной оферты
+        </Link>{" "}
+        и согласен на обработку персональных данных в соответствии с{" "}
         <Link
           href="/privacy"
           target="_blank"

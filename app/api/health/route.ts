@@ -1,37 +1,29 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/data";
+import { createPublicPb } from "@/lib/pb/server";
+import { isDbConfigured } from "@/lib/pb/shared";
 
-// Диагностика доступности Supabase. Откройте /api/health в браузере.
+// Диагностика доступности PocketBase. Откройте /api/health в браузере.
+// force-dynamic обязателен: иначе при `next build` ответ запекается статически
+// и на проде роут всегда возвращал бы состояние на момент сборки.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
-  if (!isSupabaseConfigured()) {
+  if (!isDbConfigured()) {
     return NextResponse.json({
       ok: false,
       configured: false,
       error:
-        "Supabase не настроен: нет NEXT_PUBLIC_SUPABASE_URL / ANON_KEY в .env.local",
+        "PocketBase не настроен: нет NEXT_PUBLIC_PB_URL в .env.production",
     });
   }
 
   const started = Date.now();
   try {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("categories")
-      .select("id", { count: "exact", head: true });
-    const ms = Date.now() - started;
-
-    if (error) {
-      return NextResponse.json({
-        ok: false,
-        configured: true,
-        ms,
-        error:
-          error.message ||
-          "Запрос к Supabase не выполнен — проект недоступен (возможно, на паузе) или неверный URL/ключ.",
-      });
-    }
-    return NextResponse.json({ ok: true, configured: true, ms });
+    const pb = createPublicPb();
+    await pb.health.check();
+    // Дополнительно проверяем, что схема на месте (коллекция categories).
+    await pb.collection("categories").getList(1, 1);
+    return NextResponse.json({ ok: true, configured: true, ms: Date.now() - started });
   } catch (e) {
     return NextResponse.json({
       ok: false,
@@ -40,7 +32,7 @@ export async function GET() {
       error:
         e instanceof Error
           ? e.message
-          : "Не удалось подключиться к Supabase (таймаут или неверный адрес)",
+          : "Не удалось подключиться к PocketBase (сервис остановлен или неверный адрес)",
     });
   }
 }

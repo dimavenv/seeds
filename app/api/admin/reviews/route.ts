@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { pbAdmin } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 
 export async function POST(request: Request) {
@@ -24,8 +24,9 @@ export async function POST(request: Request) {
   const author_name = body.author_name?.trim();
   const text = body.text?.trim();
   const rating = Number(body.rating);
-  const source = body.source?.trim() || null;
-  const created_at = body.created_at || undefined;
+  const source = body.source?.trim() || "";
+  // Дата отзыва (для перенесённых с Ozon и т.п.) — хранится в published_at.
+  const publishedAt = body.created_at ? new Date(body.created_at) : new Date();
 
   if (!author_name || !text || !rating || rating < 1 || rating > 5) {
     return NextResponse.json(
@@ -33,27 +34,25 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  if (Number.isNaN(publishedAt.getTime())) {
+    return NextResponse.json({ error: "Некорректная дата" }, { status: 400 });
+  }
 
-  const supabase = createServiceClient();
-  const { data, error } = await supabase
-    .from("reviews")
-    .insert({
+  try {
+    const pb = await pbAdmin();
+    const rec = await pb.collection("reviews").create({
       author_name,
       text,
       rating,
       source,
       status: "approved",
-      ...(created_at ? { created_at } : {}),
-    })
-    .select("id")
-    .single();
-
-  if (error) {
+      published_at: publishedAt.toISOString(),
+    });
+    return NextResponse.json({ ok: true, id: rec.id });
+  } catch {
     return NextResponse.json(
       { error: "Не удалось сохранить отзыв" },
       { status: 503 }
     );
   }
-
-  return NextResponse.json({ ok: true, id: data.id });
 }

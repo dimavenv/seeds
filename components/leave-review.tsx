@@ -18,7 +18,7 @@ export default function LeaveReview({
   defaultName,
   existing,
 }: {
-  orderId: number;
+  orderId: string;
   canReview: boolean;
   defaultName: string;
   existing: Review | null;

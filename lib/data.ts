@@ -1,57 +1,31 @@
 import { unstable_cache } from "next/cache";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-import { fetchWithTimeout } from "@/lib/supabase/fetch";
+import { createPublicPb } from "@/lib/pb/server";
+import { isDbConfigured, mapCategory, mapProduct } from "@/lib/pb/shared";
 import { demoCategories, demoProducts } from "@/lib/demo-data";
 import type { Category, Product } from "@/lib/types";
 
-export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-}
-
-// Клиент без cookie — для публичного кэшируемого чтения (категории/каталог).
-// Можно использовать внутри unstable_cache (там недоступны cookies()).
-function createPublicClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: { persistSession: false },
-      global: { fetch: fetchWithTimeout(10000) },
-    }
-  );
-}
+// Обратная совместимость со старым именем (использовалось до переезда на PB).
+export { isDbConfigured as isSupabaseConfigured };
 
 // Категории почти не меняются, но запрашиваются в футере на КАЖДОЙ странице.
-// Кэшируем на 10 минут, чтобы медленная сеть не тормозила каждую загрузку.
+// Кэшируем на 10 минут, чтобы не дёргать базу на каждую загрузку.
 const getCategoriesCached = unstable_cache(
   async (): Promise<Category[]> => {
-    const supabase = createPublicClient();
-    const { data, error } = await supabase
-      .from("categories")
-      .select("*")
-      .order("sort_order");
-    if (error || !data) throw new Error("categories unavailable");
-    return data as Category[];
+    const pb = createPublicPb();
+    const list = await pb
+      .collection("categories")
+      .getFullList({ sort: "sort_order" });
+    return list.map(mapCategory);
   },
-  ["categories-v1"],
+  ["categories-v2"],
   { revalidate: 600, tags: ["categories"] }
 );
 
-const PRODUCT_SELECT =
-  "id, slug, name, description, price, category_id, image_url, images, stock, seeds_per_pack, is_new, is_featured, created_at, category:categories(slug, name)";
-// Без новых колонок: запасной набор, если миграция ещё не применена — чтобы
-// отсутствие колонки не сваливало весь каталог в демо-данные.
-const PRODUCT_SELECT_SAFE =
-  "id, slug, name, description, price, category_id, image_url, images, stock, is_new, is_featured, created_at, category:categories(slug, name)";
-
 export async function getCategories(): Promise<Category[]> {
-  if (!isSupabaseConfigured()) return demoCategories;
+  if (!isDbConfigured()) return demoCategories;
   try {
-    return await getCategoriesCached();
+    const cats = await getCategoriesCached();
+    return cats.length > 0 ? cats : demoCategories;
   } catch {
     // Таймаут/ошибка сети — не валим страницу, показываем демо-категории.
     return demoCategories;
@@ -96,70 +70,122 @@ function filterDemo(opts: ProductQuery): Product[] {
   return opts.limit ? list.slice(0, opts.limit) : list;
 }
 
+// SQLite LIKE регистронезависим только для латиницы, поэтому для кириллицы
+// ищем по нескольким вариантам регистра («томат», «Томат», как ввели).
+function searchVariants(q: string): string[] {
+  const t = q.trim();
+  const lower = t.toLowerCase();
+  const capital = lower.charAt(0).toUpperCase() + lower.slice(1);
+  return Array.from(new Set([t, lower, capital]));
+}
+
+const SORT_MAP: Record<NonNullable<ProductQuery["sort"]>, string> = {
+  price_asc: "price",
+  price_desc: "-price",
+  name: "name",
+  new: "-created",
+};
+
 export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
-  if (!isSupabaseConfigured()) return filterDemo(opts);
-  const supabase = createClient();
+  if (!isDbConfigured()) return filterDemo(opts);
+  const pb = createPublicPb();
 
-  let categoryId: number | null = null;
-  if (opts.categorySlug) {
-    const { data: cat } = await supabase
-      .from("categories")
-      .select("id")
-      .eq("slug", opts.categorySlug)
-      .maybeSingle();
-    if (!cat) return [];
-    categoryId = cat.id as number;
-  }
+  try {
+    const parts: string[] = [];
+    const params: Record<string, unknown> = {};
 
-  const build = (cols: string) => {
-    let query = supabase.from("products").select(cols);
-    if (categoryId != null) query = query.eq("category_id", categoryId);
-    if (opts.q) query = query.ilike("name", `%${opts.q}%`);
-    if (opts.featured) query = query.eq("is_featured", true);
-    if (opts.onlyNew) query = query.eq("is_new", true);
-    if (typeof opts.minPrice === "number") query = query.gte("price", opts.minPrice);
-    if (typeof opts.maxPrice === "number") query = query.lte("price", opts.maxPrice);
-    switch (opts.sort) {
-      case "price_asc": query = query.order("price", { ascending: true }); break;
-      case "price_desc": query = query.order("price", { ascending: false }); break;
-      case "name": query = query.order("name", { ascending: true }); break;
-      default: query = query.order("created_at", { ascending: false });
+    if (opts.categorySlug) {
+      let categoryId: string;
+      try {
+        const cat = await pb
+          .collection("categories")
+          .getFirstListItem(pb.filter("slug = {:slug}", { slug: opts.categorySlug }));
+        categoryId = cat.id;
+      } catch {
+        return []; // категории нет — нет и товаров
+      }
+      parts.push("category = {:categoryId}");
+      params.categoryId = categoryId;
     }
-    if (opts.limit) query = query.limit(opts.limit);
-    return query;
-  };
 
-  // Пробуем полный набор колонок; если новая колонка ещё не добавлена — повтор
-  // без неё (реальные товары остаются), и только если совсем не вышло — демо.
-  let { data, error } = await build(PRODUCT_SELECT);
-  if (error) ({ data, error } = await build(PRODUCT_SELECT_SAFE));
-  if (error || !data) return filterDemo(opts);
-  return data as unknown as Product[];
+    if (opts.q) {
+      const variants = searchVariants(opts.q);
+      const or = variants
+        .map((_, i) => `name ~ {:q${i}}`)
+        .join(" || ");
+      parts.push(`(${or})`);
+      variants.forEach((v, i) => (params[`q${i}`] = v));
+    }
+
+    if (opts.featured) parts.push("is_featured = true");
+    if (opts.onlyNew) parts.push("is_new = true");
+    if (typeof opts.minPrice === "number") {
+      parts.push("price >= {:minPrice}");
+      params.minPrice = opts.minPrice;
+    }
+    if (typeof opts.maxPrice === "number") {
+      parts.push("price <= {:maxPrice}");
+      params.maxPrice = opts.maxPrice;
+    }
+
+    const query = {
+      filter: parts.length ? pb.filter(parts.join(" && "), params) : "",
+      sort: SORT_MAP[opts.sort ?? "new"],
+      expand: "category",
+    };
+
+    if (opts.limit) {
+      const page = await pb.collection("products").getList(1, opts.limit, query);
+      return page.items.map(mapProduct);
+    }
+    const list = await pb.collection("products").getFullList(query);
+    return list.map(mapProduct);
+  } catch {
+    return filterDemo(opts);
+  }
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {
-  if (!isSupabaseConfigured())
+  if (!isDbConfigured())
     return demoProducts.find((p) => p.slug === slug) ?? null;
-  const supabase = createClient();
-  const trySelect = (cols: string) =>
-    supabase.from("products").select(cols).eq("slug", slug).maybeSingle();
-  let { data, error } = await trySelect(PRODUCT_SELECT);
-  if (error) ({ data, error } = await trySelect(PRODUCT_SELECT_SAFE));
-  if (error || !data) return demoProducts.find((p) => p.slug === slug) ?? null;
-  return data as unknown as Product;
+  const pb = createPublicPb();
+  try {
+    const rec = await pb
+      .collection("products")
+      .getFirstListItem(pb.filter("slug = {:slug}", { slug }), {
+        expand: "category",
+      });
+    return mapProduct(rec);
+  } catch {
+    return demoProducts.find((p) => p.slug === slug) ?? null;
+  }
 }
 
-export async function getProductsByIds(ids: number[]): Promise<Product[]> {
-  if (ids.length === 0) return [];
-  if (!isSupabaseConfigured())
-    return demoProducts.filter((p) => ids.includes(p.id));
-  const supabase = createClient();
-  const trySelect = (cols: string) =>
-    supabase.from("products").select(cols).in("id", ids);
-  let { data, error } = await trySelect(PRODUCT_SELECT);
-  if (error) ({ data, error } = await trySelect(PRODUCT_SELECT_SAFE));
-  if (error || !data) return demoProducts.filter((p) => ids.includes(p.id));
-  return data as unknown as Product[];
+// ID записей PocketBase: строка из букв/цифр (стандартно 15 символов).
+export function isValidRecordId(id: unknown): id is string {
+  return typeof id === "string" && /^[a-z0-9]{8,32}$/i.test(id);
+}
+
+export async function getProductsByIds(ids: string[]): Promise<Product[]> {
+  const valid = Array.from(new Set(ids.filter(isValidRecordId))).slice(0, 100);
+  if (valid.length === 0) return [];
+  if (!isDbConfigured())
+    return demoProducts.filter((p) => valid.includes(p.id));
+  const pb = createPublicPb();
+  try {
+    const params: Record<string, unknown> = {};
+    const or = valid.map((id, i) => {
+      params[`id${i}`] = id;
+      return `id = {:id${i}}`;
+    });
+    const list = await pb.collection("products").getFullList({
+      filter: pb.filter(or.join(" || "), params),
+      expand: "category",
+    });
+    return list.map(mapProduct);
+  } catch {
+    return demoProducts.filter((p) => valid.includes(p.id));
+  }
 }
 
 export async function getCategoryBySlug(
@@ -171,16 +197,14 @@ export async function getCategoryBySlug(
 
 // Дата окончания отпуска (для плашки). null — отпуска нет / БД недоступна.
 export async function getVacationUntil(): Promise<string | null> {
-  if (!isSupabaseConfigured()) return null;
+  if (!isDbConfigured()) return null;
   try {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("site_settings")
-      .select("vacation_until")
-      .eq("id", 1)
-      .maybeSingle();
-    if (error || !data?.vacation_until) return null;
-    return data.vacation_until as string; // 'YYYY-MM-DD'
+    const pb = createPublicPb();
+    const page = await pb.collection("site_settings").getList(1, 1);
+    const value = page.items[0]?.vacation_until;
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? value
+      : null;
   } catch {
     return null;
   }
