@@ -125,6 +125,14 @@ export default async function AccountPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3">
+                    {o.payment_status === "refunded" && (
+                      <span className="badge bg-amber-100 text-amber-700">↩ Возврат оплаты</span>
+                    )}
+                    {o.payment_status === "paid" && (o.refunded_amount ?? 0) > 0 && (
+                      <span className="badge bg-amber-100 text-amber-700">
+                        ↩ Возврат {formatPrice(o.refunded_amount ?? 0)}
+                      </span>
+                    )}
                     <span className={`badge ${STATUS_BADGE[o.status]}`}>
                       {ORDER_STATUS_LABELS[o.status]}
                     </span>
@@ -137,14 +145,26 @@ export default async function AccountPage() {
                 <div className="mt-4 flex items-center gap-2 border-t border-brand-100 pt-4">
                   {items.slice(0, 6).map((it) => {
                     const img = it.product_id ? imgMap.get(it.product_id) : null;
+                    const refunded = (it.refunded_qty ?? 0) > 0;
                     return (
                       <div
                         key={it.id}
                         className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-brand-50"
-                        title={it.name}
+                        title={refunded ? `${it.name} — возврат оформлен` : it.name}
                       >
                         {img && (
-                          <Image src={img} alt="" fill sizes="56px" className="object-cover" />
+                          <Image
+                            src={img}
+                            alt=""
+                            fill
+                            sizes="56px"
+                            className={`object-cover ${refunded ? "opacity-60 grayscale" : ""}`}
+                          />
+                        )}
+                        {refunded && (
+                          <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-tl-lg bg-amber-100 text-[11px] font-bold text-amber-700">
+                            ↩
+                          </span>
                         )}
                       </div>
                     );

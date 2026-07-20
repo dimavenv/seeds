@@ -24,7 +24,8 @@ function readEnvFile(file) {
       // (.*?) — лениво, чтобы \s*$ отрезал хвостовые пробелы и \r (CRLF).
       const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
       if (m && !line.trim().startsWith("#")) {
-        env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+        // Кавычки снимаем только парой — одиночная остаётся частью значения.
+        env[m[1]] = m[2].replace(/^(["'])([\s\S]*)\1$/, "$2");
         if (/[ \t\r]$/.test(line) && m[2] !== "") dirtyKeys.push(m[1]);
       }
     }

@@ -77,7 +77,19 @@ export default async function AdminOrderDetail({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <OrderPayment id={order.id} status={order.payment_status ?? "unpaid"} />
+          <OrderPayment
+            id={order.id}
+            status={order.payment_status ?? "unpaid"}
+            total={order.total}
+            refundedAmount={order.refunded_amount ?? 0}
+            items={items.map((it) => ({
+              id: it.id,
+              name: it.name,
+              price: it.price,
+              qty: it.qty,
+              refundedQty: it.refunded_qty ?? 0,
+            }))}
+          />
           <OrderStatusSelect id={order.id} status={order.status} />
           <OrderTrackingInput id={order.id} tracking={order.tracking_number ?? null} />
           <DeleteButton
@@ -111,8 +123,10 @@ export default async function AdminOrderDetail({
                 const slug = it.product_id
                   ? productMap.get(it.product_id)?.slug
                   : null;
+                const refunded = it.refunded_qty ?? 0;
+                const fullRefund = refunded >= it.qty;
                 const card = (
-                  <div className="card flex items-center gap-4 p-3">
+                  <div className={`card flex items-center gap-4 p-3 ${fullRefund ? "opacity-75" : ""}`}>
                     <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-brand-50">
                       {img && (
                         <Image
@@ -120,17 +134,31 @@ export default async function AdminOrderDetail({
                           alt=""
                           fill
                           sizes="80px"
-                          className="object-cover"
+                          className={`object-cover ${fullRefund ? "grayscale" : ""}`}
                         />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-brand-800">{it.name}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`font-semibold text-brand-800 ${fullRefund ? "line-through" : ""}`}>
+                          {it.name}
+                        </span>
+                        {refunded > 0 && (
+                          <span className="badge bg-amber-100 text-amber-700">
+                            ↩ {fullRefund ? "возврат" : `возврат ${refunded} из ${it.qty}`}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-sm text-brand-500">
                         {formatPrice(it.price)} × {it.qty}
                       </div>
+                      {refunded > 0 && (
+                        <div className="text-xs font-semibold text-amber-700">
+                          Возвращено {formatPrice(it.price * refunded)}
+                        </div>
+                      )}
                     </div>
-                    <div className="whitespace-nowrap font-bold text-brand-700">
+                    <div className={`whitespace-nowrap font-bold ${fullRefund ? "text-brand-400 line-through" : "text-brand-700"}`}>
                       {formatPrice(it.price * it.qty)}
                     </div>
                   </div>
@@ -191,6 +219,22 @@ export default async function AdminOrderDetail({
                 <span>Итого</span>
                 <span>{formatPrice(order.total)}</span>
               </div>
+              {(order.refunded_amount ?? 0) > 0 && (
+                <>
+                  <div className="flex justify-between font-semibold text-amber-700">
+                    <span>Возвращено покупателю</span>
+                    <span>−{formatPrice(order.refunded_amount ?? 0)}</span>
+                  </div>
+                  {order.payment_status === "paid" && (
+                    <div className="flex justify-between text-brand-500">
+                      <span>Осталось по оплате</span>
+                      <span>
+                        {formatPrice(Math.max(0, order.total - (order.refunded_amount ?? 0)))}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
 

@@ -4,6 +4,7 @@ import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { encryptField } from "@/lib/crypto";
+import { notifyNewSupport } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 
 // Привязка заявки к аккаунту — «по возможности» (не блокирует отправку).
@@ -87,6 +88,10 @@ export async function POST(request: Request) {
       status: "new",
       user: userId ?? "",
     });
+
+    // Продавцу «у вас новый вопрос» — с Reply-To покупателя, чтобы отвечать
+    // прямо из почты одной кнопкой.
+    void notifyNewSupport({ name, email, subject, message }).catch(() => {});
 
     return NextResponse.json({ ok: true });
   } catch (e) {

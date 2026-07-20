@@ -70,11 +70,14 @@ export async function mailOrderPlaced(
 }
 
 // «Оплата получена» / «Возврат оформлен» — из callback банка и админки.
+// Для возврата: total — возвращённая сумма, items — возвращённые позиции,
+// opts.partial — возврат частичный (остальной заказ остаётся оплаченным).
 export async function mailPayment(
   o: OrderInfo,
   kind: "paid" | "refunded",
   total?: number,
-  items?: { name: string; price: number; qty: number }[]
+  items?: { name: string; price: number; qty: number }[],
+  opts: { partial?: boolean } = {}
 ): Promise<void> {
   if (kind === "paid") {
     const rows = (items ?? [])
@@ -101,13 +104,41 @@ export async function mailPayment(
       ${note("Кассовый чек придёт отдельным письмом.")}`
     );
   } else {
+    const rows = (items ?? [])
+      .map(
+        (i) => `<tr>
+          <td style="padding:7px 0;border-bottom:1px solid #edf2ed;">${escapeHtml(i.name)}</td>
+          <td style="padding:7px 8px;border-bottom:1px solid #edf2ed;text-align:center;white-space:nowrap;">× ${i.qty}</td>
+          <td style="padding:7px 0;border-bottom:1px solid #edf2ed;text-align:right;white-space:nowrap;">${formatPrice(i.price * i.qty)}</td>
+        </tr>`
+      )
+      .join("");
     await send(
       o,
-      "Возврат оформлен",
-      `${orderTitle(o.number, "возврат оформлен")}
-      <p style="margin:0;">${hello(o.name)} Мы оформили возврат оплаты по вашему
-      заказу. Деньги вернутся на карту, обычно это занимает от 1 до 10 дней —
-      зависит от банка.</p>`
+      opts.partial ? "Частичный возврат оформлен" : "Возврат оформлен",
+      `${orderTitle(o.number, opts.partial ? "частичный возврат оформлен" : "возврат оформлен")}
+      <p style="margin:0 0 ${rows || total ? "16px" : "0"};">${hello(o.name)} Мы оформили ${
+        opts.partial ? "частичный возврат" : "возврат оплаты"
+      }${total ? ` на сумму <b>${formatPrice(total)}</b>` : ""} по вашему заказу.
+      Деньги вернутся на карту, обычно это занимает от 1 до 10 дней —
+      зависит от банка.</p>
+      ${
+        rows
+          ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">
+              ${rows}
+              ${
+                total
+                  ? `<tr>
+                      <td style="padding:10px 0 0;font-weight:bold;">Возвращено</td>
+                      <td></td>
+                      <td style="padding:10px 0 0;text-align:right;font-weight:bold;white-space:nowrap;">${formatPrice(total)}</td>
+                    </tr>`
+                  : ""
+              }
+            </table>`
+          : ""
+      }
+      ${opts.partial ? note("Остальная часть заказа остаётся оплаченной и будет выполнена как обычно.") : ""}`
     );
   }
 }

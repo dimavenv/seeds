@@ -20,7 +20,8 @@ function loadEnvFile(file) {
     for (const line of fs.readFileSync(file, "utf8").split("\n")) {
       const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
       if (m && !line.trim().startsWith("#") && !(m[1] in process.env)) {
-        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+        // Кавычки снимаем только парой — одиночная остаётся частью значения.
+        process.env[m[1]] = m[2].replace(/^(["'])([\s\S]*)\1$/, "$2");
       }
     }
   } catch {

@@ -71,6 +71,8 @@ export type Order = {
   tracking_number?: string | null;
   payment_status?: PaymentStatus;
   alfa_order_id?: string | null;
+  // Сколько рублей уже возвращено покупателю (частичные возвраты суммируются).
+  refunded_amount?: number;
   user_id: string | null;
   created_at: string;
   order_items?: OrderItem[];
@@ -83,6 +85,9 @@ export type SupportRequest = {
   subject: string;
   message: string;
   status: string;
+  // Ответ продавца (зашифрован, как и message) и когда он отправлен.
+  reply?: string | null;
+  replied_at?: string | null;
   user_id: string | null;
   created_at: string;
 };
@@ -94,6 +99,8 @@ export type OrderItem = {
   name: string;
   price: number;
   qty: number;
+  // Сколько штук из qty возвращено покупателю деньгами.
+  refunded_qty?: number;
 };
 
 export type ReviewStatus = "pending" | "approved" | "rejected";
