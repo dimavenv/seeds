@@ -272,6 +272,9 @@ export async function refundOrder(
   }
 
   await pb.collection("orders").update(id, { payment_status: "refunded" }).catch(() => {});
+  // Остаток на склад автоматически НЕ возвращаем: товар мог быть уже отгружен.
+  // Вернуть его в наличие — ручное решение админа (правкой остатка товара),
+  // как и договаривались по возвратам/отменам.
   const info = await orderMailInfo(id);
   if (info) {
     void mailPayment({ to: info.to, number: info.number, name: info.name }, "refunded").catch(
@@ -279,6 +282,58 @@ export async function refundOrder(
     );
   }
   revalidatePath("/admin/orders");
+  return { ok: true };
+}
+
+// Удаление тестового/мусорного заказа вместе с составом. Необратимо —
+// подтверждение спрашивает клиентская кнопка.
+export async function deleteOrder(
+  id: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
+  try {
+    const items = await pb.collection("order_items").getFullList({
+      filter: pb.filter("order = {:id}", { id }),
+    });
+    for (const it of items) {
+      await pb.collection("order_items").delete(it.id);
+    }
+    await pb.collection("orders").delete(id);
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function deleteReview(
+  id: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
+  try {
+    await pb.collection("reviews").delete(id);
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
+  revalidatePath("/admin/reviews");
+  revalidatePath("/reviews");
+  return { ok: true };
+}
+
+export async function deleteSupportRequest(
+  id: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
+  try {
+    await pb.collection("support_requests").delete(id);
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
+  revalidatePath("/admin/support");
   return { ok: true };
 }
 

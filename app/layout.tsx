@@ -4,6 +4,7 @@ import { StoreProvider } from "@/components/store-provider";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import VacationBanner from "@/components/vacation-banner";
+import CookieConsent from "@/components/cookie-consent";
 import { getCategories, getVacationUntil } from "@/lib/data";
 
 export const metadata: Metadata = {
@@ -44,6 +45,7 @@ export default async function RootLayout({
           <VacationBanner until={vacationUntil} />
           <main className="flex-1">{children}</main>
           <Footer categories={categories} />
+          <CookieConsent />
         </StoreProvider>
       </body>
     </html>

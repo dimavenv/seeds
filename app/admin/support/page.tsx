@@ -3,6 +3,8 @@ import { mapSupportRequest } from "@/lib/pb/shared";
 import { formatDate } from "@/lib/format";
 import { decryptField } from "@/lib/crypto";
 import type { SupportRequest } from "@/lib/types";
+import DeleteButton from "@/components/admin/delete-button";
+import { deleteSupportRequest } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -44,12 +46,20 @@ export default async function AdminSupport() {
                     {formatDate(r.created_at)}
                   </div>
                 </div>
-                <a
-                  href={`mailto:${email}?subject=Re: ${encodeURIComponent(r.subject)}`}
-                  className="btn-outline !py-1.5"
-                >
-                  Ответить
-                </a>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={`mailto:${email}?subject=Re: ${encodeURIComponent(r.subject)}`}
+                    className="btn-outline !py-1.5"
+                  >
+                    Ответить
+                  </a>
+                  <DeleteButton
+                    action={deleteSupportRequest.bind(null, r.id)}
+                    confirmText={`Точно удалить заявку «${r.subject}» из базы? Действие необратимо.`}
+                  >
+                    Удалить
+                  </DeleteButton>
+                </div>
               </div>
 
               <div className="mt-3 text-sm text-brand-700">

@@ -17,8 +17,12 @@ function baseClient(): PocketBase {
   const pb = new PocketBase(internalUrl());
   pb.autoCancellation(false);
   // Таймаут на каждый запрос — чтобы недоступная база не подвешивала страницы.
+  // cache: no-store — Next по умолчанию кэширует GET через свой fetch, и БД
+  // начинает отдавать устаревшие записи (статусы оплаты, остатки, цены).
+  // Нужное кэширование каталога делается выше через unstable_cache/revalidate.
   pb.beforeSend = (url, options) => {
     options.signal ??= AbortSignal.timeout(10000);
+    (options as { cache?: RequestCache }).cache ??= "no-store";
     return { url, options };
   };
   return pb;

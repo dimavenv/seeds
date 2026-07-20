@@ -4,8 +4,8 @@ import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
 import { normalizeCheckoutItems, findStockIssues, stockShortageMessage } from "@/lib/checkout";
-import { reserveStock, releaseStock } from "@/lib/stock";
-import { DELIVERY_COST, normalizeDeliveryMethod } from "@/lib/delivery";
+import { reserveStock, releaseStock, restockOrderItems } from "@/lib/stock";
+import { deliveryCostFor, normalizeDeliveryMethod } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
@@ -36,6 +36,37 @@ async function nextOrderNumber(pb: Awaited<ReturnType<typeof pbAdmin>>): Promise
     .getList(1, 1, { sort: "-number", fields: "number" });
   const max = (page.items[0]?.number as number | undefined) ?? 0;
   return max + 1;
+}
+
+// Зависшие неоплаченные заказы: покупатель ушёл с платёжной формы и callback
+// от банка так и не пришёл. Такие «пустышки» (новые, ждут оплаты дольше TTL)
+// удаляем при следующем оформлении — чтобы неоплаченные заказы не копились.
+// Товар, зарезервированный при оформлении, при удалении возвращаем на склад
+// (restockOrderItems) — иначе он завис бы навсегда. Оплаченные и взятые
+// админом в работу заказы фильтр не задевает.
+const PENDING_ORDER_TTL_MS = 2 * 60 * 60 * 1000; // 2 часа
+
+async function cleanupStalePendingOrders(
+  pb: Awaited<ReturnType<typeof pbAdmin>>
+): Promise<void> {
+  const cutoff = new Date(Date.now() - PENDING_ORDER_TTL_MS)
+    .toISOString()
+    .replace("T", " "); // формат дат PocketBase
+  const stale = await pb.collection("orders").getFullList({
+    filter: pb.filter(
+      'status = "new" && payment_status = "pending" && placed_at < {:cutoff}',
+      { cutoff }
+    ),
+    fields: "id",
+  });
+  for (const o of stale) {
+    // Возвращает резерв на склад и отдаёт id позиций для удаления.
+    const items = await restockOrderItems(pb, o.id);
+    for (const l of items) {
+      await pb.collection("order_items").delete(l.id).catch(() => {});
+    }
+    await pb.collection("orders").delete(o.id).catch(() => {});
+  }
 }
 
 export async function POST(request: Request) {
@@ -109,6 +140,7 @@ export async function POST(request: Request) {
     ]);
 
     const priceList = productRecords.map(mapProduct);
+
     const lines = items
       .map((i) => {
         const p = priceList.find((x) => x.id === i.id);
@@ -168,7 +200,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const total = lines.reduce((s, l) => s + l.price * l.qty, 0) + DELIVERY_COST;
+    // Сумма и доставка: стоимость доставки считаем НА СЕРВЕРЕ по тем же
+    // правилам, что и на странице оформления (Почта России бесплатно от
+    // порога) — клиенту не доверяем.
+    const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
+    const deliveryCost = deliveryCostFor(delivery_method, subtotal);
+    const total = subtotal + deliveryCost;
 
     // Создание заказа: до 3 попыток на случай гонки за номер.
     let order: { id: string; number: number } | null = null;
@@ -184,7 +221,7 @@ export async function POST(request: Request) {
           address: encryptField(address.trim()),
           comment: comment?.trim() || "",
           delivery_method,
-          delivery_cost: DELIVERY_COST,
+          delivery_cost: deliveryCost,
           total,
           status: "new",
           payment_status: "unpaid",
@@ -201,6 +238,10 @@ export async function POST(request: Request) {
       await releaseStock(pb, reserveLines);
       throw lastError ?? new Error("order create failed");
     }
+
+    // Фоновая уборка старых зависших неоплаченных заказов — не задерживает
+    // текущее оформление и не роняет его при ошибке.
+    void cleanupStalePendingOrders(pb).catch(() => {});
 
     try {
       for (const l of lines) {
@@ -283,12 +324,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Без онлайн-оплаты заказ оформлен сразу — шлём «заказ принят».
+    // Без онлайн-оплаты заказ оформлен сразу и окончательно. Товар уже
+    // зарезервирован выше (reserveStock) — повторно списывать не нужно.
+    // Шлём «заказ принят».
     if (email?.trim()) {
       void mailOrderPlaced(
         { to: email.trim(), number: order.number, name: customer_name.trim() },
         lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
-        { total, deliveryCost: DELIVERY_COST, deliveryMethod: delivery_method }
+        { total, deliveryCost, deliveryMethod: delivery_method }
       ).catch(() => {});
     }
 
