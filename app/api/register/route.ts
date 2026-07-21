@@ -9,6 +9,7 @@ import {
   emailTaken,
   createUser,
   sendCodeEmail,
+  sendExistsEmail,
 } from "@/lib/registration";
 
 function bad(error: string, status = 400) {
@@ -38,16 +39,16 @@ export async function POST(request: Request) {
 
   if (!dbReady()) return bad("Регистрация временно недоступна", 503);
 
-  try {
-    if (await emailTaken(input.email)) {
-      return bad("Такой email уже зарегистрирован");
-    }
-  } catch {
-    return bad("Регистрация временно недоступна", 503);
-  }
-
-  // Почта не настроена — работаем по-старому, без кода.
+  // Почта не настроена (dev-режим) — аккаунт создаётся сразу, скрыть
+  // существование адреса тут нельзя, поэтому сообщаем как есть.
   if (!isMailConfigured()) {
+    try {
+      if (await emailTaken(input.email)) {
+        return bad("Такой email уже зарегистрирован");
+      }
+    } catch {
+      return bad("Регистрация временно недоступна", 503);
+    }
     const res = await createUser(input, false);
     if (!res.ok) return bad(res.error, res.status);
     return NextResponse.json({ ok: true });
@@ -56,6 +57,26 @@ export async function POST(request: Request) {
   // Не даём заваливать один IP письмами: 5 отправок за 10 минут.
   if (!allowAttempt(`start:${ip ?? "?"}`, 5, 10 * 60 * 1000)) {
     return bad("Слишком много попыток — подождите несколько минут", 429);
+  }
+
+  // Занятость адреса проверяем, но НАРУЖУ не показываем: и для свободной, и для
+  // занятой почты отвечаем одинаково ({ needCode, ticket }). Разница лишь в
+  // письме — код регистрации или «у вас уже есть аккаунт» (аудит 4.4). На
+  // занятый адрес билет всё равно выдаётся, но код в письмо не уходит, поэтому
+  // /api/register/confirm по нему аккаунт не создаст (проверка кода не пройдёт).
+  let taken = false;
+  try {
+    taken = await emailTaken(input.email);
+  } catch {
+    return bad("Регистрация временно недоступна", 503);
+  }
+
+  if (taken) {
+    void sendExistsEmail(input.email, input.name).catch(() => {});
+    return NextResponse.json({
+      needCode: true,
+      ticket: issueTicket(input.email, generateCode()),
+    });
   }
 
   const code = generateCode();
