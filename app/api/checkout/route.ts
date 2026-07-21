@@ -4,7 +4,7 @@ import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
 import { normalizeCheckoutItems, findStockIssues, stockShortageMessage } from "@/lib/checkout";
-import { reserveStock, releaseStock, restockOrderItems } from "@/lib/stock";
+import { reserveStock, releaseStock } from "@/lib/stock";
 import { deliveryCostFor, normalizeDeliveryMethod, ozonRestrictedRegion } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
@@ -12,6 +12,7 @@ import { mailOrderPlaced } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
+import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
 
 type IncomingItem = { id: string; qty: number };
 
@@ -38,37 +39,6 @@ async function nextOrderNumber(pb: Awaited<ReturnType<typeof pbAdmin>>): Promise
     .getList(1, 1, { sort: "-number", fields: "number" });
   const max = (page.items[0]?.number as number | undefined) ?? 0;
   return max + 1;
-}
-
-// Зависшие неоплаченные заказы: покупатель ушёл с платёжной формы и callback
-// от банка так и не пришёл. Такие «пустышки» (новые, ждут оплаты дольше TTL)
-// удаляем при следующем оформлении — чтобы неоплаченные заказы не копились.
-// Товар, зарезервированный при оформлении, при удалении возвращаем на склад
-// (restockOrderItems) — иначе он завис бы навсегда. Оплаченные и взятые
-// админом в работу заказы фильтр не задевает.
-const PENDING_ORDER_TTL_MS = 2 * 60 * 60 * 1000; // 2 часа
-
-async function cleanupStalePendingOrders(
-  pb: Awaited<ReturnType<typeof pbAdmin>>
-): Promise<void> {
-  const cutoff = new Date(Date.now() - PENDING_ORDER_TTL_MS)
-    .toISOString()
-    .replace("T", " "); // формат дат PocketBase
-  const stale = await pb.collection("orders").getFullList({
-    filter: pb.filter(
-      'status = "new" && payment_status = "pending" && placed_at < {:cutoff}',
-      { cutoff }
-    ),
-    fields: "id",
-  });
-  for (const o of stale) {
-    // Возвращает резерв на склад и отдаёт id позиций для удаления.
-    const items = await restockOrderItems(pb, o.id);
-    for (const l of items) {
-      await pb.collection("order_items").delete(l.id).catch(() => {});
-    }
-    await pb.collection("orders").delete(o.id).catch(() => {});
-  }
 }
 
 export async function POST(request: Request) {

@@ -1,0 +1,19 @@
+# Плановая уборка зависших неоплаченных заказов (возврат резерва на склад).
+# Дёргает защищённый роут сайта /api/cron/cleanup. Работает в паре с
+# cleanup.timer. Установка:
+#   sudo cp deploy/cleanup.service deploy/cleanup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cleanup.timer
+#
+# CRON_SECRET должен совпадать со значением в .env.production сайта.
+# Задайте его здесь через Environment= или положите в /etc/default/tomatsemena.
+
+[Unit]
+Description=Tomat Semena — cleanup stale pending orders
+After=network.target
+
+[Service]
+Type=oneshot
+# Секрет уборки: держите его в /etc/default/tomatsemena (chmod 600), а не в юните.
+EnvironmentFile=/etc/default/tomatsemena
+ExecStart=/usr/bin/curl -fsS -m 30 -H "Authorization: Bearer ${CRON_SECRET}" https://tomatsemena.ru/api/cron/cleanup
