@@ -1,39 +1,69 @@
 "use client";
 
 import PocketBase from "pocketbase";
-import { PB_COOKIE } from "@/lib/pb/shared";
 
-// Единый браузерный клиент PocketBase. Сессия хранится в localStorage (SDK)
-// и зеркалируется в cookie pb_auth — её читает сервер (SSR/actions).
+// Единый браузерный клиент PocketBase.
+//
+// Сессионную cookie pb_auth теперь ставит СЕРВЕР (httpOnly, недоступна из JS —
+// аудит 4.2, см. /api/auth/login и /api/auth/logout). Клиентский SDK держит
+// токен только в своём сторе (localStorage) для СОБСТВЕННЫХ запросов (корзина,
+// загрузка фото) — они уходят с заголовком Authorization, а не через cookie.
+// Поэтому здесь cookie больше НЕ пишем (иначе появлялась бы вторая, читаемая
+// из JS копия сессии).
 let instance: PocketBase | null = null;
 
 export function getPb(): PocketBase {
   if (instance) return instance;
   instance = new PocketBase(process.env.NEXT_PUBLIC_PB_URL ?? "");
   instance.autoCancellation(false);
-
-  const syncCookie = () => {
-    if (typeof document === "undefined") return;
-    document.cookie = instance!.authStore.exportToCookie(
-      {
-        httpOnly: false,
-        secure: window.location.protocol === "https:",
-        sameSite: "Lax",
-        path: "/",
-      },
-      PB_COOKIE
-    );
-  };
-  instance.authStore.onChange(syncCookie);
-  syncCookie();
   return instance;
 }
 
-// Полный выход: чистим сессию SDK и cookie.
-export function clearAuth(): void {
-  const pb = getPb();
-  pb.authStore.clear();
-  if (typeof document !== "undefined") {
-    document.cookie = `${PB_COOKIE}=; Max-Age=0; path=/`;
+export type ServerLoginResult =
+  | { ok: true; isAdmin: boolean }
+  | { ok: false; error: string; status: number };
+
+// Вход через серверный роут: пароль проверяется на сервере, httpOnly-cookie
+// ставится там же. В ответе приходит токен — заполняем им клиентский SDK, чтобы
+// его собственные запросы (корзина/избранное) продолжали работать.
+export async function serverLogin(payload: {
+  email: string;
+  password: string;
+  captchaToken?: string;
+}): Promise<ServerLoginResult> {
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, error: "Не удалось подключиться к серверу", status: 0 };
   }
+  const data = (await res.json().catch(() => ({}))) as {
+    token?: string;
+    record?: unknown;
+    isAdmin?: boolean;
+    error?: string;
+  };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: data.error ?? "Не удалось войти",
+      status: res.status,
+    };
+  }
+  if (data.token) getPb().authStore.save(data.token, data.record as never);
+  return { ok: true, isAdmin: Boolean(data.isAdmin) };
+}
+
+// Полный выход: гасим серверную httpOnly-cookie и чистим клиентский SDK-стор.
+export async function clearAuth(): Promise<void> {
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch {
+    // сеть недоступна — cookie истечёт сама; локально всё равно выходим
+  }
+  getPb().authStore.clear();
 }

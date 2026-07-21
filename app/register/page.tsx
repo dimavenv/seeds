@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getPb } from "@/lib/pb/client";
+import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 
 export default function RegisterPage() {
@@ -25,9 +25,15 @@ export default function RegisterPage() {
   }, [resendIn]);
 
   async function finishLogin() {
-    // Аккаунт создан — входим и идём в кабинет.
-    await getPb().collection("users").authWithPassword(email, password);
-    window.location.assign("/account");
+    // Аккаунт создан — входим через сервер (ставит httpOnly-cookie) и идём в
+    // кабинет. Если включена капча, авто-вход без токена не пройдёт — тогда
+    // просто отправляем на страницу входа с пометкой об успешной регистрации.
+    const result = await serverLogin({ email, password });
+    if (result.ok) {
+      window.location.assign("/account");
+    } else {
+      window.location.assign("/login?registered=1");
+    }
   }
 
   async function submit(e: React.FormEvent) {

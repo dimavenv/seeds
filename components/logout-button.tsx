@@ -9,7 +9,7 @@ export default function LogoutButton() {
   async function logout() {
     setLoading(true);
     try {
-      clearAuth();
+      await clearAuth();
     } catch {
       // игнорируем
     }

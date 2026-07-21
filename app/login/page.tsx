@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getPb } from "@/lib/pb/client";
+import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
@@ -15,6 +15,14 @@ export default function LoginPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaReset, setCaptchaReset] = useState(0);
+  const [registered, setRegistered] = useState(false);
+
+  // Пришли после регистрации (когда авто-вход не прошёл из-за капчи).
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRegistered(new URLSearchParams(window.location.search).has("registered"));
+    }
+  }, []);
 
   // Проверка доступности базы при загрузке страницы.
   useEffect(() => {
@@ -50,40 +58,17 @@ export default function LoginPage() {
       setLoading(false);
     }, 10000);
 
-    try {
-      // Сначала проверяем капчу на сервере, затем входим.
-      if (captchaEnabled) {
-        const guard = await fetch("/api/login-guard", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ captchaToken }),
-        });
-        if (!guard.ok) {
-          clearTimeout(safety);
-          const data = await guard.json().catch(() => ({}));
-          setError(data.error ?? "Подтвердите, что вы не робот");
-          setLoading(false);
-          resetCaptcha();
-          return;
-        }
-      }
-
-      const pb = getPb();
-      await pb.collection("users").authWithPassword(email, password);
-      clearTimeout(safety);
-      // Жёсткий переход — надёжнее обновляет сессию.
-      window.location.assign("/account");
-    } catch (e) {
-      clearTimeout(safety);
-      const status = (e as { status?: number })?.status;
-      setError(
-        status === 400
-          ? "Неверный email или пароль"
-          : "Не удалось подключиться к базе. Проверьте /api/health и настройки PocketBase."
-      );
+    // Вход на сервере: пароль и капча проверяются там, сессия — в httpOnly-cookie.
+    const result = await serverLogin({ email, password, captchaToken });
+    clearTimeout(safety);
+    if (!result.ok) {
+      setError(result.error);
       setLoading(false);
       resetCaptcha();
+      return;
     }
+    // Жёсткий переход — надёжнее обновляет сессию.
+    window.location.assign("/account");
   }
 
   const dbDown = health && !health.ok;
@@ -95,6 +80,12 @@ export default function LoginPage() {
         <p className="mt-1 text-sm text-brand-500">
           Войдите в личный кабинет или панель администратора.
         </p>
+
+        {registered && (
+          <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
+            Регистрация завершена — войдите с вашими email и паролем.
+          </div>
+        )}
 
         {dbDown && (
           <div className="mt-4 rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-700">
