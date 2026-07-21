@@ -1,6 +1,10 @@
-// Клиент подсказок адресов DaData. Единый источник для structured-адреса (Почта)
-// и однострочного поля ПВЗ (Ozon). Токен публичный (сервис подсказок) — попадает
-// в браузерный бандл, это нормально для DaData.
+// Клиентский помощник подсказок адресов DaData. Единый источник для
+// structured-адреса (Почта) и однострочного поля ПВЗ (Ozon).
+//
+// ВАЖНО (аудит 5.5): токен DaData больше НЕ уходит в браузер. Запросы идут через
+// собственный серверный прокси /api/dadata (app/api/dadata/route.ts +
+// lib/dadata-server.ts), который подставляет ключ на сервере и троттлит запросы,
+// чтобы ключ нельзя было выскрести из бандла и сжечь квоту.
 
 // Ответ DaData (suggestions API). Берём только нужные поля.
 export type DadataAddressData = {
@@ -22,14 +26,15 @@ export type DadataAddressData = {
 
 export type DadataSuggestion = { value: string; data: DadataAddressData };
 
-export const DADATA_TOKEN = process.env.NEXT_PUBLIC_DADATA_TOKEN;
-export const hasDadata = Boolean(DADATA_TOKEN);
+// Включены ли подсказки. Только публичный НЕсекретный флаг
+// NEXT_PUBLIC_DADATA_ENABLED — намеренно НЕ ссылаемся здесь на токен, иначе
+// Next вшил бы его значение в браузерный бандл (ровно то, от чего уходим,
+// аудит 5.5). При миграции задайте DADATA_TOKEN (сервер) и
+// NEXT_PUBLIC_DADATA_ENABLED=1 (браузер).
+export const hasDadata = Boolean(process.env.NEXT_PUBLIC_DADATA_ENABLED);
 
-const SUGGEST_URL =
-  "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address";
-
-// Запрос подсказок адреса. Без токена/при ошибке возвращает пустой список,
-// чтобы поля работали как обычный ручной ввод.
+// Запрос подсказок адреса через собственный прокси. Без подсказок/при ошибке
+// возвращает пустой список, чтобы поля работали как обычный ручной ввод.
 export async function suggestAddress(params: {
   query: string;
   count?: number;
@@ -39,32 +44,22 @@ export async function suggestAddress(params: {
   restrictValue?: boolean;
   signal?: AbortSignal;
 }): Promise<DadataSuggestion[]> {
-  if (!DADATA_TOKEN) return [];
-  const {
-    query,
-    count = 7,
-    fromBound,
-    toBound,
-    locations,
-    restrictValue,
-    signal,
-  } = params;
+  if (!hasDadata) return [];
+  const { query, count = 7, fromBound, toBound, locations, restrictValue, signal } =
+    params;
+  if (!query || query.trim().length < 2) return [];
   try {
-    const res = await fetch(SUGGEST_URL, {
+    const res = await fetch("/api/dadata", {
       method: "POST",
       signal,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Token ${DADATA_TOKEN}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query,
         count,
-        from_bound: fromBound ? { value: fromBound } : undefined,
-        to_bound: toBound ? { value: toBound } : undefined,
+        fromBound,
+        toBound,
         locations,
-        restrict_value: restrictValue ?? Boolean(locations),
+        restrictValue,
       }),
     });
     if (!res.ok) return [];
