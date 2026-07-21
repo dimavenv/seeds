@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
 import { normalizeCheckoutItems, findStockIssues, stockShortageMessage } from "@/lib/checkout";
 import { reserveStock, releaseStock, restockOrderItems } from "@/lib/stock";
-import { deliveryCostFor, normalizeDeliveryMethod } from "@/lib/delivery";
+import { deliveryCostFor, normalizeDeliveryMethod, ozonRestrictedRegion } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
@@ -100,6 +100,20 @@ export async function POST(request: Request) {
   }
   if (items.length === 0) {
     return NextResponse.json({ error: "Корзина пуста" }, { status: 400 });
+  }
+
+  // Ozon не возит в Крым, Калининград и на Камчатку — не даём оформить такой
+  // заказ, даже если клиентскую проверку обошли.
+  if (delivery_method === "ozon") {
+    const restricted = ozonRestrictedRegion(address);
+    if (restricted) {
+      return NextResponse.json(
+        {
+          error: `Доставка Ozon в регион «${restricted}» недоступна. Выберите другой пункт выдачи или Почту России.`,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   // Антибот-капча (если подключена) — до любых операций с базой.

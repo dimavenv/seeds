@@ -9,6 +9,7 @@ import {
   DELIVERY_COST,
   FREE_DELIVERY_FROM,
   deliveryCostFor,
+  ozonRestrictedRegion,
   type DeliveryMethodId,
 } from "@/lib/delivery";
 import DeliveryMethodCards from "@/components/delivery-method-cards";
@@ -23,9 +24,7 @@ import DadataAddress, {
   emptyAddress,
   type AddressValue,
 } from "@/components/dadata-address";
-import OzonPvzField, {
-  type OzonPvzSelection,
-} from "@/components/ozon-pvz-field";
+import OzonPvzField from "@/components/ozon-pvz-field";
 
 const PROFILE_KEY = "checkout_profile";
 
@@ -39,7 +38,7 @@ type SavedProfile = {
     comment: string;
   };
   address: AddressValue;
-  pvz: OzonPvzSelection | null;
+  pvz: string;
   deliveryMethod: DeliveryMethodId;
 };
 
@@ -59,8 +58,8 @@ export default function CheckoutPage() {
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
-  // Выбранный пункт выдачи Ozon (для способа доставки «Ozon»).
-  const [pvz, setPvz] = useState<OzonPvzSelection | null>(null);
+  // Написанный покупателем пункт выдачи Ozon (для способа доставки «Ozon»).
+  const [pvz, setPvz] = useState("");
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -77,7 +76,9 @@ export default function CheckoutPage() {
       if (cancelled || !saved) return;
       if (saved.form) setForm(saved.form);
       if (saved.address) setAddress(saved.address);
-      if (saved.pvz) setPvz(saved.pvz);
+      // Раньше сюда сохранялся объект выбранного ПВЗ — теперь это строка;
+      // старые сохранённые профили с объектом просто игнорируем.
+      if (typeof saved.pvz === "string") setPvz(saved.pvz);
       if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
       setRemember(true);
     });
@@ -110,11 +111,18 @@ export default function CheckoutPage() {
     // Почта — структурный адрес с индексом.
     let addressStr: string;
     if (deliveryMethod === "ozon") {
-      if (!pvz) {
-        setError("Выберите пункт выдачи Ozon на карте или в списке");
+      if (!pvz.trim()) {
+        setError("Напишите адрес пункта выдачи Ozon");
         return;
       }
-      addressStr = `Пункт выдачи Ozon [${pvz.code}]: ${pvz.address}`;
+      const restricted = ozonRestrictedRegion(pvz);
+      if (restricted) {
+        setError(
+          `Доставка Ozon в регион «${restricted}» недоступна. Выберите другой пункт выдачи или Почту России.`
+        );
+        return;
+      }
+      addressStr = `Пункт выдачи Ozon: ${pvz.trim()}`;
     } else {
       const missingAddress =
         !address.postal_code.trim() ||
@@ -361,7 +369,8 @@ export default function CheckoutPage() {
               submitting ||
               !consent ||
               (captchaEnabled && !captchaToken) ||
-              (deliveryMethod === "ozon" && !pvz)
+              (deliveryMethod === "ozon" &&
+                (!pvz.trim() || Boolean(ozonRestrictedRegion(pvz))))
             }
             className="btn-accent mt-5 w-full"
           >

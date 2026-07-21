@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { clientIp } from "@/lib/client-ip";
-import { deliveryMethodLabel, normalizeDeliveryMethod } from "@/lib/delivery";
+import {
+  deliveryMethodLabel,
+  normalizeDeliveryMethod,
+  ozonRestrictedRegion,
+} from "@/lib/delivery";
 import { isRussianEmail } from "@/lib/ru-email";
 import { isValidRecordId } from "@/lib/pb/shared";
 
@@ -35,6 +39,34 @@ describe("normalizeDeliveryMethod", () => {
     expect(deliveryMethodLabel("post")).toBe("Почта России");
     expect(deliveryMethodLabel("unknown")).toBe("unknown");
     expect(deliveryMethodLabel(null)).toBe("—");
+  });
+});
+
+describe("ozonRestrictedRegion", () => {
+  it("запрещённые для Ozon регионы находятся по адресу", () => {
+    expect(ozonRestrictedRegion("г Симферополь, ул Ленина, д 1")).toContain(
+      "Крым"
+    );
+    expect(ozonRestrictedRegion("Республика Крым, Ялта")).toContain("Крым");
+    expect(ozonRestrictedRegion("г Севастополь, ул Большая Морская")).toContain(
+      "Севастополь"
+    );
+    expect(ozonRestrictedRegion("г Калининград, Ленинский пр-т")).toContain(
+      "Калининград"
+    );
+    expect(
+      ozonRestrictedRegion("Камчатский край, г Петропавловск-Камчатский")
+    ).toContain("Камчат");
+    // регистр не важен
+    expect(ozonRestrictedRegion("КАЛИНИНГРАД")).not.toBeNull();
+  });
+
+  it("разрешённые адреса и пустые значения — null", () => {
+    expect(ozonRestrictedRegion("г Краснодар, ул Красная, д 176")).toBeNull();
+    expect(ozonRestrictedRegion("г Москва, ул Тверская, д 7")).toBeNull();
+    expect(ozonRestrictedRegion("")).toBeNull();
+    expect(ozonRestrictedRegion(null)).toBeNull();
+    expect(ozonRestrictedRegion(undefined)).toBeNull();
   });
 });
 

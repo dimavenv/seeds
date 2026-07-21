@@ -70,3 +70,41 @@ export function normalizeDeliveryMethod(id: unknown): DeliveryMethodId {
     ? (id as DeliveryMethodId)
     : "ozon";
 }
+
+// Регионы, в которые Ozon-доставку оформить нельзя (Крым, Калининград,
+// Камчатка). Проверяем по ключевым словам в написанном покупателем адресе
+// пункта выдачи — и на странице оформления, и на сервере (клиенту не доверяем).
+const OZON_RESTRICTED_REGIONS: { name: string; keywords: string[] }[] = [
+  {
+    name: "Республика Крым / Севастополь",
+    keywords: [
+      "крым",
+      "севастополь",
+      "симферополь",
+      "керчь",
+      "ялта",
+      "евпатория",
+      "феодосия",
+      "джанкой",
+    ],
+  },
+  {
+    name: "Калининградская область",
+    keywords: ["калининград", "калининградск"],
+  },
+  {
+    name: "Камчатский край",
+    keywords: ["камчат", "петропавловск-камчат"],
+  },
+];
+
+// Если написанный адрес попадает в запрещённый для Ozon регион — вернуть его
+// название (для сообщения об ошибке), иначе null.
+export function ozonRestrictedRegion(address: string | null | undefined): string | null {
+  const text = (address ?? "").toLowerCase();
+  if (!text.trim()) return null;
+  for (const region of OZON_RESTRICTED_REGIONS) {
+    if (region.keywords.some((k) => text.includes(k))) return region.name;
+  }
+  return null;
+}
