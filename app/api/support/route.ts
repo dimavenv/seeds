@@ -6,6 +6,7 @@ import { isDbConfigured } from "@/lib/pb/shared";
 import { encryptField } from "@/lib/crypto";
 import { notifyNewSupport } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
+import { allowAttempt } from "@/lib/email-code";
 
 // Привязка заявки к аккаунту — «по возможности» (не блокирует отправку).
 async function bestEffortUserId(): Promise<string | null> {
@@ -59,7 +60,13 @@ export async function POST(request: Request) {
   }
 
   const ip = clientIp(request);
-  if (!(await verifyCaptcha(body.captchaToken, ip))) {
+  if (!allowAttempt(`support:${ip ?? "?"}`, 5, 10 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Слишком много обращений — подождите несколько минут" },
+      { status: 429 }
+    );
+  }
+  if (!(await verifyCaptcha(body.captchaToken, ip, { failClosed: true }))) {
     return NextResponse.json(
       { error: "Подтвердите, что вы не робот" },
       { status: 400 }

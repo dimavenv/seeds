@@ -9,6 +9,19 @@ import {
 import { demoCategories, demoProducts } from "@/lib/demo-data";
 import type { Category, Product } from "@/lib/types";
 
+// Демо-каталог показываем ТОЛЬКО когда база вообще не настроена, либо когда
+// демо-режим включён явным флагом DEMO_MODE=true. Иначе (боевая база временно
+// недоступна) НЕ подменяем реальный каталог фейковым: громко пишем в лог и
+// отдаём пустой результат — фейковый товар в проде опаснее пустой страницы
+// (принимает заказы, которые «исчезают»). См. аудит 11.3.
+function demoAllowed(): boolean {
+  return !isDbConfigured() || process.env.DEMO_MODE === "true";
+}
+
+function onDbError(where: string, e: unknown): void {
+  console.error(`[data] ${where}: PocketBase недоступен —`, e);
+}
+
 // Категории почти не меняются, но запрашиваются в футере на КАЖДОЙ странице.
 // Кэшируем на 10 минут, чтобы не дёргать базу на каждую загрузку.
 const getCategoriesCached = unstable_cache(
@@ -27,10 +40,13 @@ export async function getCategories(): Promise<Category[]> {
   if (!isDbConfigured()) return demoCategories;
   try {
     const cats = await getCategoriesCached();
-    return cats.length > 0 ? cats : demoCategories;
-  } catch {
-    // Таймаут/ошибка сети — не валим страницу, показываем демо-категории.
-    return demoCategories;
+    if (cats.length > 0) return cats;
+    return demoAllowed() ? demoCategories : [];
+  } catch (e) {
+    // Таймаут/ошибка сети — не валим страницу. В проде показываем пустой
+    // список категорий, а не демо-подмену (демо только при DEMO_MODE).
+    onDbError("getCategories", e);
+    return demoAllowed() ? demoCategories : [];
   }
 }
 
@@ -142,8 +158,9 @@ export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
     }
     const list = await pb.collection("products").getFullList(query);
     return list.map(mapProduct);
-  } catch {
-    return filterDemo(opts);
+  } catch (e) {
+    onDbError("getProducts", e);
+    return demoAllowed() ? filterDemo(opts) : [];
   }
 }
 
@@ -158,8 +175,11 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
         expand: "category",
       });
     return mapProduct(rec);
-  } catch {
-    return demoProducts.find((p) => p.slug === slug) ?? null;
+  } catch (e) {
+    onDbError("getProductBySlug", e);
+    return demoAllowed()
+      ? demoProducts.find((p) => p.slug === slug) ?? null
+      : null;
   }
 }
 
@@ -184,8 +204,11 @@ export async function getProductsByIds(ids: string[]): Promise<Product[]> {
       expand: "category",
     });
     return list.map(mapProduct);
-  } catch {
-    return demoProducts.filter((p) => valid.includes(p.id));
+  } catch (e) {
+    onDbError("getProductsByIds", e);
+    return demoAllowed()
+      ? demoProducts.filter((p) => valid.includes(p.id))
+      : [];
   }
 }
 

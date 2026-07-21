@@ -11,6 +11,7 @@ import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
+import { allowAttempt } from "@/lib/email-code";
 
 type IncomingItem = { id: string; qty: number };
 
@@ -116,9 +117,20 @@ export async function POST(request: Request) {
     }
   }
 
-  // Антибот-капча (если подключена) — до любых операций с базой.
+  // Ограничение частоты оформления с одного IP — чтобы нельзя было массово
+  // создавать заказы (резервировать весь склад, спамить письмами продавцу).
+  // Лимитер в памяти воркера — достаточно как приложенческий слой поверх
+  // nginx limit_req (см. deploy/nginx.conf).
   const ip = clientIp(request);
-  if (!(await verifyCaptcha(body.captchaToken, ip))) {
+  if (!allowAttempt(`checkout:${ip ?? "?"}`, 15, 5 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Слишком много попыток оформления — подождите пару минут" },
+      { status: 429 }
+    );
+  }
+
+  // Антибот-капча (если подключена) — до любых операций с базой.
+  if (!(await verifyCaptcha(body.captchaToken, ip, { failClosed: true }))) {
     return NextResponse.json(
       { error: "Подтвердите, что вы не робот" },
       { status: 400 }

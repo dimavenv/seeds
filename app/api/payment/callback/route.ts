@@ -140,6 +140,42 @@ export async function GET(req: Request) {
         }
       } else if (next) {
         const prev = await pb.collection("orders").getOne(orderNumber);
+
+        // Прежде чем пометить заказ ОПЛАЧЕННЫМ, не доверяем только callback'у:
+        // сверяемся с банком server-to-server (getOrderStatusExtended) и
+        // проверяем, что реально СПИСАННАЯ сумма совпадает с суммой заказа в
+        // копейках. Валидная подпись callback гарантирует подлинность, а эта
+        // проверка закрывает несовпадение суммы/валюты (аудит 3.1, 3.3).
+        if (next === "paid") {
+          try {
+            const { isAlfaConfigured, alfaStatus } = await import("@/lib/alfa");
+            const alfaOrderId = String(prev.alfa_order_id ?? "");
+            if (isAlfaConfigured() && alfaOrderId) {
+              const st = await alfaStatus(alfaOrderId);
+              const expectedKopecks = Math.round(Number(prev.total ?? 0) * 100);
+              const depositedKopecks =
+                st.paymentAmountInfo?.depositedAmount ??
+                (typeof st.amount === "number" ? st.amount : undefined);
+              const paidStatus = st.orderStatus === 2; // 2 — оплачен (deposited)
+              if (!paidStatus || depositedKopecks !== expectedKopecks) {
+                console.error(
+                  `[callback] заказ ${orderNumber}: оплата НЕ подтверждена банком ` +
+                    `(orderStatus=${st.orderStatus}, deposited=${depositedKopecks}, ` +
+                    `ожидалось=${expectedKopecks}) — статус «оплачен» не выставлен.`
+                );
+                return new NextResponse("OK"); // не помечаем оплаченным
+              }
+            }
+          } catch (e) {
+            // Не смогли сверить статус с банком — не рискуем помечать оплаченным.
+            console.error(
+              `[callback] заказ ${orderNumber}: не удалось сверить статус с банком:`,
+              e
+            );
+            return new NextResponse("OK");
+          }
+        }
+
         if (prev.payment_status !== next) {
           const rec = await pb
             .collection("orders")

@@ -1,3 +1,4 @@
+import "server-only";
 import crypto from "node:crypto";
 
 // Шифрование чувствительных полей (телефон, email, адрес) перед записью в БД,

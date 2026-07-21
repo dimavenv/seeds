@@ -16,6 +16,36 @@ const nextConfig = {
       { protocol: "https", hostname: "picsum.photos" },
     ],
   },
+  // Заголовки безопасности на уровне приложения (работают и на Vercel, и на VPS,
+  // где nginx добавляет их дополнительно). CSP здесь намеренно ограничивает
+  // только то, что НЕ зависит от внешних origin'ов (PocketBase, DaData,
+  // SmartCaptcha грузятся с динамических адресов): защита от кликджекинга
+  // (frame-ancestors), подмены base href (base-uri) и плагинов (object-src).
+  // Полноценный script-src/connect-src с nonce задаётся на nginx — см.
+  // deploy/nginx.conf и раздел CSP в аудите.
+  async headers() {
+    const csp = [
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self' https://pay.alfabank.ru https://payment.alfabank.ru https://alfa.rbsuat.com",
+    ].join("; ");
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: csp },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "geolocation=(), camera=(), microphone=()",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

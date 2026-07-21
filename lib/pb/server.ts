@@ -1,3 +1,4 @@
+import "server-only";
 import PocketBase from "pocketbase";
 import { cookies } from "next/headers";
 import { PB_COOKIE } from "@/lib/pb/shared";

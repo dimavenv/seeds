@@ -13,6 +13,8 @@
 //   ALFA_PASSWORD — пароль API-логина
 //   ALFA_CALLBACK_TOKEN — общий токен для проверки подписи callback (симметричный)
 
+import "server-only";
+
 const GATEWAY = (process.env.ALFA_GATEWAY || "").replace(/\/+$/, "");
 
 export function isAlfaConfigured(): boolean {

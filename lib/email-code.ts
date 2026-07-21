@@ -1,3 +1,4 @@
+import "server-only";
 import crypto from "node:crypto";
 
 // Коды подтверждения почты при регистрации — без хранения в БД.

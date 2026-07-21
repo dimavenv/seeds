@@ -31,7 +31,9 @@ export async function POST(request: Request) {
   if (error) return bad(error);
 
   const ip = clientIp(request);
-  const human = await verifyCaptcha(String(body.captchaToken ?? ""), ip);
+  const human = await verifyCaptcha(String(body.captchaToken ?? ""), ip, {
+    failClosed: true,
+  });
   if (!human) return bad("Подтвердите, что вы не робот");
 
   if (!dbReady()) return bad("Регистрация временно недоступна", 503);
