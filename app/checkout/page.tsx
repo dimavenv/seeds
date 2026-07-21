@@ -60,6 +60,9 @@ export default function CheckoutPage() {
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
   // Написанный покупателем пункт выдачи Ozon (для способа доставки «Ozon»).
   const [pvz, setPvz] = useState("");
+  // Код региона (KLADR) выбранного из подсказок ПВЗ — для проверки Ozon на
+  // сервере по нормализованному региону, а не по свободному тексту (аудит 2.6).
+  const [pvzRegionKladr, setPvzRegionKladr] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -164,6 +167,7 @@ export default function CheckoutPage() {
           address: addressStr,
           comment: form.comment,
           delivery_method: deliveryMethod,
+          region_kladr: deliveryMethod === "ozon" ? pvzRegionKladr : null,
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
           captchaToken,
         }),
@@ -288,7 +292,11 @@ export default function CheckoutPage() {
               {deliveryMethod === "ozon" ? "Пункт выдачи" : "Адрес доставки"}
             </legend>
             {deliveryMethod === "ozon" ? (
-              <OzonPvzField value={pvz} onChange={setPvz} />
+              <OzonPvzField
+                value={pvz}
+                onChange={setPvz}
+                onRegionKladr={setPvzRegionKladr}
+              />
             ) : (
               <DadataAddress value={address} onChange={setAddress} />
             )}

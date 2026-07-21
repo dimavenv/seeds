@@ -108,3 +108,33 @@ export function ozonRestrictedRegion(address: string | null | undefined): string
   }
   return null;
 }
+
+// Авторитетная проверка по коду региона (2 первые цифры KLADR/региона от
+// DaData). Не зависит от написания и транслита ("Симферополь"/"Simferopol"):
+// DaData уже нормализовала адрес до кода региона. Аудит 2.6.
+const OZON_RESTRICTED_REGION_CODES: Record<string, string> = {
+  "91": "Республика Крым",
+  "92": "Севастополь",
+  "39": "Калининградская область",
+  "41": "Камчатский край",
+};
+
+export function ozonRestrictedByRegionCode(
+  regionKladrId: string | null | undefined
+): string | null {
+  const code = String(regionKladrId ?? "").trim().slice(0, 2);
+  if (!/^\d{2}$/.test(code)) return null;
+  return OZON_RESTRICTED_REGION_CODES[code] ?? null;
+}
+
+// Единая серверная проверка Ozon-ограничения: сначала по нормализованному коду
+// региона (если пришёл от DaData), затем — запасной разбор свободного текста.
+export function ozonRestriction(params: {
+  regionKladrId?: string | null;
+  address?: string | null;
+}): string | null {
+  return (
+    ozonRestrictedByRegionCode(params.regionKladrId) ??
+    ozonRestrictedRegion(params.address)
+  );
+}

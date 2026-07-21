@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
 import { normalizeCheckoutItems, findStockIssues, stockShortageMessage } from "@/lib/checkout";
 import { reserveStock, releaseStock } from "@/lib/stock";
-import { deliveryCostFor, normalizeDeliveryMethod, ozonRestrictedRegion } from "@/lib/delivery";
+import { deliveryCostFor, normalizeDeliveryMethod, ozonRestriction } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
 import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
 import { mailOrderPlaced } from "@/lib/order-mail";
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
     address?: string;
     comment?: string;
     delivery_method?: string;
+    region_kladr?: string | null;
     items?: IncomingItem[];
     captchaToken?: string;
   };
@@ -74,9 +75,13 @@ export async function POST(request: Request) {
   }
 
   // Ozon не возит в Крым, Калининград и на Камчатку — не даём оформить такой
-  // заказ, даже если клиентскую проверку обошли.
+  // заказ, даже если клиентскую проверку обошли. Проверяем по нормализованному
+  // коду региона DaData (если пришёл), иначе — по свободному тексту адреса.
   if (delivery_method === "ozon") {
-    const restricted = ozonRestrictedRegion(address);
+    const restricted = ozonRestriction({
+      regionKladrId: body.region_kladr,
+      address,
+    });
     if (restricted) {
       return NextResponse.json(
         {

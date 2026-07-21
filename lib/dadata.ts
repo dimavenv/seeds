@@ -10,6 +10,11 @@ export type DadataAddressData = {
   settlement_with_type: string | null;
   street_with_type: string | null;
   house: string | null;
+  // Нормализованные идентификаторы региона — устойчивая замена разбора
+  // свободного текста (аудит 2.6): region_kladr_id начинается с 2-значного
+  // кода региона (91 — Крым, 92 — Севастополь, 39 — Калининград, 41 — Камчатка).
+  region_kladr_id: string | null;
+  region_fias_id: string | null;
   city_fias_id: string | null;
   settlement_fias_id: string | null;
   street_fias_id: string | null;

@@ -4,6 +4,8 @@ import {
   deliveryMethodLabel,
   normalizeDeliveryMethod,
   ozonRestrictedRegion,
+  ozonRestrictedByRegionCode,
+  ozonRestriction,
 } from "@/lib/delivery";
 import { isRussianEmail } from "@/lib/ru-email";
 import { isValidRecordId } from "@/lib/pb/shared";
@@ -67,6 +69,46 @@ describe("ozonRestrictedRegion", () => {
     expect(ozonRestrictedRegion("")).toBeNull();
     expect(ozonRestrictedRegion(null)).toBeNull();
     expect(ozonRestrictedRegion(undefined)).toBeNull();
+  });
+});
+
+describe("ozonRestrictedByRegionCode (KLADR)", () => {
+  it("запрещённые регионы по коду (первые 2 цифры KLADR)", () => {
+    expect(ozonRestrictedByRegionCode("9100000000000")).toContain("Крым");
+    expect(ozonRestrictedByRegionCode("9200000000000")).toContain("Севастополь");
+    expect(ozonRestrictedByRegionCode("3900000000000")).toContain("Калининград");
+    expect(ozonRestrictedByRegionCode("4100000000000")).toContain("Камчат");
+    // Короткий 2-значный код тоже принимается.
+    expect(ozonRestrictedByRegionCode("91")).toContain("Крым");
+  });
+
+  it("разрешённые/некорректные коды — null", () => {
+    expect(ozonRestrictedByRegionCode("2300000000000")).toBeNull(); // Краснодар
+    expect(ozonRestrictedByRegionCode("77")).toBeNull(); // Москва
+    expect(ozonRestrictedByRegionCode("")).toBeNull();
+    expect(ozonRestrictedByRegionCode(null)).toBeNull();
+    expect(ozonRestrictedByRegionCode("ab")).toBeNull();
+  });
+});
+
+describe("ozonRestriction (код региона приоритетнее текста)", () => {
+  it("ловит нормализованный регион, который обошёл разбор текста", () => {
+    // Свободный текст без ключевых слов (транслит), но код региона — Крым.
+    expect(
+      ozonRestriction({ regionKladrId: "9100000000000", address: "Simferopol, Lenina 1" })
+    ).toContain("Крым");
+  });
+
+  it("падает обратно на текст, когда кода нет", () => {
+    expect(
+      ozonRestriction({ regionKladrId: null, address: "г Калининград, пр Мира" })
+    ).toContain("Калининград");
+  });
+
+  it("разрешённый заказ — null", () => {
+    expect(
+      ozonRestriction({ regionKladrId: "2300000000000", address: "г Краснодар" })
+    ).toBeNull();
   });
 });
 

@@ -9,9 +9,13 @@ import { ozonRestrictedRegion } from "@/lib/delivery";
 export default function OzonPvzField({
   value,
   onChange,
+  onRegionKladr,
 }: {
   value: string;
   onChange: (v: string) => void;
+  // Код региона (KLADR) выбранной подсказки DaData — для авторитетной проверки
+  // ограничений Ozon на сервере. null, когда покупатель правит адрес вручную.
+  onRegionKladr?: (kladrId: string | null) => void;
 }) {
   const restricted = ozonRestrictedRegion(value);
 
@@ -21,8 +25,15 @@ export default function OzonPvzField({
         label="Адрес пункта выдачи Ozon"
         required
         value={value}
-        onChange={onChange}
-        onPick={(s) => onChange(s.value)}
+        onChange={(v) => {
+          onChange(v);
+          // Ручная правка обнуляет привязку к нормализованному региону.
+          onRegionKladr?.(null);
+        }}
+        onPick={(s) => {
+          onChange(s.value);
+          onRegionKladr?.(s.data?.region_kladr_id ?? null);
+        }}
         placeholder="Например: г Краснодар, ул Красная, д 176"
       />
       <p className="text-xs text-brand-500">
