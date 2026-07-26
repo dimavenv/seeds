@@ -13,10 +13,10 @@ import {
 import { loadUserStore, saveUserStore } from "@/app/store-actions";
 import {
   SYNC_KEY,
-  capQty,
   consumePendingMerge,
   resolveCartOnLoad,
 } from "@/lib/cart-sync";
+import { cartReducer, toggleWishlist, type CartAction } from "@/lib/cart-store";
 import ScrollToTop from "@/components/scroll-to-top";
 import type { CartItem, Product } from "@/lib/types";
 
@@ -55,8 +55,14 @@ function onlyStringIds(items: CartItem[]): CartItem[] {
   return items.filter((i) => typeof i.id === "string");
 }
 
-// capQty и слияние корзин живут в lib/cart-sync (там же — правило «слить или
-// довериться серверу»), чтобы это поведение покрывалось тестами.
+// Сама логика корзины — чистый редьюсер в lib/cart-store (покрыт тестами,
+// включая регрессию «несколько добавлений в одном тике»); правило «слить или
+// довериться серверу» — в lib/cart-sync. Провайдер только склеивает их с React
+// и сервером.
+
+// Сколько раз повторяем неудавшуюся запись на сервер, прежде чем сдаться
+// (localStorage всё равно хранит актуальную корзину).
+const PERSIST_RETRIES = 3;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -77,20 +83,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Синхронизацию с сервером запускаем один раз за загрузку страницы.
   const syncStartedRef = useRef(false);
 
+  // Последний снимок, который ещё НЕ подтверждён сервером. Двойная роль:
+  //  - flush() всегда пишет именно его (быстрые действия коалесцируются,
+  //    сервер получает финальное состояние, а не каждый промежуточный шаг);
+  //  - если к моменту ответа loadUserStore() он непустой — пользователь успел
+  //    изменить корзину до завершения синхронизации, и локальное состояние
+  //    НОВЕЕ серверного снимка (см. эффект синхронизации ниже).
+  const desiredRef = useRef<{ cart: CartItem[]; wishlist: string[] } | null>(
+    null
+  );
+
+  // Записать desiredRef на сервер через очередь. Неудачную запись (сетевая
+  // ошибка или ok:false от server action) повторяем с растущей паузой —
+  // раньше сбой просто глотался: очищенная корзина не доезжала до PocketBase,
+  // и при следующей загрузке «сервер — источник истины» воскрешал удалённое.
+  const flush = useCallback((attempt = 0) => {
+    writeQueueRef.current = writeQueueRef.current.then(async () => {
+      const want = desiredRef.current;
+      if (!want || !userIdRef.current) return;
+      const res = await saveUserStore(want).catch(() => ({ ok: false }));
+      if (res.ok) {
+        // Подтверждён именно этот снимок; более новый (если появился за время
+        // запроса) допишет уже его собственный flush из persist().
+        if (desiredRef.current === want) desiredRef.current = null;
+      } else if (attempt < PERSIST_RETRIES) {
+        setTimeout(() => flush(attempt + 1), 2000 * (attempt + 1));
+      } else {
+        // Запись так и не прошла — на сервере осталась устаревшая корзина.
+        // Снимаем метку «уже слито»: следующая загрузка не поверит серверу
+        // слепо (trust-server затёр бы локальные изменения), а сольёт его с
+        // локальной копией — добавленные товары не потеряются.
+        try {
+          localStorage.removeItem(SYNC_KEY);
+        } catch {}
+      }
+    });
+  }, []);
+
   // Мгновенная запись корзины/избранного в базу (для вошедшего пользователя).
   // Вызывается из КАЖДОГО действия с корзиной — очистка и удаление доезжают до
   // сервера сразу, и «воскресшие» корзины остаются в прошлом.
   // Пишет server action по httpOnly-cookie: токен PocketBase в браузере не нужен.
-  const persist = useCallback((nextCart: CartItem[], nextWishlist: string[]) => {
-    if (!CONFIGURED || !userIdRef.current) return;
-    writeQueueRef.current = writeQueueRef.current.then(async () => {
-      try {
-        await saveUserStore({ cart: nextCart, wishlist: nextWishlist });
-      } catch {
-        // сеть/сервер недоступны — запишется при следующем действии
-      }
-    });
-  }, []);
+  const persist = useCallback(
+    (nextCart: CartItem[], nextWishlist: string[]) => {
+      if (!CONFIGURED) return;
+      desiredRef.current = { cart: nextCart, wishlist: nextWishlist };
+      // До завершения loadUserStore() userId ещё неизвестен — снимок остаётся
+      // в desiredRef, его допишет эффект синхронизации.
+      if (userIdRef.current) flush();
+    },
+    [flush]
+  );
 
   // Единые сеттеры: обновляют реф синхронно, состояние — как обычно.
   const setCartSync = useCallback((next: CartItem[]) => {
@@ -140,6 +183,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       userIdRef.current = data.userId;
 
+      // Пользователь успел изменить корзину, ПОКА грузился серверный снимок
+      // (в desiredRef лежит неподтверждённая локальная запись): локальное
+      // состояние новее серверного — не перетираем его (иначе удалённое в эти
+      // секунды «воскресало» бы), а наоборот дописываем на сервер.
+      if (desiredRef.current) {
+        try {
+          localStorage.setItem(SYNC_KEY, JSON.stringify(data.userId));
+        } catch {}
+        flush();
+        return;
+      }
+
       // Правило слияния — в lib/cart-sync (покрыто тестами):
       //  - только что вошли на этом устройстве → ВСЕГДА слить (гостевые товары
       //    не теряем, даже если у аккаунта уже есть непустая корзина);
@@ -169,7 +224,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [ready, persist, setCartSync, setWishSync]);
+  }, [ready, persist, flush, setCartSync, setWishSync]);
 
   // 3) Локальное сохранение (всегда — и для гостя, и как кэш).
   useEffect(() => {
@@ -183,10 +238,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const cartCount = cart.reduce((s, i) => s + i.qty, 0);
     const cartTotal = cart.reduce((s, i) => s + i.qty * i.price, 0);
 
-    // Каждое действие: считаем новое состояние ОТ РЕФА (не от замыкания —
-    // см. комментарий у cartRef), показываем его и СРАЗУ пишем на сервер
-    // (write-through, без дебаунса).
-    const apply = (next: CartItem[]) => {
+    // Каждое действие: редьюсер считает новое состояние ОТ РЕФА (не от
+    // замыкания — см. комментарий у cartRef), показываем его и СРАЗУ пишем на
+    // сервер (write-through, без дебаунса).
+    const dispatch = (action: CartAction) => {
+      const next = cartReducer(cartRef.current, action);
       setCartSync(next);
       persist(next, wishRef.current);
     };
@@ -195,51 +251,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cart,
       cartCount,
       cartTotal,
-      addToCart: (product, qty = 1) => {
-        const cur = cartRef.current;
-        const found = cur.find((i) => i.id === product.id);
-        const next = found
-          ? cur.map((i) =>
-              i.id === product.id
-                ? {
-                    ...i,
-                    stock: product.stock,
-                    qty: Math.max(1, capQty(i.qty + qty, product.stock)),
-                  }
-                : i
-            )
-          : [
-              ...cur,
-              {
-                id: product.id,
-                slug: product.slug,
-                name: product.name,
-                price: product.price,
-                image_url: product.image_url,
-                stock: product.stock,
-                qty: Math.max(1, capQty(qty, product.stock)),
-              },
-            ];
-        apply(next);
-      },
-      // Количество зажато снизу единицей (capQty) — до нуля позиция не
-      // опускается, для удаления есть removeFromCart.
-      setQty: (id, qty) =>
-        apply(
-          cartRef.current.map((i) =>
-            i.id === id ? { ...i, qty: Math.max(1, capQty(qty, i.stock)) } : i
-          )
-        ),
-      removeFromCart: (id) =>
-        apply(cartRef.current.filter((i) => i.id !== id)),
-      clearCart: () => apply([]),
+      addToCart: (product, qty = 1) => dispatch({ type: "add", product, qty }),
+      setQty: (id, qty) => dispatch({ type: "set-qty", id, qty }),
+      removeFromCart: (id) => dispatch({ type: "remove", id }),
+      clearCart: () => dispatch({ type: "clear" }),
       wishlist,
       isWished: (id) => wishlist.includes(id),
       toggleWish: (id) => {
-        const cur = wishRef.current;
-        const next = cur.includes(id)
-          ? cur.filter((x) => x !== id)
-          : [...cur, id];
+        const next = toggleWishlist(wishRef.current, id);
         setWishSync(next);
         persist(cartRef.current, next);
       },

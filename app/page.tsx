@@ -1,6 +1,7 @@
 import Link from "next/link";
 import ProductGrid from "@/components/product-grid";
 import HeroBanner from "@/components/hero-banner";
+import { getBannerImages } from "@/lib/banners";
 import { getProducts } from "@/lib/data";
 import { DELIVERY_COST, FREE_DELIVERY_FROM } from "@/lib/delivery";
 import { formatPrice } from "@/lib/format";
@@ -15,8 +16,9 @@ export default async function HomePage() {
 
   return (
     <div className="container-page py-6">
-      {/* Баннеры (свои картинки из public/banners/ или запасной баннер) */}
-      <HeroBanner />
+      {/* Баннеры: список файлов public/banners/ собирается на сервере при
+          рендере страницы (ISR, revalidate 60) — без клиентского пробинга. */}
+      <HeroBanner images={getBannerImages()} />
 
       {/* Хиты */}
       {featured.length > 0 && (

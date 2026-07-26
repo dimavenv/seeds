@@ -4,41 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LeafIcon } from "@/components/icons";
 
-// Кандидаты на баннеры: положите файлы public/banners/1.jpg … 12.jpg
-// Несуществующие картинки автоматически пропускаются. Если файлов нет —
+// Карусель баннеров главной. Список картинок приходит с сервера
+// (lib/banners.ts читает public/banners при рендере страницы) — браузер больше
+// не пробует по одному ~12 кандидатов на каждый визит. Если файлов нет —
 // показывается запасной зелёный баннер с текстом.
-const CANDIDATES = Array.from(
-  { length: 12 },
-  (_, i) => `/banners/${i + 1}.jpg`
-);
-
-export default function HeroBanner() {
-  const [available, setAvailable] = useState<string[]>([]);
-  const [failed, setFailed] = useState<string[]>([]);
+export default function HeroBanner({ images }: { images: string[] }) {
   const [index, setIndex] = useState(0);
   // Пауза автопрокрутки, пока курсор над баннером (пользователь читает/целится).
   const [hovered, setHovered] = useState(false);
-
-  // Предзагрузка: оставляем только реально существующие картинки.
-  useEffect(() => {
-    let active = true;
-    CANDIDATES.forEach((src) => {
-      const img = new window.Image();
-      img.onload = () => {
-        if (active) setAvailable((prev) => (prev.includes(src) ? prev : [...prev, src]));
-      };
-      img.onerror = () => {
-        if (active) setFailed((prev) => (prev.includes(src) ? prev : [...prev, src]));
-      };
-      img.src = src;
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // Сохраняем порядок CANDIDATES среди загруженных.
-  const images = CANDIDATES.filter((s) => available.includes(s));
 
   useEffect(() => {
     if (images.length <= 1 || hovered) return;
@@ -46,13 +19,8 @@ export default function HeroBanner() {
     return () => clearInterval(t);
   }, [images.length, hovered]);
 
-  const allChecked = available.length + failed.length === CANDIDATES.length;
-
-  // Пока не подтвердилась ни одна картинка (и проверка ещё не закончена) —
-  // показываем запасной баннер, чтобы не было пустоты.
   if (images.length === 0) {
-    // Если все проверены и картинок нет — постоянный запасной баннер.
-    return <FallbackHero subtle={!allChecked} />;
+    return <FallbackHero />;
   }
 
   const current = index % images.length;
@@ -100,13 +68,9 @@ export default function HeroBanner() {
   );
 }
 
-function FallbackHero({ subtle }: { subtle?: boolean }) {
+function FallbackHero() {
   return (
-    <section
-      className={`overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-8 text-white sm:p-12 ${
-        subtle ? "opacity-95" : ""
-      }`}
-    >
+    <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-8 text-white sm:p-12">
       <div className="max-w-2xl">
         <span className="badge bg-white/15 text-white">
           <LeafIcon className="mr-1 h-4 w-4" /> Сезон посадки открыт
