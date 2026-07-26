@@ -25,6 +25,14 @@ export function SearchIcon({ className = "h-5 w-5" }: IconProps) {
   );
 }
 
+export function CheckIcon({ className = "h-5 w-5" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 12.5l5.5 5.5L20 6.5" />
+    </svg>
+  );
+}
+
 export function CloseIcon({ className = "h-5 w-5" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

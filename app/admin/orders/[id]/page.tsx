@@ -144,7 +144,7 @@ export default async function AdminOrderDetail({
                           {it.name}
                         </span>
                         {refunded > 0 && (
-                          <span className="badge bg-amber-100 text-amber-700">
+                          <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
                             ↩ {fullRefund ? "возврат" : `возврат ${refunded} из ${it.qty}`}
                           </span>
                         )}

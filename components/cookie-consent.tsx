@@ -31,12 +31,15 @@ export default function CookieConsent() {
   }
 
   return (
+    // Обёртка растянута на всю ширину низа экрана: pointer-events-none, чтобы
+    // «пустые» места не перехватывали клики (под ними кнопка «наверх» и ссылки
+    // футера); кликабельна только сама плашка (pointer-events-auto).
     <div
-      className="fixed inset-x-0 bottom-0 z-50 p-3 sm:p-4"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 p-3 sm:p-4"
       role="region"
       aria-label="Сообщение об использовании cookies"
     >
-      <div className="card mx-auto flex max-w-3xl animate-fade-up flex-col items-start gap-3 p-4 shadow-xl sm:flex-row sm:items-center">
+      <div className="card pointer-events-auto mx-auto flex max-w-3xl animate-fade-up flex-col items-start gap-3 p-4 shadow-xl sm:flex-row sm:items-center">
         <p className="text-sm leading-relaxed text-brand-700">
           Мы используем cookies, чтобы работали вход в аккаунт и корзина.
           Оставаясь на сайте, вы соглашаетесь с{" "}

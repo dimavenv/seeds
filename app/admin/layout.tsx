@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import AdminNav from "@/components/admin/admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -55,12 +56,7 @@ export default async function AdminLayout({
     <div className="container-page py-6">
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <h1 className="mr-4 text-2xl font-bold text-brand-800">Админ-панель</h1>
-        <Link href="/admin" className="btn-outline !py-1.5">Дашборд</Link>
-        <Link href="/admin/products" className="btn-outline !py-1.5">Товары</Link>
-        <Link href="/admin/orders" className="btn-outline !py-1.5">Заказы</Link>
-        <Link href="/admin/support" className="btn-outline !py-1.5">Заявки</Link>
-        <Link href="/admin/reviews" className="btn-outline !py-1.5">Отзывы</Link>
-        <Link href="/account" className="btn-outline !py-1.5">Личный кабинет</Link>
+        <AdminNav />
         <span className="ml-auto text-sm text-brand-500">{session.email}</span>
       </div>
       {children}

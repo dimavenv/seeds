@@ -93,18 +93,24 @@ export default function LeaveReview({
     <div className="card p-5">
       <h3 className="font-bold text-brand-800">Оставить отзыв</h3>
 
-      <div className="mt-3 flex gap-1 text-2xl">
+      <div
+        className="mt-3 flex gap-1 text-2xl"
+        role="radiogroup"
+        aria-label="Оценка"
+      >
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
+            role="radio"
+            aria-checked={rating === n}
             onMouseEnter={() => setHover(n)}
             onMouseLeave={() => setHover(0)}
             onClick={() => setRating(n)}
             aria-label={`Оценка ${n}`}
-            className={
+            className={`rounded transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
               n <= (hover || rating) ? "text-accent-500" : "text-brand-200"
-            }
+            }`}
           >
             ★
           </button>
@@ -125,7 +131,7 @@ export default function LeaveReview({
       />
 
       {error && (
-        <p className="mt-2 rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
+        <p role="alert" className="mt-2 alert-error">
           {error}
         </p>
       )}

@@ -11,7 +11,7 @@ import type { Review, ReviewStatus } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 const STATUS_BADGE: Record<ReviewStatus, string> = {
-  pending: "bg-amber-100 text-amber-700",
+  pending: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
   approved: "bg-brand-600 text-white",
   rejected: "bg-accent-500/15 text-accent-700",
 };
@@ -43,7 +43,7 @@ export default async function AdminReviews() {
       <h2 className="mb-4 text-lg font-bold text-brand-800">
         Отзывы ({reviews.length}){" "}
         {pendingCount > 0 && (
-          <span className="badge bg-amber-100 text-amber-700">
+          <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
             на модерации: {pendingCount}
           </span>
         )}
@@ -64,7 +64,7 @@ export default async function AdminReviews() {
                   <div className="flex items-center gap-2">
                     <Stars value={r.rating} />
                     {r.source === "ozon" && (
-                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-blue-600">
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-blue-600 dark:bg-blue-400/15 dark:text-blue-300">
                         Ozon
                       </span>
                     )}

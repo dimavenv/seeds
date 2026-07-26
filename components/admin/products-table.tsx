@@ -71,7 +71,9 @@ function InlineNumber({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
-        if (e.key === "Enter") commit();
+        // Enter только снимает фокус: сохранение делает onBlur, иначе Enter и
+        // последующий blur коммитили бы значение дважды (два запроса на сервер).
+        if (e.key === "Enter") e.currentTarget.blur();
         if (e.key === "Escape") {
           setEditing(false);
           setDraft(String(value));
@@ -92,11 +94,11 @@ const catChip = (active: boolean) =>
 
 function StatusPill({ inStock }: { inStock: boolean }) {
   return inStock ? (
-    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-400/15 dark:text-green-300">
       В продаже
     </span>
   ) : (
-    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
       Готов к продаже
     </span>
   );

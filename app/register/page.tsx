@@ -155,7 +155,7 @@ export default function RegisterPage() {
               />
             </label>
             {error && (
-              <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">{error}</p>
+              <p role="alert" className="alert-error">{error}</p>
             )}
             <button type="submit" disabled={loading || code.length !== 6} className="btn-primary w-full">
               {loading ? "Проверяем…" : "Подтвердить и создать аккаунт"}
@@ -214,7 +214,7 @@ export default function RegisterPage() {
           <SmartCaptcha onToken={setCaptchaToken} />
 
           {error && (
-            <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">{error}</p>
+            <p role="alert" className="alert-error">{error}</p>
           )}
           <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? "Отправляем код…" : "Зарегистрироваться"}

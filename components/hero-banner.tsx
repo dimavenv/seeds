@@ -16,6 +16,8 @@ export default function HeroBanner() {
   const [available, setAvailable] = useState<string[]>([]);
   const [failed, setFailed] = useState<string[]>([]);
   const [index, setIndex] = useState(0);
+  // Пауза автопрокрутки, пока курсор над баннером (пользователь читает/целится).
+  const [hovered, setHovered] = useState(false);
 
   // Предзагрузка: оставляем только реально существующие картинки.
   useEffect(() => {
@@ -39,10 +41,10 @@ export default function HeroBanner() {
   const images = CANDIDATES.filter((s) => available.includes(s));
 
   useEffect(() => {
-    if (images.length <= 1) return;
+    if (images.length <= 1 || hovered) return;
     const t = setInterval(() => setIndex((i) => (i + 1) % images.length), 5000);
     return () => clearInterval(t);
-  }, [images.length]);
+  }, [images.length, hovered]);
 
   const allChecked = available.length + failed.length === CANDIDATES.length;
 
@@ -56,7 +58,13 @@ export default function HeroBanner() {
   const current = index % images.length;
 
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-brand-100">
+    <section
+      className="relative overflow-hidden rounded-3xl bg-brand-100"
+      aria-roledescription="карусель"
+      aria-label="Акции и предложения"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div className="relative aspect-[16/9] w-full">
         {images.map((src, i) => (
           <Link
@@ -80,8 +88,9 @@ export default function HeroBanner() {
               key={src}
               onClick={() => setIndex(i)}
               aria-label={`Баннер ${i + 1}`}
+              aria-current={i === current}
               className={`h-2.5 rounded-full transition-all ${
-                i === current ? "w-6 bg-white" : "w-2.5 bg-white/60"
+                i === current ? "w-6 bg-white" : "w-2.5 bg-white/60 hover:bg-white/80"
               }`}
             />
           ))}

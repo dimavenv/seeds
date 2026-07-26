@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/components/store-provider";
 import ProductGrid from "@/components/product-grid";
 import { HeartIcon } from "@/components/icons";
+import Spinner from "@/components/spinner";
 import type { Product } from "@/lib/types";
 
 export default function FavoritesPage() {
@@ -23,11 +24,19 @@ export default function FavoritesPage() {
     fetch(`/api/products?ids=${wishlist.join(",")}`)
       .then((r) => r.json())
       .then((d) => setProducts(d.products ?? []))
+      .catch(() => setProducts([])) // сеть упала — покажем пустой список, не вечную загрузку
       .finally(() => setLoading(false));
   }, [wishlist, ready]);
 
   if (!ready || loading) {
-    return <div className="container-page py-10 text-brand-500">Загрузка…</div>;
+    return (
+      <div
+        className="container-page flex items-center gap-3 py-10 text-brand-500"
+        role="status"
+      >
+        <Spinner /> Загрузка…
+      </div>
+    );
   }
 
   if (wishlist.length === 0) {

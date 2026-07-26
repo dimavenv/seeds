@@ -109,7 +109,7 @@ export default function SupportForm() {
       <ConsentCheckbox checked={consent} onChange={setConsent} />
       <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
       {error && (
-        <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
+        <p role="alert" className="alert-error">
           {error}
         </p>
       )}

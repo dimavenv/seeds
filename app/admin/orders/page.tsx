@@ -21,7 +21,7 @@ const FILTER_LABELS: Record<OrderStatus, string> = {
 };
 
 const PAYMENT_BADGE: Partial<Record<PaymentStatus, { label: string; cls: string }>> = {
-  pending: { label: "Ждёт оплаты", cls: "bg-amber-100 text-amber-700" },
+  pending: { label: "Ждёт оплаты", cls: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300" },
   paid: { label: "Оплачен", cls: "bg-brand-600 text-white" },
   failed: { label: "Оплата не прошла", cls: "bg-accent-500/15 text-accent-700" },
   refunded: { label: "Возврат", cls: "bg-brand-200 text-brand-700" },
@@ -146,7 +146,7 @@ export default async function AdminOrders({
             const refunded = o.refunded_amount ?? 0;
             const pay =
               o.payment_status === "paid" && refunded > 0
-                ? { label: `↩ Возврат ${formatPrice(refunded)}`, cls: "bg-amber-100 text-amber-700" }
+                ? { label: `↩ Возврат ${formatPrice(refunded)}`, cls: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300" }
                 : PAYMENT_BADGE[o.payment_status ?? "unpaid"];
             return (
               <li key={o.id} className="relative">

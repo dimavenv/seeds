@@ -211,7 +211,7 @@ export default function ProductForm({
       </div>
 
       {error && (
-        <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">{error}</p>
+        <p role="alert" className="alert-error">{error}</p>
       )}
 
       <div className="flex gap-3 pt-2">

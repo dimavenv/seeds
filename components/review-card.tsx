@@ -57,13 +57,19 @@ export default function ReviewCard({
           <div className="flex items-center gap-1.5">
             <span className="truncate font-semibold text-brand-800">{name}</span>
             {isOzon && (
-              <span className="group relative cursor-default">
-                <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-600">
+              // tabIndex + focus-within: подсказка доступна и с клавиатуры,
+              // а не только по ховеру мыши.
+              <span
+                className="group relative cursor-default focus:outline-none"
+                tabIndex={0}
+                aria-label="Отзыв перенесён с Ozon"
+              >
+                <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:bg-blue-400/15 dark:text-blue-300">
                   Ozon
                 </span>
                 {/* brand-900/50 инвертируются вместе с темой: тёмный фон +
                     светлый текст в светлой теме, и наоборот в тёмной. */}
-                <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-52 -translate-x-1/2 rounded-xl bg-brand-900 px-3 py-2 text-center text-xs text-brand-50 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-52 -translate-x-1/2 rounded-xl bg-brand-900 px-3 py-2 text-center text-xs text-brand-50 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   Данный отзыв был перенесён с&nbsp;Ozon
                   <span className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-brand-900" />
                 </span>

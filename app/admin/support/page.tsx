@@ -33,7 +33,7 @@ export default async function AdminSupport() {
       <h2 className="mb-4 text-lg font-bold text-brand-800">
         Заявки в поддержку <span className="text-brand-400">({requests.length})</span>
         {openCount > 0 && (
-          <span className="ml-2 badge bg-amber-100 text-amber-700">
+          <span className="ml-2 badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
             {openCount} без ответа
           </span>
         )}
@@ -64,7 +64,7 @@ export default async function AdminSupport() {
                       {isAnswered ? (
                         <span className="badge bg-brand-600 text-white">Отвечено</span>
                       ) : (
-                        <span className="badge bg-amber-100 text-amber-700">Ждёт ответа</span>
+                        <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">Ждёт ответа</span>
                       )}
                     </div>
                     <div className="text-sm text-brand-500">

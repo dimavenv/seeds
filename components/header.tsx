@@ -13,15 +13,26 @@ import {
   UserIcon,
 } from "@/components/icons";
 
+// Общий стиль круглых кнопок-иконок шапки: заметное кольцо при фокусе
+// с клавиатуры (мышиный клик кольца не рисует).
+const ICON_BTN =
+  "rounded-full p-2 text-brand-700 transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400";
+
 export default function Header() {
   const { cartCount, wishlist, ready } = useStore();
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Блокируем прокрутку страницы, пока открыт мобильный поиск.
+  // Блокируем прокрутку страницы, пока открыт мобильный поиск; Escape закрывает.
   useEffect(() => {
     document.body.style.overflow = searchOpen ? "hidden" : "";
+    if (!searchOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSearchOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
     };
   }, [searchOpen]);
 
@@ -45,28 +56,36 @@ export default function Header() {
             type="button"
             onClick={() => setSearchOpen(true)}
             aria-label="Поиск"
-            className="rounded-full p-2 text-brand-700 hover:bg-brand-50 md:hidden"
+            className={`${ICON_BTN} md:hidden`}
           >
             <SearchIcon className="h-6 w-6" />
           </button>
 
-          <Link href="/favorites" className="relative rounded-full p-2 text-brand-700 hover:bg-brand-50 sm:p-2.5" aria-label="Избранное">
+          <Link href="/favorites" className={`relative sm:p-2.5 ${ICON_BTN}`} aria-label="Избранное">
             <HeartIcon className="h-6 w-6" />
             {ready && wishlist.length > 0 && (
-              <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1 text-[11px] font-bold text-white">
+              // key по значению: при изменении счётчик перерисовывается и
+              // «подпрыгивает» (pop-in) — заметная обратная связь на добавление.
+              <span
+                key={wishlist.length}
+                className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1 text-[11px] font-bold text-white motion-safe:animate-pop-in"
+              >
                 {wishlist.length}
               </span>
             )}
           </Link>
-          <Link href="/cart" className="relative rounded-full p-2 text-brand-700 hover:bg-brand-50 sm:p-2.5" aria-label="Корзина">
+          <Link href="/cart" className={`relative sm:p-2.5 ${ICON_BTN}`} aria-label="Корзина">
             <CartIcon className="h-6 w-6" />
             {ready && cartCount > 0 && (
-              <span className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1 text-[11px] font-bold text-white">
+              <span
+                key={cartCount}
+                className="absolute right-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-500 px-1 text-[11px] font-bold text-white motion-safe:animate-pop-in"
+              >
                 {cartCount}
               </span>
             )}
           </Link>
-          <Link href="/account" className="rounded-full p-2 text-brand-700 hover:bg-brand-50 sm:p-2.5" aria-label="Личный кабинет">
+          <Link href="/account" className={`sm:p-2.5 ${ICON_BTN}`} aria-label="Личный кабинет">
             <UserIcon className="h-6 w-6" />
           </Link>
         </nav>
@@ -92,11 +111,17 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Мобильный оверлей поиска: затемнение + окно сверху */}
+      {/* Мобильный оверлей поиска: затемнение + окно сверху.
+          Закрывается по крестику, клику по затемнению и Escape. */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div
+          className="fixed inset-0 z-50 md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Поиск по каталогу"
+        >
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/50 motion-safe:animate-fade-in"
             onClick={() => setSearchOpen(false)}
           />
           <div className="relative mx-auto max-w-2xl bg-surface p-4 shadow-lg">
@@ -108,7 +133,7 @@ export default function Header() {
                 type="button"
                 onClick={() => setSearchOpen(false)}
                 aria-label="Закрыть"
-                className="rounded-full p-2 text-brand-700 hover:bg-brand-50"
+                className={ICON_BTN}
               >
                 <CloseIcon className="h-6 w-6" />
               </button>

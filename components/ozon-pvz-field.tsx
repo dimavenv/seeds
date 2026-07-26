@@ -50,7 +50,7 @@ export default function OzonPvzField({
         .
       </p>
       {restricted && (
-        <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
+        <p role="alert" className="alert-error">
           Доставка Ozon в регион «{restricted}» недоступна. Выберите другой пункт
           выдачи или способ доставки «Почта России».
         </p>

@@ -1,4 +1,5 @@
 import CategoryNav from "@/components/category-nav";
+import CatalogSort from "@/components/catalog-sort";
 import ProductGrid from "@/components/product-grid";
 import { getCategories, getProducts } from "@/lib/data";
 
@@ -48,9 +49,12 @@ export default async function CatalogView({
     <div className="container-page py-6">
       <CategoryNav categories={categories} activeSlug={categorySlug} />
       <h1 className="mb-1 text-2xl font-bold text-brand-800">{title}</h1>
-      <p className="mb-5 text-sm text-brand-500">
-        Найдено товаров: {products.length}
-      </p>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-brand-500">
+          Найдено товаров: {products.length}
+        </p>
+        <CatalogSort value={sort} />
+      </div>
       <ProductGrid products={products} />
     </div>
   );

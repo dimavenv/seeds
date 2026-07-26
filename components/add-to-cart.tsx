@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/components/store-provider";
-import { CartIcon, HeartIcon } from "@/components/icons";
+import { CartIcon, CheckIcon, HeartIcon } from "@/components/icons";
 import type { Product } from "@/lib/types";
 
 export default function AddToCart({ product }: { product: Product }) {
@@ -12,6 +12,15 @@ export default function AddToCart({ product }: { product: Product }) {
   const wished = ready && isWished(product.id);
   const inStock = product.stock > 0;
 
+  // Таймер «Добавлено ✓» гасим при размонтировании, чтобы не дёргать setState
+  // на снятом компоненте.
+  const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (addedTimer.current) clearTimeout(addedTimer.current);
+    };
+  }, []);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
@@ -19,7 +28,8 @@ export default function AddToCart({ product }: { product: Product }) {
           <div className="flex items-center rounded-full border border-brand-200 bg-surface">
             <button
               onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="px-4 py-2 text-lg text-brand-600"
+              disabled={qty <= 1}
+              className="px-4 py-2 text-lg text-brand-600 disabled:opacity-40"
               aria-label="Меньше"
             >
               −
@@ -41,11 +51,20 @@ export default function AddToCart({ product }: { product: Product }) {
             onClick={() => {
               addToCart(product, qty);
               setAdded(true);
-              setTimeout(() => setAdded(false), 1500);
+              if (addedTimer.current) clearTimeout(addedTimer.current);
+              addedTimer.current = setTimeout(() => setAdded(false), 1500);
             }}
-            className="btn-accent flex-1"
+            className={`btn flex-1 text-white ${
+              added
+                ? "bg-brand-500 hover:bg-brand-600"
+                : "bg-accent-500 hover:bg-accent-600"
+            }`}
           >
-            <CartIcon className="h-5 w-5" />
+            {added ? (
+              <CheckIcon className="h-5 w-5 motion-safe:animate-pop-in" />
+            ) : (
+              <CartIcon className="h-5 w-5" />
+            )}
             {added ? "Добавлено!" : "В корзину"}
           </button>
         ) : (

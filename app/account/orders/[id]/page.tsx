@@ -94,7 +94,7 @@ export default async function OrderDetailPage({
             </span>
             {order.payment_status === "paid" &&
               ((order.refunded_amount ?? 0) > 0 ? (
-                <span className="ml-2 badge bg-amber-100 text-amber-700">
+                <span className="ml-2 badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
                   Оплачен · частичный возврат
                 </span>
               ) : (
@@ -167,7 +167,7 @@ export default async function OrderDetailPage({
                         {it.name}
                       </span>
                       {refunded > 0 && (
-                        <span className="badge bg-amber-100 text-amber-700">
+                        <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
                           ↩ {fullRefund ? "Возврат оформлен" : `Возврат ${refunded} из ${it.qty}`}
                         </span>
                       )}

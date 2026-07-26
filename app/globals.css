@@ -96,14 +96,12 @@ body {
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
-}
-
-/* Плашка cookies растянута прозрачной обёрткой на всю ширину низа экрана и
-   перехватывает клики даже в «пустых» местах — под ней кнопка «наверх» и
-   ссылки футера. Кликабельным оставляем только содержимое плашки. */
-[aria-label="Сообщение об использовании cookies"] {
-  pointer-events: none;
-}
-[aria-label="Сообщение об использовании cookies"] > * {
-  pointer-events: auto;
+  /* Единый стиль сообщения об ошибке формы (используется с role="alert"). */
+  .alert-error {
+    @apply rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600;
+  }
+  /* Ссылка «перейти к содержимому»: невидима, пока не получит фокус с клавиатуры. */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[60] focus:rounded-full focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white;
+  }
 }

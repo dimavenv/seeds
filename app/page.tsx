@@ -2,6 +2,8 @@ import Link from "next/link";
 import ProductGrid from "@/components/product-grid";
 import HeroBanner from "@/components/hero-banner";
 import { getProducts } from "@/lib/data";
+import { DELIVERY_COST, FREE_DELIVERY_FROM } from "@/lib/delivery";
+import { formatPrice } from "@/lib/format";
 
 export const revalidate = 60;
 
@@ -45,7 +47,13 @@ export default async function HomePage() {
       {/* Преимущества */}
       <section className="mt-12 grid gap-4 sm:grid-cols-3">
         {[
-          ["🚚", "Доставка по России", "300 ₽; бесплатно при заказе от 3000 ₽"],
+          // Стоимость доставки берём из общих констант (настраиваются через
+          // env), чтобы главная не расходилась с корзиной и оформлением.
+          [
+            "🚚",
+            "Доставка по России",
+            `${formatPrice(DELIVERY_COST)}; бесплатно при заказе от ${formatPrice(FREE_DELIVERY_FROM)}`,
+          ],
           ["🌱", "Высокая всхожесть", "Проверенные семена от производителей"],
           ["🔒", "Удобная оплата", "Оформление заказа за пару минут"],
         ].map(([icon, title, text]) => (

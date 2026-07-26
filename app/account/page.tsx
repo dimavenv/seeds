@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 
 const STATUS_BADGE: Record<OrderStatus, string> = {
   new: "bg-brand-100 text-brand-700",
-  processing: "bg-amber-100 text-amber-700",
-  shipped: "bg-sky-100 text-sky-700",
+  processing: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
+  shipped: "bg-sky-100 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300",
   done: "bg-brand-600 text-white",
   cancelled: "bg-accent-500/15 text-accent-700",
 };
@@ -126,10 +126,10 @@ export default async function AccountPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     {o.payment_status === "refunded" && (
-                      <span className="badge bg-amber-100 text-amber-700">↩ Возврат оплаты</span>
+                      <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">↩ Возврат оплаты</span>
                     )}
                     {o.payment_status === "paid" && (o.refunded_amount ?? 0) > 0 && (
-                      <span className="badge bg-amber-100 text-amber-700">
+                      <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
                         ↩ Возврат {formatPrice(o.refunded_amount ?? 0)}
                       </span>
                     )}
@@ -162,7 +162,7 @@ export default async function AccountPage() {
                           />
                         )}
                         {refunded && (
-                          <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-tl-lg bg-amber-100 text-[11px] font-bold text-amber-700">
+                          <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-tl-lg bg-amber-100 text-[11px] font-bold text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
                             ↩
                           </span>
                         )}

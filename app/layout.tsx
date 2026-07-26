@@ -41,9 +41,15 @@ export default async function RootLayout({
       </head>
       <body className="flex min-h-screen flex-col">
         <StoreProvider>
+          {/* Для клавиатуры/скринридеров: перепрыгнуть шапку сразу к содержимому. */}
+          <a href="#main" className="skip-link">
+            Перейти к содержимому
+          </a>
           <Header />
           <VacationBanner until={vacationUntil} />
-          <main className="flex-1">{children}</main>
+          <main id="main" className="flex-1">
+            {children}
+          </main>
           <Footer categories={categories} />
           <CookieConsent />
         </StoreProvider>

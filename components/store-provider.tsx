@@ -67,8 +67,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const userIdRef = useRef<string | null>(null);
   // Очередь записей: сериализуем, чтобы быстрые действия не обгоняли друг друга.
   const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
-  // Свежие корзина/избранное для эффекта синхронизации (без их наличия в deps —
-  // иначе эффект перезапускался бы на каждое изменение корзины).
+  // СИНХРОННОЕ зеркало корзины/избранного. Действия читают и пишут именно рефы:
+  // несколько вызовов в одном тике (например, «Заказать ещё раз» добавляет весь
+  // состав заказа циклом) видят результат друг друга, а не устаревшее состояние
+  // из замыкания — иначе React сбатчил бы setState и выжил бы только последний
+  // добавленный товар.
   const cartRef = useRef<CartItem[]>([]);
   const wishRef = useRef<string[]>([]);
   // Синхронизацию с сервером запускаем один раз за загрузку страницы.
@@ -89,24 +92,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // 1) Мгновенная загрузка из localStorage.
-  useEffect(() => {
-    setCart(onlyStringIds(read<CartItem[]>(CART_KEY, [])));
-    setWishlist(read<unknown[]>(WISH_KEY, []).filter(
-      (x): x is string => typeof x === "string"
-    ));
-    setReady(true);
+  // Единые сеттеры: обновляют реф синхронно, состояние — как обычно.
+  const setCartSync = useCallback((next: CartItem[]) => {
+    cartRef.current = next;
+    setCart(next);
+  }, []);
+  const setWishSync = useCallback((next: string[]) => {
+    wishRef.current = next;
+    setWishlist(next);
   }, []);
 
-  // Держим свежие значения для эффекта синхронизации ниже. Объявлено ДО него —
-  // эффекты в одном коммите выполняются в порядке объявления, поэтому к моменту
-  // синхронизации в рефах уже лежит корзина, поднятая из localStorage.
+  // 1) Мгновенная загрузка из localStorage.
   useEffect(() => {
-    cartRef.current = cart;
-  }, [cart]);
-  useEffect(() => {
-    wishRef.current = wishlist;
-  }, [wishlist]);
+    setCartSync(onlyStringIds(read<CartItem[]>(CART_KEY, [])));
+    setWishSync(
+      read<unknown[]>(WISH_KEY, []).filter(
+        (x): x is string => typeof x === "string"
+      )
+    );
+    setReady(true);
+  }, [setCartSync, setWishSync]);
 
   // 2) Кто вошёл + серверная корзина — одним запросом к server action (сессия
   //    берётся из httpOnly-cookie, токен в браузере не нужен).
@@ -151,8 +156,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         justLoggedIn: consumePendingMerge(),
       });
 
-      setCart(resolved.cart);
-      setWishlist(resolved.wishlist);
+      setCartSync(resolved.cart);
+      setWishSync(resolved.wishlist);
       if (resolved.action === "merge") {
         // Слитый результат сразу закрепляем на сервере и помечаем устройство.
         try {
@@ -164,7 +169,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [ready, persist]);
+  }, [ready, persist, setCartSync, setWishSync]);
 
   // 3) Локальное сохранение (всегда — и для гостя, и как кэш).
   useEffect(() => {
@@ -178,11 +183,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const cartCount = cart.reduce((s, i) => s + i.qty, 0);
     const cartTotal = cart.reduce((s, i) => s + i.qty * i.price, 0);
 
-    // Каждое действие: считаем новое состояние, показываем его и СРАЗУ пишем
-    // на сервер (write-through, без дебаунса).
+    // Каждое действие: считаем новое состояние ОТ РЕФА (не от замыкания —
+    // см. комментарий у cartRef), показываем его и СРАЗУ пишем на сервер
+    // (write-through, без дебаунса).
     const apply = (next: CartItem[]) => {
-      setCart(next);
-      persist(next, wishlist);
+      setCartSync(next);
+      persist(next, wishRef.current);
     };
 
     return {
@@ -190,9 +196,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cartCount,
       cartTotal,
       addToCart: (product, qty = 1) => {
-        const found = cart.find((i) => i.id === product.id);
+        const cur = cartRef.current;
+        const found = cur.find((i) => i.id === product.id);
         const next = found
-          ? cart.map((i) =>
+          ? cur.map((i) =>
               i.id === product.id
                 ? {
                     ...i,
@@ -202,7 +209,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                 : i
             )
           : [
-              ...cart,
+              ...cur,
               {
                 id: product.id,
                 slug: product.slug,
@@ -215,30 +222,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ];
         apply(next);
       },
+      // Количество зажато снизу единицей (capQty) — до нуля позиция не
+      // опускается, для удаления есть removeFromCart.
       setQty: (id, qty) =>
         apply(
-          cart
-            .map((i) =>
-              i.id === id
-                ? { ...i, qty: Math.max(1, capQty(qty, i.stock)) }
-                : i
-            )
-            .filter((i) => i.qty > 0)
+          cartRef.current.map((i) =>
+            i.id === id ? { ...i, qty: Math.max(1, capQty(qty, i.stock)) } : i
+          )
         ),
-      removeFromCart: (id) => apply(cart.filter((i) => i.id !== id)),
+      removeFromCart: (id) =>
+        apply(cartRef.current.filter((i) => i.id !== id)),
       clearCart: () => apply([]),
       wishlist,
       isWished: (id) => wishlist.includes(id),
       toggleWish: (id) => {
-        const next = wishlist.includes(id)
-          ? wishlist.filter((x) => x !== id)
-          : [...wishlist, id];
-        setWishlist(next);
-        persist(cart, next);
+        const cur = wishRef.current;
+        const next = cur.includes(id)
+          ? cur.filter((x) => x !== id)
+          : [...cur, id];
+        setWishSync(next);
+        persist(cartRef.current, next);
       },
       ready,
     };
-  }, [cart, wishlist, ready, persist]);
+  }, [cart, wishlist, ready, persist, setCartSync, setWishSync]);
 
   return (
     <StoreContext.Provider value={value}>

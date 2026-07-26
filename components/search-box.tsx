@@ -23,6 +23,8 @@ export default function SearchBox({
   const [items, setItems] = useState<Product[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Подсвеченная стрелками подсказка (-1 — ничего не выбрано).
+  const [active, setActive] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -61,6 +63,7 @@ export default function SearchBox({
         });
         const data = (await res.json()) as { products?: Product[] };
         setItems(data.products ?? []);
+        setActive(-1);
         setOpen(true);
       } catch {
         /* отменён/сеть — игнорируем */
@@ -86,6 +89,24 @@ export default function SearchBox({
     router.push(`/product/${slug}`);
   }
 
+  // Навигация по подсказкам с клавиатуры — как в address-suggest-input.
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (!open || items.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((i) => Math.min(i + 1, items.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((i) => Math.max(i - 1, -1));
+    } else if (e.key === "Enter" && active >= 0) {
+      e.preventDefault();
+      goto(items[active].slug);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setActive(-1);
+    }
+  }
+
   const query = q.trim();
 
   return (
@@ -96,10 +117,14 @@ export default function SearchBox({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => items.length > 0 && setOpen(true)}
+          onKeyDown={onKeyDown}
           placeholder="Поиск: томат, перец, баклажан…"
           className="input pr-14 text-base md:py-3"
           aria-label="Поиск"
           autoComplete="off"
+          role="combobox"
+          aria-expanded={open && query.length >= 2}
+          aria-autocomplete="list"
         />
         <button
           type="submit"
@@ -114,13 +139,16 @@ export default function SearchBox({
         <div className="absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-xl">
           {items.length > 0 ? (
             <>
-              <ul className="max-h-[60vh] overflow-auto py-1">
-                {items.map((p) => (
-                  <li key={p.id}>
+              <ul role="listbox" aria-label="Подсказки" className="max-h-[60vh] overflow-auto py-1">
+                {items.map((p, i) => (
+                  <li key={p.id} role="option" aria-selected={i === active}>
                     <button
                       type="button"
                       onClick={() => goto(p.slug)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-brand-50"
+                      onMouseEnter={() => setActive(i)}
+                      className={`flex w-full items-center gap-3 px-3 py-2 text-left ${
+                        i === active ? "bg-brand-50" : "hover:bg-brand-50"
+                      }`}
                     >
                       <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-brand-50">
                         {p.image_url && (

@@ -6,13 +6,21 @@ import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
 import { DELIVERY_COST, FREE_DELIVERY_FROM } from "@/lib/delivery";
 import { CartIcon } from "@/components/icons";
+import Spinner from "@/components/spinner";
 
 export default function CartPage() {
   const { cart, cartTotal, setQty, removeFromCart, ready } = useStore();
   const deliveryFree = cartTotal >= FREE_DELIVERY_FROM;
 
   if (!ready) {
-    return <div className="container-page py-10 text-brand-500">Загрузка…</div>;
+    return (
+      <div
+        className="container-page flex items-center gap-3 py-10 text-brand-500"
+        role="status"
+      >
+        <Spinner /> Загрузка…
+      </div>
+    );
   }
 
   if (cart.length === 0) {
@@ -67,8 +75,14 @@ export default function CartPage() {
                 <div className="flex shrink-0 items-center rounded-full border border-brand-200">
                   <button
                     onClick={() => setQty(item.id, item.qty - 1)}
-                    className="px-3 py-1.5 text-brand-600"
+                    disabled={item.qty <= 1}
+                    className="px-3 py-1.5 text-brand-600 disabled:opacity-40"
                     aria-label="Меньше"
+                    title={
+                      item.qty <= 1
+                        ? "Минимум 1 шт. — убрать товар можно крестиком"
+                        : undefined
+                    }
                   >
                     −
                   </button>

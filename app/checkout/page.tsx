@@ -25,6 +25,7 @@ import DadataAddress, {
   type AddressValue,
 } from "@/components/dadata-address";
 import OzonPvzField from "@/components/ozon-pvz-field";
+import Spinner from "@/components/spinner";
 
 const PROFILE_KEY = "checkout_profile";
 
@@ -211,7 +212,19 @@ export default function CheckoutPage() {
     }
   }
 
-  if (ready && cart.length === 0) {
+  // Пока корзина поднимается из localStorage — не мигаем пустой формой.
+  if (!ready) {
+    return (
+      <div
+        className="container-page flex items-center gap-3 py-10 text-brand-500"
+        role="status"
+      >
+        <Spinner /> Загрузка…
+      </div>
+    );
+  }
+
+  if (cart.length === 0) {
     return (
       <div className="container-page py-16 text-center">
         <h1 className="text-2xl font-bold text-brand-800">Корзина пуста</h1>
@@ -314,7 +327,7 @@ export default function CheckoutPage() {
             бесплатно.
           </p>
           {error && (
-            <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
+            <p role="alert" className="alert-error">
               {error}
             </p>
           )}

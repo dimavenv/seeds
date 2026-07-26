@@ -8,7 +8,7 @@ import { PAYMENT_STATUS_LABELS, type PaymentStatus } from "@/lib/types";
 
 const BADGE: Record<PaymentStatus, string> = {
   unpaid: "bg-brand-100 text-brand-600",
-  pending: "bg-amber-100 text-amber-700",
+  pending: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
   paid: "bg-brand-600 text-white",
   failed: "bg-accent-500/15 text-accent-700",
   refunded: "bg-brand-200 text-brand-700",
@@ -96,7 +96,7 @@ export default function OrderPayment({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <span className={`badge ${partial ? "bg-amber-100 text-amber-700" : BADGE[status]}`}>
+      <span className={`badge ${partial ? "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300" : BADGE[status]}`}>
         {partial
           ? `Оплачен · возврат ${formatPrice(refundedAmount)}`
           : PAYMENT_STATUS_LABELS[status]}
