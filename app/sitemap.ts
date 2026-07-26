@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getCategories, getProducts } from "@/lib/data";
+import { getCategories, getSitemapProducts } from "@/lib/data";
 
 const BASE = "https://tomatsemena.ru";
 
@@ -22,9 +22,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   try {
+    // Кэшируемые читатели (см. lib/data.ts): карта сайта живёт по ISR, а
+    // no-store-выборка выводила её из статической генерации и запекалась без
+    // товаров. getProducts здесь использовать нельзя — он намеренно no-store.
     const [categories, products] = await Promise.all([
       getCategories(),
-      getProducts({}),
+      getSitemapProducts(),
     ]);
     return [
       ...staticPages,

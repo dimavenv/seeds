@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { pbAdmin } from "@/lib/pb/server";
 import { getSessionPb } from "@/lib/auth";
 import { isValidRecordId } from "@/lib/data";
@@ -131,6 +131,8 @@ export async function saveProduct(
     return { error: errMessage(e) };
   }
 
+  // Набор URL товаров изменился — сбрасываем кэш карты сайта (tag "products").
+  revalidateTag("products");
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
   revalidatePath("/");
@@ -170,6 +172,7 @@ export async function deleteProduct(id: string): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
   await pb.collection("products").delete(id).catch(() => {});
+  revalidateTag("products"); // товар исчез из карты сайта
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
 }
@@ -234,6 +237,9 @@ export async function updateVacationUntil(date: string | null): Promise<void> {
   } else {
     await pb.collection("site_settings").create({ vacation_until: value });
   }
+  // Дата отпуска кэшируется в unstable_cache (lib/data.ts) — сбрасываем по тегу,
+  // иначе плашка меняется только через revalidate (до 10 минут).
+  revalidateTag("site-settings");
   revalidatePath("/", "layout");
   revalidatePath("/admin");
 }

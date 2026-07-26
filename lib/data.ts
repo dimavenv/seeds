@@ -18,6 +18,27 @@ function demoAllowed(): boolean {
   return !isDbConfigured() || process.env.DEMO_MODE === "true";
 }
 
+// Next бросает DynamicServerError (digest DYNAMIC_SERVER_USAGE), чтобы ВЫЙТИ из
+// статической генерации, — это управляющий сигнал, а не сбой базы. Глотать его
+// нельзя: тогда Next не узнает, что страница динамическая, и запечёт в
+// статический HTML результат фолбэка (пустой либо демо-каталог). SDK PocketBase
+// оборачивает его в ClientResponseError со status 0, поэтому проверяем и
+// вложенные причины.
+//
+// Возвращает САМУ ошибку Next (или null). Пробрасывать нужно именно её, а не
+// обёртку PocketBase: Next опознаёт сигнал по полю digest у брошенной ошибки,
+// поэтому throw обёртки он считает обычным сбоем рендера и валит сборку
+// («Error occurred prerendering page»).
+function dynamicServerUsageError(e: unknown): unknown | null {
+  const hasDigest = (x: unknown): boolean =>
+    (x as { digest?: unknown } | null)?.digest === "DYNAMIC_SERVER_USAGE";
+  if (hasDigest(e)) return e;
+  const err = e as { cause?: unknown; originalError?: unknown } | null;
+  if (hasDigest(err?.cause)) return err!.cause;
+  if (hasDigest(err?.originalError)) return err!.originalError;
+  return null;
+}
+
 function onDbError(where: string, e: unknown): void {
   console.error(`[data] ${where}: PocketBase недоступен —`, e);
 }
@@ -26,7 +47,9 @@ function onDbError(where: string, e: unknown): void {
 // Кэшируем на 10 минут, чтобы не дёргать базу на каждую загрузку.
 const getCategoriesCached = unstable_cache(
   async (): Promise<Category[]> => {
-    const pb = createPublicPb();
+    // force-cache: читаем внутри unstable_cache, свежесть даёт revalidate/tags.
+    // С no-store страницы с футером не смогли бы остаться статическими.
+    const pb = createPublicPb("force-cache");
     const list = await pb
       .collection("categories")
       .getFullList({ sort: "sort_order" });
@@ -45,6 +68,8 @@ export async function getCategories(): Promise<Category[]> {
   } catch (e) {
     // Таймаут/ошибка сети — не валим страницу. В проде показываем пустой
     // список категорий, а не демо-подмену (демо только при DEMO_MODE).
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
     onDbError("getCategories", e);
     return demoAllowed() ? demoCategories : [];
   }
@@ -119,7 +144,9 @@ export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
           .collection("categories")
           .getFirstListItem(pb.filter("slug = {:slug}", { slug: opts.categorySlug }));
         categoryId = cat.id;
-      } catch {
+      } catch (e) {
+        const dsu = dynamicServerUsageError(e);
+        if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
         return []; // категории нет — нет и товаров
       }
       parts.push("category = {:categoryId}");
@@ -159,6 +186,8 @@ export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
     const list = await pb.collection("products").getFullList(query);
     return list.map(mapProduct);
   } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
     onDbError("getProducts", e);
     return demoAllowed() ? filterDemo(opts) : [];
   }
@@ -176,6 +205,8 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
       });
     return mapProduct(rec);
   } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
     onDbError("getProductBySlug", e);
     return demoAllowed()
       ? demoProducts.find((p) => p.slug === slug) ?? null
@@ -205,6 +236,8 @@ export async function getProductsByIds(ids: string[]): Promise<Product[]> {
     });
     return list.map(mapProduct);
   } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
     onDbError("getProductsByIds", e);
     return demoAllowed()
       ? demoProducts.filter((p) => valid.includes(p.id))
@@ -219,17 +252,71 @@ export async function getCategoryBySlug(
   return cats.find((c) => c.slug === slug) ?? null;
 }
 
-// Дата окончания отпуска (для плашки). null — отпуска нет / БД недоступна.
-export async function getVacationUntil(): Promise<string | null> {
-  if (!isDbConfigured()) return null;
-  try {
-    const pb = createPublicPb();
+// Дата окончания отпуска (для плашки в layout — значит, запрос на КАЖДОЙ
+// странице). Кэшируем, как и категории: иначе no-store-запрос выводил бы из
+// статической генерации вообще все страницы сайта.
+// Админка после смены даты сбрасывает кэш через revalidateTag("site-settings").
+const getVacationUntilCached = unstable_cache(
+  async (): Promise<string | null> => {
+    const pb = createPublicPb("force-cache");
     const page = await pb.collection("site_settings").getList(1, 1);
     const value = page.items[0]?.vacation_until;
     return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
       ? value
       : null;
-  } catch {
+  },
+  ["site-settings-vacation-v1"],
+  { revalidate: 600, tags: ["site-settings"] }
+);
+
+// Дата окончания отпуска (для плашки). null — отпуска нет / БД недоступна.
+export async function getVacationUntil(): Promise<string | null> {
+  if (!isDbConfigured()) return null;
+  try {
+    return await getVacationUntilCached();
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getVacationUntil", e);
     return null;
+  }
+}
+
+// ===== Карта сайта =====
+// Отдельный кэшируемый читатель: sitemap.xml пересобирается по ISR (revalidate
+// 3600), поэтому здесь нужна кэшируемая выборка — с no-store карта сайта
+// вываливалась из статической генерации и запекалась без товаров (или, до
+// гейтинга демо-режима, с ФЕЙКОВЫМИ демо-URL). Берём только slug и дату.
+export type SitemapProduct = { slug: string; created_at: string };
+
+const getSitemapProductsCached = unstable_cache(
+  async (): Promise<SitemapProduct[]> => {
+    const pb = createPublicPb("force-cache");
+    const list = await pb
+      .collection("products")
+      .getFullList({ fields: "slug,created", sort: "-created" });
+    return list
+      .map((r) => ({
+        slug: typeof r.slug === "string" ? r.slug : "",
+        created_at: typeof r.created === "string" ? r.created : "",
+      }))
+      .filter((p) => p.slug);
+  },
+  ["sitemap-products-v1"],
+  { revalidate: 3600, tags: ["products"] }
+);
+
+export async function getSitemapProducts(): Promise<SitemapProduct[]> {
+  const fromDemo = (): SitemapProduct[] =>
+    demoProducts.map((p) => ({ slug: p.slug, created_at: p.created_at }));
+  if (!isDbConfigured()) return fromDemo();
+  try {
+    return await getSitemapProductsCached();
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getSitemapProducts", e);
+    // База недоступна: лучше карта без товаров, чем фейковые URL в индексе.
+    return demoAllowed() ? fromDemo() : [];
   }
 }

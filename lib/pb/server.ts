@@ -14,25 +14,34 @@ function internalUrl(): string {
   ).replace(/\/+$/, "");
 }
 
-function baseClient(): PocketBase {
+function baseClient(cache: RequestCache = "no-store"): PocketBase {
   const pb = new PocketBase(internalUrl());
   pb.autoCancellation(false);
   // Таймаут на каждый запрос — чтобы недоступная база не подвешивала страницы.
-  // cache: no-store — Next по умолчанию кэширует GET через свой fetch, и БД
+  // cache по умолчанию no-store — Next иначе кэширует GET через свой fetch, и БД
   // начинает отдавать устаревшие записи (статусы оплаты, остатки, цены).
-  // Нужное кэширование каталога делается выше через unstable_cache/revalidate.
   pb.beforeSend = (url, options) => {
     options.signal ??= AbortSignal.timeout(10000);
-    (options as { cache?: RequestCache }).cache ??= "no-store";
+    (options as { cache?: RequestCache }).cache ??= cache;
     return { url, options };
   };
   return pb;
 }
 
-// Публичный клиент без авторизации — для кэшируемого чтения каталога
+// Публичный клиент без авторизации — для чтения каталога
 // (внутри unstable_cache недоступны cookies()).
-export function createPublicPb(): PocketBase {
-  return baseClient();
+//
+// ВАЖНО про cache (см. аудит: разбор DYNAMIC_SERVER_USAGE):
+// при `next build` Next БРОСАЕТ DynamicServerError на любой no-store fetch,
+// чтобы вывести страницу из статической генерации. SDK PocketBase эту ошибку
+// перехватывает и оборачивает в ClientResponseError 0, поэтому сигнал до Next
+// не доходит — и в статический HTML запекается результат фолбэка (пустой или
+// демо-каталог). Чтобы страница могла остаться статической, читатели ВНУТРИ
+// unstable_cache должны запрашивать кэшируемо: createPublicPb("force-cache").
+// Свежесть там обеспечивает сам unstable_cache (revalidate + tags).
+// Для цен, остатков и статусов оплаты оставляйте no-store (по умолчанию).
+export function createPublicPb(cache: RequestCache = "no-store"): PocketBase {
+  return baseClient(cache);
 }
 
 // Клиент с токеном пользователя из cookie — для SSR-страниц и server actions.
