@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getPb } from "@/lib/pb/client";
+import { loadUserStore, saveUserStore } from "@/app/store-actions";
 import { MAX_QTY_PER_ITEM } from "@/lib/checkout";
 import ScrollToTop from "@/components/scroll-to-top";
 import type { CartItem, Product } from "@/lib/types";
@@ -85,50 +85,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [synced, setSynced] = useState(false);
-
-  // Клиент PocketBase только если он настроен (иначе чистый локальный режим).
-  const pb = useMemo(() => (CONFIGURED ? getPb() : null), []);
 
   // Рефы для записи из обработчиков действий (без устаревших замыканий).
   const userIdRef = useRef<string | null>(null);
-  const storeRecordIdRef = useRef<string | null>(null);
   // Очередь записей: сериализуем, чтобы быстрые действия не обгоняли друг друга.
   const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Свежие корзина/избранное для эффекта синхронизации (без их наличия в deps —
+  // иначе эффект перезапускался бы на каждое изменение корзины).
+  const cartRef = useRef<CartItem[]>([]);
+  const wishRef = useRef<string[]>([]);
+  // Синхронизацию с сервером запускаем один раз за загрузку страницы.
+  const syncStartedRef = useRef(false);
 
   // Мгновенная запись корзины/избранного в базу (для вошедшего пользователя).
   // Вызывается из КАЖДОГО действия с корзиной — очистка и удаление доезжают до
   // сервера сразу, и «воскресшие» корзины остаются в прошлом.
-  const persist = useCallback(
-    (nextCart: CartItem[], nextWishlist: string[]) => {
-      const uid = userIdRef.current;
-      if (!pb || !uid) return;
-      const payload = { user: uid, cart: nextCart, wishlist: nextWishlist };
-      writeQueueRef.current = writeQueueRef.current.then(async () => {
-        try {
-          if (storeRecordIdRef.current) {
-            await pb.collection("user_store").update(storeRecordIdRef.current, payload);
-          } else {
-            const rec = await pb.collection("user_store").create(payload);
-            storeRecordIdRef.current = rec.id;
-          }
-        } catch {
-          // гонка create (уникальный user) или сеть — попробуем найти запись
-          try {
-            const rec = await pb
-              .collection("user_store")
-              .getFirstListItem(pb.filter("user = {:u}", { u: uid }));
-            storeRecordIdRef.current = rec.id;
-            await pb.collection("user_store").update(rec.id, payload);
-          } catch {
-            // не судьба — запишется при следующем действии
-          }
-        }
-      });
-    },
-    [pb]
-  );
+  // Пишет server action по httpOnly-cookie: токен PocketBase в браузере не нужен.
+  const persist = useCallback((nextCart: CartItem[], nextWishlist: string[]) => {
+    if (!CONFIGURED || !userIdRef.current) return;
+    writeQueueRef.current = writeQueueRef.current.then(async () => {
+      try {
+        await saveUserStore({ cart: nextCart, wishlist: nextWishlist });
+      } catch {
+        // сеть/сервер недоступны — запишется при следующем действии
+      }
+    });
+  }, []);
 
   // 1) Мгновенная загрузка из localStorage.
   useEffect(() => {
@@ -139,77 +121,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
-  // 2) Кто вошёл (и реакция на вход/выход).
+  // Держим свежие значения для эффекта синхронизации ниже. Объявлено ДО него —
+  // эффекты в одном коммите выполняются в порядке объявления, поэтому к моменту
+  // синхронизации в рефах уже лежит корзина, поднятая из localStorage.
   useEffect(() => {
-    if (!pb) return;
-    const id = pb.authStore.record?.id ?? null;
-    setUserId(id);
-    userIdRef.current = id;
-    const unsubscribe = pb.authStore.onChange(() => {
-      const next = pb.authStore.record?.id ?? null;
-      setUserId(next);
-      userIdRef.current = next;
-      if (!next) {
-        setSynced(false); // вышел — позволить пересинк при след. входе
-        storeRecordIdRef.current = null;
-        try {
-          localStorage.removeItem(SYNC_KEY);
-        } catch {}
-      }
-    });
-    return unsubscribe;
-  }, [pb]);
+    cartRef.current = cart;
+  }, [cart]);
+  useEffect(() => {
+    wishRef.current = wishlist;
+  }, [wishlist]);
 
-  // 3) При входе — один раз слить локальное с серверным и сразу записать
-  //    результат. Дальше (обычная загрузка страницы) сервер — источник истины:
-  //    корзину подменяем серверной, чтобы очищенное на другом устройстве или
-  //    до перезагрузки не «воскресало» из localStorage.
+  // 2) Кто вошёл + серверная корзина — одним запросом к server action (сессия
+  //    берётся из httpOnly-cookie, токен в браузере не нужен).
+  //    При первом входе на устройстве локальное сливается с серверным и сразу
+  //    записывается. Дальше сервер — источник истины: корзину подменяем
+  //    серверной, чтобы очищенное на другом устройстве или до перезагрузки не
+  //    «воскресало» из localStorage.
   useEffect(() => {
-    if (!pb || !ready || !userId || synced) return;
+    if (!CONFIGURED || !ready || syncStartedRef.current) return;
+    syncStartedRef.current = true;
     let active = true;
     (async () => {
-      let record: { id: string; cart?: unknown; wishlist?: unknown } | null = null;
-      try {
-        record = await pb
-          .collection("user_store")
-          .getFirstListItem(pb.filter("user = {:u}", { u: userId }));
-      } catch {
-        record = null; // записи ещё нет
-      }
+      const data = await loadUserStore().catch(() => null);
       if (!active) return;
-      const serverCart = onlyStringIds(
-        Array.isArray(record?.cart) ? (record!.cart as CartItem[]) : []
-      );
-      const serverWish = (Array.isArray(record?.wishlist) ? record!.wishlist : []
-      ).filter((x): x is string => typeof x === "string");
-      storeRecordIdRef.current = record?.id ?? null;
+      if (!data || !data.signedIn || !data.userId) {
+        // Гость (или сервер недоступен): серверную корзину не трогаем, а метку
+        // слияния снимаем — чтобы следующий вход снова слил локальное с серверным.
+        userIdRef.current = null;
+        if (data && !data.signedIn) {
+          try {
+            localStorage.removeItem(SYNC_KEY);
+          } catch {}
+        }
+        return;
+      }
 
-      const alreadyMerged = read<string | null>(SYNC_KEY, null) === userId;
-      if (alreadyMerged && record) {
+      userIdRef.current = data.userId;
+
+      // Верим серверу только если запись действительно есть: иначе (запись
+      // удалена/не прочиталась) пустой серверной корзиной затёрли бы локальную.
+      const alreadyMerged =
+        read<string | null>(SYNC_KEY, null) === data.userId && data.exists;
+      if (alreadyMerged) {
         // Не первый заход этого пользователя на этом устройстве — верим серверу.
-        setCart(serverCart);
-        setWishlist(serverWish);
+        setCart(data.cart);
+        setWishlist(data.wishlist);
       } else {
         // Первый вход на устройстве: объединяем корзины и сразу сохраняем.
-        const merged = mergeCarts(cart, serverCart);
-        const mergedWish = Array.from(new Set([...wishlist, ...serverWish]));
+        const merged = mergeCarts(cartRef.current, data.cart);
+        const mergedWish = Array.from(
+          new Set([...wishRef.current, ...data.wishlist])
+        );
         setCart(merged);
         setWishlist(mergedWish);
         try {
-          localStorage.setItem(SYNC_KEY, JSON.stringify(userId));
+          localStorage.setItem(SYNC_KEY, JSON.stringify(data.userId));
         } catch {}
         persist(merged, mergedWish);
       }
-      setSynced(true);
     })();
     return () => {
       active = false;
     };
-    // cart/wishlist в зависимостях: до завершения синка эффект перезапустится
-    // со свежими данными (флаг synced не даст зациклиться после).
-  }, [pb, ready, userId, synced, persist, cart, wishlist]);
+  }, [ready, persist]);
 
-  // 4) Локальное сохранение (всегда — и для гостя, и как кэш).
+  // 3) Локальное сохранение (всегда — и для гостя, и как кэш).
   useEffect(() => {
     if (ready) localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart, ready]);
