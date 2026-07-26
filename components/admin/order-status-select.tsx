@@ -9,7 +9,7 @@ export default function OrderStatusSelect({
   id,
   status,
 }: {
-  id: number;
+  id: string;
   status: OrderStatus;
 }) {
   const [pending, startTransition] = useTransition();

@@ -1,0 +1,15 @@
+# Запускает cleanup.service каждые 10 минут (уборка зависших заказов).
+# См. комментарий-инструкцию в cleanup.service.
+
+[Unit]
+Description=Tomat Semena — periodic stale-order cleanup
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+# Небольшой разброс, чтобы запуск не совпадал с ровными минутами.
+RandomizedDelaySec=60s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

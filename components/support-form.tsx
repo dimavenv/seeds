@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ConsentCheckbox from "@/components/consent-checkbox";
+import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 
 export default function SupportForm() {
   const [form, setForm] = useState({
@@ -11,9 +12,18 @@ export default function SupportForm() {
     message: "",
   });
   const [consent, setConsent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  // Токен капчи одноразовый: после неудачной отправки сбрасываем виджет,
+  // иначе повторная попытка невозможна без перезагрузки страницы.
+  function resetCaptcha() {
+    setCaptchaToken("");
+    setCaptchaReset((n) => n + 1);
+  }
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -27,23 +37,29 @@ export default function SupportForm() {
       setError("Подтвердите согласие на обработку персональных данных");
       return;
     }
+    if (captchaEnabled && !captchaToken) {
+      setError("Подтвердите, что вы не робот");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch("/api/support", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, captchaToken }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Не удалось отправить заявку");
         setSubmitting(false);
+        resetCaptcha();
         return;
       }
       setDone(true);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setSubmitting(false);
+      resetCaptcha();
     }
   }
 
@@ -91,12 +107,17 @@ export default function SupportForm() {
         <textarea required value={form.message} onChange={update("message")} className="input min-h-32" placeholder="Опишите ваш вопрос подробнее" />
       </label>
       <ConsentCheckbox checked={consent} onChange={setConsent} />
+      <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
       {error && (
         <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
           {error}
         </p>
       )}
-      <button type="submit" disabled={submitting || !consent} className="btn-accent w-full sm:w-auto">
+      <button
+        type="submit"
+        disabled={submitting || !consent || (captchaEnabled && !captchaToken)}
+        className="btn-accent w-full sm:w-auto"
+      >
         {submitting ? "Отправляем…" : "Отправить вопрос"}
       </button>
     </form>

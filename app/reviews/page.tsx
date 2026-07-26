@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/data";
+import { createPublicPb } from "@/lib/pb/server";
+import { isDbConfigured, mapReview } from "@/lib/pb/shared";
 import Stars from "@/components/stars";
 import ReviewCard from "@/components/review-card";
 import type { Review } from "@/lib/types";
@@ -9,17 +9,25 @@ import type { Review } from "@/lib/types";
 export const metadata: Metadata = { title: "Отзывы — Tomat Semena" };
 export const dynamic = "force-dynamic";
 
+// «на основе 1 отзыва / 5 отзывов / 21 отзыва» — прежний вариант давал
+// «21 отзывов» и содержал две одинаковые ветви тернарника.
+function reviewsWord(n: number): string {
+  return n % 10 === 1 && n % 100 !== 11 ? "отзыва" : "отзывов";
+}
+
 export default async function ReviewsPage() {
   let reviews: Review[] = [];
-  if (isSupabaseConfigured()) {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("reviews")
-      .select("id, author_name, rating, text, status, source, created_at, order_id, user_id")
-      .eq("status", "approved")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    reviews = (data ?? []) as Review[];
+  if (isDbConfigured()) {
+    try {
+      const pb = createPublicPb();
+      const page = await pb.collection("reviews").getList(1, 100, {
+        filter: 'status = "approved"',
+        sort: "-published_at",
+      });
+      reviews = page.items.map(mapReview);
+    } catch {
+      reviews = [];
+    }
   }
 
   const avg =
@@ -46,7 +54,7 @@ export default async function ReviewsPage() {
             <div className="text-5xl font-black text-brand-800">{avg}</div>
             <Stars value={Math.round(Number(avg))} className="mt-2 text-2xl" />
             <p className="mt-2 text-sm text-brand-500">
-              на основе {reviews.length} отзыв{reviews.length === 1 ? "а" : reviews.length < 5 ? "ов" : "ов"}
+              на основе {reviews.length} {reviewsWord(reviews.length)}
             </p>
             <div className="mt-4 w-full space-y-1.5">
               {dist.map(({ n, count }) => (

@@ -1,23 +1,42 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerPb } from "@/lib/pb/server";
+import { mapSupportRequest } from "@/lib/pb/shared";
 import { formatDate } from "@/lib/format";
 import { decryptField } from "@/lib/crypto";
 import type { SupportRequest } from "@/lib/types";
+import DeleteButton from "@/components/admin/delete-button";
+import SupportReply from "@/components/admin/support-reply";
+import { deleteSupportRequest } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminSupport() {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from("support_requests")
-    .select("id, name, email, subject, message, status, user_id, created_at")
-    .order("created_at", { ascending: false });
+  const pb = createServerPb();
+  let requests: SupportRequest[] = [];
+  try {
+    const list = await pb
+      .collection("support_requests")
+      .getFullList({ sort: "-created" });
+    requests = list.map(mapSupportRequest);
+  } catch {
+    requests = [];
+  }
 
-  const requests = (data ?? []) as SupportRequest[];
+  const answered = (r: SupportRequest) => Boolean(r.reply || r.replied_at);
+  // Неотвеченные — сверху (внутри групп сортировка по дате уже есть).
+  const sorted = [...requests].sort(
+    (a, b) => Number(answered(a)) - Number(answered(b))
+  );
+  const openCount = requests.filter((r) => !answered(r)).length;
 
   return (
     <div>
       <h2 className="mb-4 text-lg font-bold text-brand-800">
-        Заявки в поддержку ({requests.length})
+        Заявки в поддержку <span className="text-brand-400">({requests.length})</span>
+        {openCount > 0 && (
+          <span className="ml-2 badge bg-amber-100 text-amber-700">
+            {openCount} без ответа
+          </span>
+        )}
       </h2>
 
       {requests.length === 0 ? (
@@ -26,41 +45,58 @@ export default async function AdminSupport() {
         </div>
       ) : (
         <div className="space-y-4">
-          {requests.map((r) => {
+          {sorted.map((r) => {
             const email = decryptField(r.email) ?? "";
             const message = decryptField(r.message);
+            const reply = r.reply ? decryptField(r.reply) : null;
+            const isAnswered = answered(r);
             return (
-            <div key={r.id} className="card p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-bold text-brand-800">
-                    {r.subject}
+              <div
+                key={r.id}
+                className={`card p-5 ${isAnswered ? "opacity-90" : ""}`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-lg font-bold text-brand-800">
+                        {r.subject}
+                      </span>
+                      {isAnswered ? (
+                        <span className="badge bg-brand-600 text-white">Отвечено</span>
+                      ) : (
+                        <span className="badge bg-amber-100 text-amber-700">Ждёт ответа</span>
+                      )}
+                    </div>
+                    <div className="text-sm text-brand-500">
+                      {formatDate(r.created_at)} · {r.name} ·{" "}
+                      <a
+                        href={`mailto:${email}`}
+                        className="text-brand-700 underline hover:text-brand-800"
+                      >
+                        {email}
+                      </a>
+                    </div>
                   </div>
-                  <div className="text-sm text-brand-500">
-                    {formatDate(r.created_at)}
-                  </div>
-                </div>
-                <a
-                  href={`mailto:${email}?subject=Re: ${encodeURIComponent(r.subject)}`}
-                  className="btn-outline !py-1.5"
-                >
-                  Ответить
-                </a>
-              </div>
-
-              <div className="mt-3 text-sm text-brand-700">
-                <div>
-                  <span className="text-brand-500">От:</span> {r.name} ·{" "}
-                  <a
-                    href={`mailto:${email}`}
-                    className="text-brand-700 underline hover:text-brand-800"
+                  <DeleteButton
+                    action={deleteSupportRequest.bind(null, r.id)}
+                    confirmText={`Точно удалить заявку «${r.subject}» из базы? Действие необратимо.`}
                   >
-                    {email}
-                  </a>
+                    Удалить
+                  </DeleteButton>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap">{message}</p>
+
+                {/* Вопрос покупателя */}
+                <div className="mt-3 rounded-xl bg-brand-100/40 p-3">
+                  <p className="whitespace-pre-wrap text-sm text-brand-700">{message}</p>
+                </div>
+
+                {/* Ответ: уже отправленный и/или форма нового */}
+                <SupportReply
+                  id={r.id}
+                  email={email}
+                  existing={reply ? { text: reply, at: r.replied_at ?? null } : null}
+                />
               </div>
-            </div>
             );
           })}
         </div>

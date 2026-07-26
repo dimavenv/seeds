@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { getPb } from "@/lib/pb/client";
+import { fileUrl } from "@/lib/pb/shared";
 import { saveProduct } from "@/app/admin/actions";
 import type { Category, Product } from "@/lib/types";
 
@@ -33,22 +34,22 @@ export default function ProductForm({
     setUploading(true);
     setError(null);
     try {
-      const supabase = createClient();
+      // Файлы уходят в коллекцию media PocketBase (доступно только админу),
+      // а в товаре хранится готовый публичный URL.
+      const pb = getPb();
       const uploaded: string[] = [];
       for (const file of files) {
-        const ext = file.name.split(".").pop() || "jpg";
-        const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("product-images")
-          .upload(path, file, { upsert: false });
-        if (upErr) {
-          setError("Не удалось загрузить фото: " + upErr.message);
-          continue;
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const rec = await pb.collection("media").create(fd);
+          uploaded.push(fileUrl("media", rec.id, String(rec.file)));
+        } catch (e) {
+          setError(
+            "Не удалось загрузить фото: " +
+              (e instanceof Error ? e.message : "ошибка сети")
+          );
         }
-        const { data } = supabase.storage
-          .from("product-images")
-          .getPublicUrl(path);
-        uploaded.push(data.publicUrl);
       }
       if (uploaded.length) setImages((prev) => [...prev, ...uploaded]);
     } finally {

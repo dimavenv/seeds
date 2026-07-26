@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { serverLogin } from "@/lib/pb/client";
+import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
 
@@ -12,6 +13,16 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+  const [registered, setRegistered] = useState(false);
+
+  // Пришли после регистрации (когда авто-вход не прошёл из-за капчи).
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRegistered(new URLSearchParams(window.location.search).has("registered"));
+    }
+  }, []);
 
   // Проверка доступности базы при загрузке страницы.
   useEffect(() => {
@@ -23,40 +34,41 @@ export default function LoginPage() {
       );
   }, []);
 
+  // Сброс одноразовой капчи после неудачной попытки входа.
+  function resetCaptcha() {
+    setCaptchaToken("");
+    setCaptchaReset((n) => n + 1);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (captchaEnabled && !captchaToken) {
+      setError("Подтвердите, что вы не робот");
+      return;
+    }
     setLoading(true);
 
     // Защита от вечного спиннера.
     const safety = setTimeout(() => {
       setError(
-        "Сервер Supabase не отвечает. Скорее всего проект на паузе — откройте дашборд Supabase и нажмите Restore."
+        "База данных не отвечает. Проверьте, запущен ли PocketBase на сервере (/api/health)."
       );
       setLoading(false);
     }, 10000);
 
-    try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      clearTimeout(safety);
-      if (error) {
-        setError("Неверный email или пароль");
-        setLoading(false);
-        return;
-      }
-      // Жёсткий переход — надёжнее обновляет сессию.
-      window.location.assign("/account");
-    } catch {
-      clearTimeout(safety);
-      setError(
-        "Не удалось подключиться к базе. Проверьте, не на паузе ли проект Supabase, и ключи в .env.local."
-      );
+    // Вход на сервере: пароль и капча проверяются там, сессия — в httpOnly-cookie.
+    const result = await serverLogin({ email, password, captchaToken });
+    clearTimeout(safety);
+    if (!result.ok) {
+      setError(result.error);
       setLoading(false);
+      resetCaptcha();
+      return;
     }
+    // Жёсткий переход — надёжнее обновляет сессию.
+    window.location.assign("/account");
   }
 
   const dbDown = health && !health.ok;
@@ -69,13 +81,19 @@ export default function LoginPage() {
           Войдите в личный кабинет или панель администратора.
         </p>
 
+        {registered && (
+          <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
+            Регистрация завершена — войдите с вашими email и паролем.
+          </div>
+        )}
+
         {dbDown && (
           <div className="mt-4 rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-700">
             <strong>База данных недоступна.</strong>
             <div className="mt-1">
               {!health?.configured
-                ? "Не заданы ключи Supabase в .env.local."
-                : "Запрос к Supabase не прошёл. Чаще всего это значит, что проект на бесплатном тарифе поставлен на паузу — откройте дашборд Supabase и нажмите Restore. Также сверьте URL и ключи в .env.local."}
+                ? "Не задан NEXT_PUBLIC_PB_URL в .env.production."
+                : "Запрос к PocketBase не прошёл. Проверьте, что сервис запущен (systemctl status pocketbase) и адрес в .env.production верный."}
             </div>
           </div>
         )}
@@ -89,12 +107,18 @@ export default function LoginPage() {
             <span className="mb-1 block text-sm font-semibold text-brand-700">Пароль</span>
             <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
           </label>
+          <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+
           {error && (
             <p className="rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600">
               {error}
             </p>
           )}
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          <button
+            type="submit"
+            disabled={loading || (captchaEnabled && !captchaToken)}
+            className="btn-primary w-full"
+          >
             {loading ? "Входим…" : "Войти"}
           </button>
         </form>

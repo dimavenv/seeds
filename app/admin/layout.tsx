@@ -18,9 +18,9 @@ export default async function AdminLayout({
             Админка недоступна
           </h1>
           <p className="mt-2 text-brand-600">
-            Не настроен Supabase. Укажите переменные окружения в{" "}
-            <code className="rounded bg-brand-100 px-1">.env.local</code> и
-            создайте администратора (см. README).
+            Не настроена база данных. Укажите переменные PocketBase в{" "}
+            <code className="rounded bg-brand-100 px-1">.env.production</code>{" "}
+            и создайте администратора (см. SETUP-DB-RU.md).
           </p>
         </div>
       </div>
@@ -34,7 +34,9 @@ export default async function AdminLayout({
           <h1 className="text-xl font-bold text-brand-800">Доступ запрещён</h1>
           <p className="mt-2 text-brand-600">
             Раздел доступен только администраторам. Если вы администратор, но
-            видите это сообщение — выполните <code className="rounded bg-brand-100 px-1">supabase/make-admin.sql</code> для своего email.
+            видите это сообщение — откройте админку PocketBase (коллекция{" "}
+            <code className="rounded bg-brand-100 px-1">users</code>) и
+            поставьте своему аккаунту role = admin, затем перезайдите.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Link href="/account" className="btn-primary">

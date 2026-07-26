@@ -1,60 +1,77 @@
 import { unstable_cache } from "next/cache";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-import { fetchWithTimeout } from "@/lib/supabase/fetch";
+import { createPublicPb } from "@/lib/pb/server";
+import {
+  isDbConfigured,
+  isValidRecordId,
+  mapCategory,
+  mapProduct,
+} from "@/lib/pb/shared";
 import { demoCategories, demoProducts } from "@/lib/demo-data";
 import type { Category, Product } from "@/lib/types";
 
-export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+// Демо-каталог показываем ТОЛЬКО когда база вообще не настроена, либо когда
+// демо-режим включён явным флагом DEMO_MODE=true. Иначе (боевая база временно
+// недоступна) НЕ подменяем реальный каталог фейковым: громко пишем в лог и
+// отдаём пустой результат — фейковый товар в проде опаснее пустой страницы
+// (принимает заказы, которые «исчезают»). См. аудит 11.3.
+function demoAllowed(): boolean {
+  return !isDbConfigured() || process.env.DEMO_MODE === "true";
 }
 
-// Клиент без cookie — для публичного кэшируемого чтения (категории/каталог).
-// Можно использовать внутри unstable_cache (там недоступны cookies()).
-function createPublicClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: { persistSession: false },
-      global: { fetch: fetchWithTimeout(10000) },
-    }
-  );
+// Next бросает DynamicServerError (digest DYNAMIC_SERVER_USAGE), чтобы ВЫЙТИ из
+// статической генерации, — это управляющий сигнал, а не сбой базы. Глотать его
+// нельзя: тогда Next не узнает, что страница динамическая, и запечёт в
+// статический HTML результат фолбэка (пустой либо демо-каталог). SDK PocketBase
+// оборачивает его в ClientResponseError со status 0, поэтому проверяем и
+// вложенные причины.
+//
+// Возвращает САМУ ошибку Next (или null). Пробрасывать нужно именно её, а не
+// обёртку PocketBase: Next опознаёт сигнал по полю digest у брошенной ошибки,
+// поэтому throw обёртки он считает обычным сбоем рендера и валит сборку
+// («Error occurred prerendering page»).
+function dynamicServerUsageError(e: unknown): unknown | null {
+  const hasDigest = (x: unknown): boolean =>
+    (x as { digest?: unknown } | null)?.digest === "DYNAMIC_SERVER_USAGE";
+  if (hasDigest(e)) return e;
+  const err = e as { cause?: unknown; originalError?: unknown } | null;
+  if (hasDigest(err?.cause)) return err!.cause;
+  if (hasDigest(err?.originalError)) return err!.originalError;
+  return null;
+}
+
+function onDbError(where: string, e: unknown): void {
+  console.error(`[data] ${where}: PocketBase недоступен —`, e);
 }
 
 // Категории почти не меняются, но запрашиваются в футере на КАЖДОЙ странице.
-// Кэшируем на 10 минут, чтобы медленная сеть не тормозила каждую загрузку.
+// Кэшируем на 10 минут, чтобы не дёргать базу на каждую загрузку.
 const getCategoriesCached = unstable_cache(
   async (): Promise<Category[]> => {
-    const supabase = createPublicClient();
-    const { data, error } = await supabase
-      .from("categories")
-      .select("*")
-      .order("sort_order");
-    if (error || !data) throw new Error("categories unavailable");
-    return data as Category[];
+    // force-cache: читаем внутри unstable_cache, свежесть даёт revalidate/tags.
+    // С no-store страницы с футером не смогли бы остаться статическими.
+    const pb = createPublicPb("force-cache");
+    const list = await pb
+      .collection("categories")
+      .getFullList({ sort: "sort_order" });
+    return list.map(mapCategory);
   },
-  ["categories-v1"],
+  ["categories-v2"],
   { revalidate: 600, tags: ["categories"] }
 );
 
-const PRODUCT_SELECT =
-  "id, slug, name, description, price, category_id, image_url, images, stock, seeds_per_pack, is_new, is_featured, created_at, category:categories(slug, name)";
-// Без новых колонок: запасной набор, если миграция ещё не применена — чтобы
-// отсутствие колонки не сваливало весь каталог в демо-данные.
-const PRODUCT_SELECT_SAFE =
-  "id, slug, name, description, price, category_id, image_url, images, stock, is_new, is_featured, created_at, category:categories(slug, name)";
-
 export async function getCategories(): Promise<Category[]> {
-  if (!isSupabaseConfigured()) return demoCategories;
+  if (!isDbConfigured()) return demoCategories;
   try {
-    return await getCategoriesCached();
-  } catch {
-    // Таймаут/ошибка сети — не валим страницу, показываем демо-категории.
-    return demoCategories;
+    const cats = await getCategoriesCached();
+    if (cats.length > 0) return cats;
+    return demoAllowed() ? demoCategories : [];
+  } catch (e) {
+    // Таймаут/ошибка сети — не валим страницу. В проде показываем пустой
+    // список категорий, а не демо-подмену (демо только при DEMO_MODE).
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getCategories", e);
+    return demoAllowed() ? demoCategories : [];
   }
 }
 
@@ -96,70 +113,136 @@ function filterDemo(opts: ProductQuery): Product[] {
   return opts.limit ? list.slice(0, opts.limit) : list;
 }
 
+// SQLite LIKE регистронезависим только для латиницы, поэтому для кириллицы
+// ищем по нескольким вариантам регистра («томат», «Томат», как ввели).
+function searchVariants(q: string): string[] {
+  const t = q.trim();
+  const lower = t.toLowerCase();
+  const capital = lower.charAt(0).toUpperCase() + lower.slice(1);
+  return Array.from(new Set([t, lower, capital]));
+}
+
+const SORT_MAP: Record<NonNullable<ProductQuery["sort"]>, string> = {
+  price_asc: "price",
+  price_desc: "-price",
+  name: "name",
+  new: "-created",
+};
+
 export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
-  if (!isSupabaseConfigured()) return filterDemo(opts);
-  const supabase = createClient();
+  if (!isDbConfigured()) return filterDemo(opts);
+  const pb = createPublicPb();
 
-  let categoryId: number | null = null;
-  if (opts.categorySlug) {
-    const { data: cat } = await supabase
-      .from("categories")
-      .select("id")
-      .eq("slug", opts.categorySlug)
-      .maybeSingle();
-    if (!cat) return [];
-    categoryId = cat.id as number;
-  }
+  try {
+    const parts: string[] = [];
+    const params: Record<string, unknown> = {};
 
-  const build = (cols: string) => {
-    let query = supabase.from("products").select(cols);
-    if (categoryId != null) query = query.eq("category_id", categoryId);
-    if (opts.q) query = query.ilike("name", `%${opts.q}%`);
-    if (opts.featured) query = query.eq("is_featured", true);
-    if (opts.onlyNew) query = query.eq("is_new", true);
-    if (typeof opts.minPrice === "number") query = query.gte("price", opts.minPrice);
-    if (typeof opts.maxPrice === "number") query = query.lte("price", opts.maxPrice);
-    switch (opts.sort) {
-      case "price_asc": query = query.order("price", { ascending: true }); break;
-      case "price_desc": query = query.order("price", { ascending: false }); break;
-      case "name": query = query.order("name", { ascending: true }); break;
-      default: query = query.order("created_at", { ascending: false });
+    if (opts.categorySlug) {
+      let categoryId: string;
+      try {
+        const cat = await pb
+          .collection("categories")
+          .getFirstListItem(pb.filter("slug = {:slug}", { slug: opts.categorySlug }));
+        categoryId = cat.id;
+      } catch (e) {
+        const dsu = dynamicServerUsageError(e);
+        if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+        return []; // категории нет — нет и товаров
+      }
+      parts.push("category = {:categoryId}");
+      params.categoryId = categoryId;
     }
-    if (opts.limit) query = query.limit(opts.limit);
-    return query;
-  };
 
-  // Пробуем полный набор колонок; если новая колонка ещё не добавлена — повтор
-  // без неё (реальные товары остаются), и только если совсем не вышло — демо.
-  let { data, error } = await build(PRODUCT_SELECT);
-  if (error) ({ data, error } = await build(PRODUCT_SELECT_SAFE));
-  if (error || !data) return filterDemo(opts);
-  return data as unknown as Product[];
+    if (opts.q) {
+      const variants = searchVariants(opts.q);
+      const or = variants
+        .map((_, i) => `name ~ {:q${i}}`)
+        .join(" || ");
+      parts.push(`(${or})`);
+      variants.forEach((v, i) => (params[`q${i}`] = v));
+    }
+
+    if (opts.featured) parts.push("is_featured = true");
+    if (opts.onlyNew) parts.push("is_new = true");
+    if (typeof opts.minPrice === "number") {
+      parts.push("price >= {:minPrice}");
+      params.minPrice = opts.minPrice;
+    }
+    if (typeof opts.maxPrice === "number") {
+      parts.push("price <= {:maxPrice}");
+      params.maxPrice = opts.maxPrice;
+    }
+
+    const query = {
+      filter: parts.length ? pb.filter(parts.join(" && "), params) : "",
+      sort: SORT_MAP[opts.sort ?? "new"],
+      expand: "category",
+    };
+
+    if (opts.limit) {
+      const page = await pb.collection("products").getList(1, opts.limit, query);
+      return page.items.map(mapProduct);
+    }
+    const list = await pb.collection("products").getFullList(query);
+    return list.map(mapProduct);
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getProducts", e);
+    return demoAllowed() ? filterDemo(opts) : [];
+  }
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {
-  if (!isSupabaseConfigured())
+  if (!isDbConfigured())
     return demoProducts.find((p) => p.slug === slug) ?? null;
-  const supabase = createClient();
-  const trySelect = (cols: string) =>
-    supabase.from("products").select(cols).eq("slug", slug).maybeSingle();
-  let { data, error } = await trySelect(PRODUCT_SELECT);
-  if (error) ({ data, error } = await trySelect(PRODUCT_SELECT_SAFE));
-  if (error || !data) return demoProducts.find((p) => p.slug === slug) ?? null;
-  return data as unknown as Product;
+  const pb = createPublicPb();
+  try {
+    const rec = await pb
+      .collection("products")
+      .getFirstListItem(pb.filter("slug = {:slug}", { slug }), {
+        expand: "category",
+      });
+    return mapProduct(rec);
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getProductBySlug", e);
+    return demoAllowed()
+      ? demoProducts.find((p) => p.slug === slug) ?? null
+      : null;
+  }
 }
 
-export async function getProductsByIds(ids: number[]): Promise<Product[]> {
-  if (ids.length === 0) return [];
-  if (!isSupabaseConfigured())
-    return demoProducts.filter((p) => ids.includes(p.id));
-  const supabase = createClient();
-  const trySelect = (cols: string) =>
-    supabase.from("products").select(cols).in("id", ids);
-  let { data, error } = await trySelect(PRODUCT_SELECT);
-  if (error) ({ data, error } = await trySelect(PRODUCT_SELECT_SAFE));
-  if (error || !data) return demoProducts.filter((p) => ids.includes(p.id));
-  return data as unknown as Product[];
+// Переехало в lib/pb/shared (нужно и клиенту); реэкспорт — для существующих
+// серверных импортов.
+export { isValidRecordId };
+
+export async function getProductsByIds(ids: string[]): Promise<Product[]> {
+  const valid = Array.from(new Set(ids.filter(isValidRecordId))).slice(0, 100);
+  if (valid.length === 0) return [];
+  if (!isDbConfigured())
+    return demoProducts.filter((p) => valid.includes(p.id));
+  const pb = createPublicPb();
+  try {
+    const params: Record<string, unknown> = {};
+    const or = valid.map((id, i) => {
+      params[`id${i}`] = id;
+      return `id = {:id${i}}`;
+    });
+    const list = await pb.collection("products").getFullList({
+      filter: pb.filter(or.join(" || "), params),
+      expand: "category",
+    });
+    return list.map(mapProduct);
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getProductsByIds", e);
+    return demoAllowed()
+      ? demoProducts.filter((p) => valid.includes(p.id))
+      : [];
+  }
 }
 
 export async function getCategoryBySlug(
@@ -169,19 +252,71 @@ export async function getCategoryBySlug(
   return cats.find((c) => c.slug === slug) ?? null;
 }
 
+// Дата окончания отпуска (для плашки в layout — значит, запрос на КАЖДОЙ
+// странице). Кэшируем, как и категории: иначе no-store-запрос выводил бы из
+// статической генерации вообще все страницы сайта.
+// Админка после смены даты сбрасывает кэш через revalidateTag("site-settings").
+const getVacationUntilCached = unstable_cache(
+  async (): Promise<string | null> => {
+    const pb = createPublicPb("force-cache");
+    const page = await pb.collection("site_settings").getList(1, 1);
+    const value = page.items[0]?.vacation_until;
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? value
+      : null;
+  },
+  ["site-settings-vacation-v1"],
+  { revalidate: 600, tags: ["site-settings"] }
+);
+
 // Дата окончания отпуска (для плашки). null — отпуска нет / БД недоступна.
 export async function getVacationUntil(): Promise<string | null> {
-  if (!isSupabaseConfigured()) return null;
+  if (!isDbConfigured()) return null;
   try {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("site_settings")
-      .select("vacation_until")
-      .eq("id", 1)
-      .maybeSingle();
-    if (error || !data?.vacation_until) return null;
-    return data.vacation_until as string; // 'YYYY-MM-DD'
-  } catch {
+    return await getVacationUntilCached();
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getVacationUntil", e);
     return null;
+  }
+}
+
+// ===== Карта сайта =====
+// Отдельный кэшируемый читатель: sitemap.xml пересобирается по ISR (revalidate
+// 3600), поэтому здесь нужна кэшируемая выборка — с no-store карта сайта
+// вываливалась из статической генерации и запекалась без товаров (или, до
+// гейтинга демо-режима, с ФЕЙКОВЫМИ демо-URL). Берём только slug и дату.
+export type SitemapProduct = { slug: string; created_at: string };
+
+const getSitemapProductsCached = unstable_cache(
+  async (): Promise<SitemapProduct[]> => {
+    const pb = createPublicPb("force-cache");
+    const list = await pb
+      .collection("products")
+      .getFullList({ fields: "slug,created", sort: "-created" });
+    return list
+      .map((r) => ({
+        slug: typeof r.slug === "string" ? r.slug : "",
+        created_at: typeof r.created === "string" ? r.created : "",
+      }))
+      .filter((p) => p.slug);
+  },
+  ["sitemap-products-v1"],
+  { revalidate: 3600, tags: ["products"] }
+);
+
+export async function getSitemapProducts(): Promise<SitemapProduct[]> {
+  const fromDemo = (): SitemapProduct[] =>
+    demoProducts.map((p) => ({ slug: p.slug, created_at: p.created_at }));
+  if (!isDbConfigured()) return fromDemo();
+  try {
+    return await getSitemapProductsCached();
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getSitemapProducts", e);
+    // База недоступна: лучше карта без товаров, чем фейковые URL в индексе.
+    return demoAllowed() ? fromDemo() : [];
   }
 }

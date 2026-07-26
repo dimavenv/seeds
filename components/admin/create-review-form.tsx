@@ -87,6 +87,8 @@ export default function CreateReviewForm() {
                 key={n}
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, rating: n }))}
+                aria-label={`Оценка ${n}`}
+                aria-pressed={form.rating === n}
                 className={`text-2xl transition ${n <= form.rating ? "text-amber-400" : "text-brand-200"}`}
               >
                 ★
