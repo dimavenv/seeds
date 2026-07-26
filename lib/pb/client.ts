@@ -1,6 +1,7 @@
 "use client";
 
 import PocketBase from "pocketbase";
+import { markPendingMerge } from "@/lib/cart-sync";
 
 // Единый браузерный клиент PocketBase.
 //
@@ -55,6 +56,10 @@ export async function serverLogin(payload: {
     };
   }
   if (data.token) getPb().authStore.save(data.token, data.record as never);
+  // Отмечаем вход: после перезагрузки страницы провайдер корзины ОБЯЗАН слить
+  // гостевую корзину с корзиной аккаунта, а не доверяться серверной (метка
+  // SYNC_KEY могла остаться от прошлой сессии в этом браузере). См. lib/cart-sync.
+  markPendingMerge();
   return { ok: true, isAdmin: Boolean(data.isAdmin) };
 }
 
