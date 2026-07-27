@@ -4,6 +4,8 @@ import { createPublicPb } from "@/lib/pb/server";
 import { isDbConfigured, mapReview } from "@/lib/pb/shared";
 import Stars from "@/components/stars";
 import ReviewCard from "@/components/review-card";
+import JsonLd from "@/components/json-ld";
+import { ORGANIZATION_ID } from "@/lib/seo";
 import type { Review } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -19,6 +21,43 @@ export const dynamic = "force-dynamic";
 // «21 отзывов» и содержал две одинаковые ветви тернарника.
 function reviewsWord(n: number): string {
   return n % 10 === 1 && n % 100 !== 11 ? "отзыва" : "отзывов";
+}
+
+// Рейтинг магазина в микроразметке. Вешаем его на тот же узел Organization,
+// что объявлен в app/layout.tsx (совпадающий @id), — так поисковик понимает,
+// что оценки относятся к продавцу.
+//
+// Именно к продавцу, а не к товару: отзывы в базе не связаны с конкретным
+// сортом (у коллекции reviews нет отношения к products). Подставить общий
+// рейтинг магазина в карточку каждого сорта — известный способ получить
+// ручные санкции за недостоверную разметку, поэтому там его нет.
+function reviewsJsonLd(reviews: Review[]) {
+  const average =
+    reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": ORGANIZATION_ID(),
+    aggregateRating: {
+      "@type": "AggregateRating",
+      ratingValue: Number(average.toFixed(1)),
+      reviewCount: reviews.length,
+      bestRating: 5,
+      worstRating: 1,
+    },
+    review: reviews.slice(0, 20).map((r) => ({
+      "@type": "Review",
+      author: { "@type": "Person", name: r.author_name },
+      reviewRating: {
+        "@type": "Rating",
+        ratingValue: r.rating,
+        bestRating: 5,
+        worstRating: 1,
+      },
+      reviewBody: r.text,
+      ...(r.created_at ? { datePublished: r.created_at.slice(0, 10) } : {}),
+    })),
+  };
 }
 
 export default async function ReviewsPage() {
@@ -48,6 +87,7 @@ export default async function ReviewsPage() {
 
   return (
     <div className="container-page py-12">
+      {reviews.length > 0 && <JsonLd data={reviewsJsonLd(reviews)} />}
       {/* Заголовок */}
       <div className="mx-auto max-w-5xl">
         <h1 className="text-center text-3xl font-extrabold text-brand-800 sm:text-4xl">

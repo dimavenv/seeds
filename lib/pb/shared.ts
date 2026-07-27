@@ -52,7 +52,15 @@ const s = (v: unknown): string => (typeof v === "string" ? v : "");
 const n = (v: unknown): number => (typeof v === "number" ? v : 0);
 
 export function mapCategory(r: R): Category {
-  return { id: r.id, slug: s(r.slug), name: s(r.name), sort_order: n(r.sort_order) };
+  return {
+    id: r.id,
+    slug: s(r.slug),
+    name: s(r.name),
+    sort_order: n(r.sort_order),
+    description: s(r.description) || null,
+    seo_title: s(r.seo_title) || null,
+    seo_description: s(r.seo_description) || null,
+  };
 }
 
 export function mapProduct(r: R): Product {

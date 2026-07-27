@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { LeafIcon } from "@/components/icons";
 
@@ -43,8 +44,24 @@ export default function HeroBanner({ images }: { images: string[] }) {
               i === current ? "opacity-100" : "opacity-0"
             }`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={`Баннер ${i + 1}`} className="h-full w-full object-cover" />
+            {/* Первый баннер грузим приоритетно: это самый крупный элемент
+                первого экрана, от него напрямую зависит LCP. Остальные —
+                лениво, они всё равно показываются не сразу. */}
+            {/* alt пустой намеренно: баннер — оформление, его смысл несёт
+                aria-label ссылки. Содержимое файла из public/banners коду
+                неизвестно, а подставлять во все баннеры одну и ту же строку с
+                ключевыми словами — ровно то переспамливание alt, за которое
+                Яндекс понижает страницу. Описательные alt с названием сорта
+                стоят там, где они правдивы, — на фото товаров. */}
+            <Image
+              src={src}
+              alt=""
+              fill
+              sizes="(max-width: 1280px) 100vw, 1280px"
+              priority={i === 0}
+              loading={i === 0 ? undefined : "lazy"}
+              className="object-cover"
+            />
           </Link>
         ))}
       </div>

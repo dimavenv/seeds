@@ -7,6 +7,13 @@ export type Category = {
   slug: string;
   name: string;
   sort_order: number;
+  // Вступительный текст над сеткой товаров и переопределения меты. Пустые
+  // строки приходят как null: страница категории тогда собирает title и
+  // description сама (см. app/catalog/[category]/page.tsx). Заполняются в
+  // админке PocketBase.
+  description?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
 };
 
 export type Product = {

@@ -55,7 +55,10 @@ const getCategoriesCached = unstable_cache(
       .getFullList({ sort: "sort_order" });
     return list.map(mapCategory);
   },
-  ["categories-v2"],
+  // Версию в ключе поднимаем при изменении формы Category (добавились
+  // description/seo_*): иначе после деплоя ISR отдавал бы записи старой формы
+  // из дискового кэша, и вступительные тексты категорий не появились бы.
+  ["categories-v3"],
   { revalidate: 600, tags: ["categories"] }
 );
 
