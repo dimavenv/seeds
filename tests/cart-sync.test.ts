@@ -5,6 +5,7 @@ import {
   nextRemovedPending,
   resolveCartOnLoad,
   subtractRemoved,
+  tombstonesToBurn,
 } from "@/lib/cart-sync";
 import { MAX_QTY_PER_ITEM } from "@/lib/checkout";
 import type { CartItem } from "@/lib/types";
@@ -235,6 +236,62 @@ describe("надгробия удалённых товаров (removedPending)"
       })
     );
     expect(r.cart[0].qty).toBe(5);
+  });
+});
+
+describe("tombstonesToBurn: когда надгробие можно сжигать", () => {
+  const X = "itemxxxxxxxxxxx";
+  const other = ci("itemoooooooooo1");
+
+  // Ошибка в эту сторону = возвращение воскрешений: сжечь до того, как
+  // удаление реально доехало до сервера.
+  it("подтверждение УСТАРЕВШЕЙ записи, где товар ещё лежал, надгробие НЕ сжигает", () => {
+    // Хронология: снимок [X, other] ушёл в полёт → пользователь удалил X
+    // (надгробие X, свежий желаемый снимок [other]) → пришло подтверждение
+    // СТАРОГО снимка. Сервер всё ещё хранит X — сжигать нельзя: свежая
+    // запись с удалением может не пройти.
+    const burn = tombstonesToBurn(
+      [X],
+      [ci(X), other], // подтверждённый (устаревший) снимок
+      [other] // самый свежий желаемый снимок — X уже удалён
+    );
+    expect(burn).toEqual([]);
+  });
+
+  // Ошибка в другую сторону = утечка: никогда не сжигать — список копится в
+  // localStorage вечно.
+  it("подтверждение актуального снимка без товара — надгробие сгорает", () => {
+    const burn = tombstonesToBurn([X], [other], [other]);
+    expect(burn).toEqual([X]);
+  });
+
+  it("устаревший подтверждённый снимок, но удаление в нём УЖЕ было — сгорает", () => {
+    // Удаление доехало более ранней записью: сервер X не хранит, даже если
+    // после неё были ещё какие-то (неподтверждённые) изменения корзины.
+    const burn = tombstonesToBurn(
+      [X],
+      [other], // подтверждённый снимок — без X
+      [other, ci("itemnewwwwwwww1")] // свежий желаемый ушёл дальше
+    );
+    expect(burn).toEqual([X]);
+  });
+
+  it("товар вернулся в свежий снимок — защитный фильтр не сжигает надгробие", () => {
+    // Обычно dispatch сам снимает надгробие при повторном добавлении; правило
+    // дублирует это защитно.
+    const burn = tombstonesToBurn([X], [other], [ci(X), other]);
+    expect(burn).toEqual([]);
+  });
+
+  it("сжигаются только доехавшие удаления, остальные остаются", () => {
+    const Y = "itemyyyyyyyyyyy";
+    // X доехал (нет в подтверждённом), Y — нет (ещё лежит в подтверждённом).
+    const burn = tombstonesToBurn([X, Y], [ci(Y)], []);
+    expect(burn).toEqual([X]);
+  });
+
+  it("пустой список надгробий — ничего не сжигаем", () => {
+    expect(tombstonesToBurn([], [], [])).toEqual([]);
   });
 });
 

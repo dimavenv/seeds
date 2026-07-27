@@ -18,6 +18,7 @@ import {
   nextRemovedPending,
   readRemovedPending,
   resolveCartOnLoad,
+  tombstonesToBurn,
   writeRemovedPending,
 } from "@/lib/cart-sync";
 import { cartReducer, toggleWishlist, type CartAction } from "@/lib/cart-store";
@@ -107,14 +108,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!want || !userIdRef.current) return;
       const res = await saveUserStore(want).catch(() => ({ ok: false }));
       if (res.ok) {
+        // Сжигаем надгробия, чьё удаление ДОЕХАЛО в подтверждённом снимке.
+        // Правило — чистая функция tombstonesToBurn (покрыта тестами):
+        // подтверждение устаревшей записи, где товар ещё лежал, надгробие
+        // НЕ трогает — свежая запись с удалением может ещё не пройти.
+        const latest = desiredRef.current ?? want;
+        const tombs = readRemovedPending();
+        const burn = new Set(tombstonesToBurn(tombs, want.cart, latest.cart));
+        if (burn.size > 0) {
+          writeRemovedPending(tombs.filter((id) => !burn.has(id)));
+        }
         // Подтверждён именно этот снимок; более новый (если появился за время
         // запроса) допишет уже его собственный flush из persist().
-        if (desiredRef.current === want) {
-          desiredRef.current = null;
-          // Сервер хранит актуальное состояние — надгробия удалённых товаров
-          // больше не нужны.
-          clearRemovedPending();
-        }
+        if (desiredRef.current === want) desiredRef.current = null;
       } else if (attempt < PERSIST_RETRIES) {
         setTimeout(() => flush(attempt + 1), 2000 * (attempt + 1));
       } else {
@@ -253,6 +259,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (ready) localStorage.setItem(WISH_KEY, JSON.stringify(wishlist));
   }, [wishlist, ready]);
+
+  // 4) Другие вкладки. Событие storage приходит, когда localStorage меняет
+  // ДРУГАЯ вкладка (в пишущей оно не срабатывает) — подхватываем её
+  // корзину/избранное в своё состояние И В РЕФЫ. Без этого вкладка Б держала
+  // бы в памяти устаревшую копию: её следующее действие записало бы на сервер
+  // снимок с товаром, только что удалённым во вкладке А, и заодно стёрло бы
+  // его надгробие (для Б товар «лежит в корзине»). Петля не возникает:
+  // приёмник сохраняет тот же сериализованный JSON, а storage срабатывает
+  // только при реальном изменении значения. persist здесь не зовём — свою
+  // запись вкладка-автор уже отправила. Остаточное окно — миллисекунды до
+  // доставки события (см. «Осознанные ограничения» в lib/cart-sync).
+  useEffect(() => {
+    if (!ready) return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.newValue === null) return; // ключ удалили — не наш случай
+      try {
+        if (e.key === CART_KEY) {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) setCartSync(onlyStringIds(parsed));
+        } else if (e.key === WISH_KEY) {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setWishSync(
+              parsed.filter((x): x is string => typeof x === "string")
+            );
+          }
+        }
+      } catch {
+        // битый JSON от чужого кода — игнорируем
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [ready, setCartSync, setWishSync]);
 
   const value = useMemo<StoreContextValue>(() => {
     const cartCount = cart.reduce((s, i) => s + i.qty, 0);
