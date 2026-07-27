@@ -6,18 +6,15 @@ import AddToCart from "@/components/add-to-cart";
 import ProductGrid from "@/components/product-grid";
 import ProductGallery from "@/components/product-gallery";
 import JsonLd from "@/components/json-ld";
-import ProductReviews from "@/components/product-reviews";
 import {
-  getApprovedProductReviews,
   getProductByLegacyRef,
   getProductBySlug,
   getProducts,
 } from "@/lib/data";
 import { formatPrice, seedsLabel } from "@/lib/format";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
-import { approvedOnly, ratingSummary } from "@/lib/reviews";
 import { ORGANIZATION_ID, SITE_NAME, absoluteUrl, siteUrl } from "@/lib/seo";
-import type { Product, Review } from "@/lib/types";
+import type { Product } from "@/lib/types";
 
 export const revalidate = 60;
 
@@ -95,17 +92,15 @@ export async function generateMetadata({
   };
 }
 
-// Микроразметка карточки: цена, наличие, рейтинг и хлебные крошки. Из неё
-// поисковик строит расширенный сниппет — звёзды и цену прямо в выдаче.
+// Микроразметка карточки: цена, наличие и хлебные крошки. Из неё поисковик
+// строит расширенный сниппет (цена и «в наличии» прямо в выдаче).
 //
-// Про рейтинг здесь железное правило: aggregateRating и review берутся РОВНО
-// из тех одобренных отзывов, которые отрисованы на странице блоком
-// ProductReviews. Нет видимых отзывов — нет и разметки рейтинга. Общий
-// рейтинг магазина сюда не подставляется никогда: разметка, не подтверждённая
-// видимым содержимым, — прямая причина ручных санкций и снятия сниппета.
-function productJsonLd(product: Product, reviews: Review[]) {
-  const summary = ratingSummary(reviews);
-  const visible = approvedOnly(reviews);
+// aggregateRating здесь НЕТ намеренно: отзывы в магазине относятся к магазину
+// целиком, а не к конкретному сорту. Подставить в карточку сорта общий
+// рейтинг магазина — ровно тот случай, за который снимают расширенные
+// сниппеты вручную: разметка не подтверждена видимым содержимым страницы.
+// Рейтинг магазина размечен там, где ему место, — на /reviews.
+function productJsonLd(product: Product) {
   const url = absoluteUrl(`/product/${product.slug}`);
   const images = (
     product.images?.length ? product.images : [product.image_url]
@@ -138,36 +133,6 @@ function productJsonLd(product: Product, reviews: Review[]) {
           itemCondition: "https://schema.org/NewCondition",
           seller: { "@id": ORGANIZATION_ID() },
         },
-        // Только при наличии одобренных отзывов — те же цифры, что видит
-        // покупатель выше по странице.
-        ...(summary
-          ? {
-              aggregateRating: {
-                "@type": "AggregateRating",
-                ratingValue: summary.value,
-                reviewCount: summary.count,
-                bestRating: 5,
-                worstRating: 1,
-              },
-              review: visible.slice(0, 10).map((r) => ({
-                "@type": "Review",
-                author: {
-                  "@type": "Person",
-                  name: r.author_name || "Покупатель",
-                },
-                reviewRating: {
-                  "@type": "Rating",
-                  ratingValue: r.rating,
-                  bestRating: 5,
-                  worstRating: 1,
-                },
-                reviewBody: r.text,
-                ...(r.created_at
-                  ? { datePublished: r.created_at.slice(0, 10) }
-                  : {}),
-              })),
-            }
-          : {}),
       },
       {
         "@type": "BreadcrumbList",
@@ -210,13 +175,12 @@ export default async function ProductPage({
     notFound();
   }
 
-  // Отзывы и похожие товары — одним заходом: оба запроса независимы.
-  const [reviews, relatedAll] = await Promise.all([
-    getApprovedProductReviews(product.id),
-    getProducts({ categorySlug: product.category?.slug, limit: 5 }),
-  ]);
-
-  const related = relatedAll
+  const related = (
+    await getProducts({
+      categorySlug: product.category?.slug,
+      limit: 5,
+    })
+  )
     .filter((p) => p.id !== product.id)
     .slice(0, 4);
 
@@ -232,7 +196,7 @@ export default async function ProductPage({
 
   return (
     <div className="container-page py-6">
-      <JsonLd data={productJsonLd(product, reviews)} />
+      <JsonLd data={productJsonLd(product)} />
       <nav className="mb-4 text-sm text-brand-500" aria-label="Хлебные крошки">
         <Link href="/" className="hover:text-brand-700">Главная</Link>
         <span className="mx-1.5">/</span>
@@ -305,12 +269,6 @@ export default async function ProductPage({
           </div>
         </section>
       )}
-
-      <ProductReviews
-        productId={product.id}
-        productName={product.name}
-        reviews={reviews}
-      />
 
       {related.length > 0 && (
         <section className="mt-14">

@@ -18,7 +18,6 @@ function review(rating: number, status: ReviewStatus = "approved"): Review {
     id: Math.random().toString(36).slice(2),
     user_id: null,
     order_id: null,
-    product_id: "p1",
     author_name: "Покупатель",
     rating,
     text: "текст",

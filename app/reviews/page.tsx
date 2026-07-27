@@ -6,6 +6,7 @@ import Stars from "@/components/stars";
 import ReviewCard from "@/components/review-card";
 import JsonLd from "@/components/json-ld";
 import { ORGANIZATION_ID } from "@/lib/seo";
+import { ratingSummary, type RatingSummary } from "@/lib/reviews";
 import type { Review } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -27,21 +28,21 @@ function reviewsWord(n: number): string {
 // что объявлен в app/layout.tsx (совпадающий @id), — так поисковик понимает,
 // что оценки относятся к продавцу.
 //
-// Именно к продавцу, а не к товару: отзывы в базе не связаны с конкретным
-// сортом (у коллекции reviews нет отношения к products). Подставить общий
-// рейтинг магазина в карточку каждого сорта — известный способ получить
-// ручные санкции за недостоверную разметку, поэтому там его нет.
-function reviewsJsonLd(reviews: Review[]) {
-  const average =
-    reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+// Именно к продавцу, а не к товару: отзывы в магазине общие, к конкретному
+// сорту они не привязаны. Подставить общий рейтинг магазина в карточку сорта —
+// известный способ получить ручные санкции за недостоверную разметку.
+//
+// Цифры берём из ratingSummary — из той же функции, что считает видимую
+// оценку выше по странице, чтобы разметка и текст не могли разойтись.
+function reviewsJsonLd(reviews: Review[], summary: RatingSummary) {
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
     "@id": ORGANIZATION_ID(),
     aggregateRating: {
       "@type": "AggregateRating",
-      ratingValue: Number(average.toFixed(1)),
-      reviewCount: reviews.length,
+      ratingValue: summary.value,
+      reviewCount: summary.count,
       bestRating: 5,
       worstRating: 1,
     },
@@ -68,9 +69,6 @@ export default async function ReviewsPage() {
       const page = await pb.collection("reviews").getList(1, 100, {
         filter: 'status = "approved"',
         sort: "-published_at",
-        // Отзывы о конкретных сортах тоже попадают в общий список — подписываем
-        // их названием сорта, иначе непонятно, о чём речь.
-        expand: "product",
       });
       reviews = page.items.map(mapReview);
     } catch {
@@ -78,10 +76,8 @@ export default async function ReviewsPage() {
     }
   }
 
-  const avg =
-    reviews.length > 0
-      ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
-      : null;
+  // Одна и та же средняя оценка идёт и в блок со звёздами, и в разметку.
+  const summary = ratingSummary(reviews);
 
   const dist = [5, 4, 3, 2, 1].map((n) => ({
     n,
@@ -90,7 +86,7 @@ export default async function ReviewsPage() {
 
   return (
     <div className="container-page py-12">
-      {reviews.length > 0 && <JsonLd data={reviewsJsonLd(reviews)} />}
+      {summary && <JsonLd data={reviewsJsonLd(reviews, summary)} />}
       {/* Заголовок */}
       <div className="mx-auto max-w-5xl">
         <h1 className="text-center text-3xl font-extrabold text-brand-800 sm:text-4xl">
@@ -98,12 +94,14 @@ export default async function ReviewsPage() {
           <span className="text-accent-500">покупателей</span>
         </h1>
 
-        {avg && reviews.length > 0 && (
+        {summary && (
           <div className="mx-auto mt-8 flex max-w-sm flex-col items-center rounded-2xl bg-brand-50 p-6 shadow-sm">
-            <div className="text-5xl font-black text-brand-800">{avg}</div>
-            <Stars value={Math.round(Number(avg))} className="mt-2 text-2xl" />
+            <div className="text-5xl font-black text-brand-800">
+              {summary.value.toFixed(1)}
+            </div>
+            <Stars value={Math.round(summary.value)} className="mt-2 text-2xl" />
             <p className="mt-2 text-sm text-brand-500">
-              на основе {reviews.length} {reviewsWord(reviews.length)}
+              на основе {summary.count} {reviewsWord(summary.count)}
             </p>
             <div className="mt-4 w-full space-y-1.5">
               {dist.map(({ n, count }) => (

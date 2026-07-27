@@ -125,13 +125,10 @@ export function mapOrderItem(r: R): OrderItem {
 }
 
 export function mapReview(r: R): Review {
-  const product = r.expand?.product as R | undefined;
   return {
     id: r.id,
     user_id: s(r.user) || null,
     order_id: s(r.order) || null,
-    product_id: s(r.product) || null,
-    product_name: product ? s(product.name) || null : null,
     author_name: s(r.author_name),
     rating: n(r.rating),
     text: s(r.text),

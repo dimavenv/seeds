@@ -414,7 +414,6 @@ export async function deleteReview(
 ): Promise<{ ok?: boolean; error?: string }> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
-  const slug = await reviewProductSlug(pb, id);
   try {
     await pb.collection("reviews").delete(id);
   } catch (e) {
@@ -422,7 +421,6 @@ export async function deleteReview(
   }
   revalidatePath("/admin/reviews");
   revalidatePath("/reviews");
-  if (slug) revalidatePath(`/product/${slug}`);
   return { ok: true };
 }
 
@@ -500,35 +498,13 @@ export async function replySupportRequest(
   return { ok: true };
 }
 
-// Страница сорта, к которому привязан отзыв (если привязан). Нужна, чтобы
-// после модерации пересобрать именно её: карточка живёт на ISR, и без сброса
-// одобренный отзыв со звёздами и aggregateRating появился бы там только через
-// час — а до тех пор видимый рейтинг и разметка расходились бы с базой.
-async function reviewProductSlug(
-  pb: Awaited<ReturnType<typeof getSessionPb>>["pb"],
-  reviewId: string
-): Promise<string | null> {
-  try {
-    const rec = await pb
-      .collection("reviews")
-      .getOne(reviewId, { expand: "product" });
-    const product = rec.expand?.product as { slug?: string } | undefined;
-    return product?.slug ? String(product.slug) : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function updateReviewStatus(
   id: string,
   status: ReviewStatus
 ): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
-  // Слаг читаем ДО обновления: если отзыв затем удалят, связь уже не достать.
-  const slug = await reviewProductSlug(pb, id);
   await pb.collection("reviews").update(id, { status }).catch(() => {});
   revalidatePath("/admin/reviews");
   revalidatePath("/reviews");
-  if (slug) revalidatePath(`/product/${slug}`);
 }

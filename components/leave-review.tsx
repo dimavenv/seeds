@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { submitProductReview, submitReview } from "@/app/account/actions";
+import { submitReview } from "@/app/account/actions";
 import Stars from "@/components/stars";
 import type { Review } from "@/lib/types";
 
@@ -12,26 +12,18 @@ const STATUS_TEXT: Record<string, string> = {
   rejected: "Ваш отзыв отклонён модератором.",
 };
 
-// Одна форма на два случая: отзыв о заказе (страница заказа) и отзыв о
-// конкретном сорте (страница товара). Различаются только тем, какое серверное
-// действие вызывается и какие подписи показываются, — поэтому вторую форму не
-// заводим, чтобы правила модерации и валидация не разъехались между копиями.
+// Отзыв о магазине, оставляемый со страницы полученного заказа. Отзывы в
+// магазине общие — к конкретному сорту они не привязываются.
 export default function LeaveReview({
   orderId,
-  productId,
   canReview,
   defaultName,
   existing,
-  placeholder = "Расскажите о сортах, всхожести, упаковке и доставке…",
-  cannotReviewText = "Оставить отзыв можно после получения заказа.",
 }: {
-  orderId?: string;
-  productId?: string;
+  orderId: string;
   canReview: boolean;
   defaultName: string;
   existing: Review | null;
-  placeholder?: string;
-  cannotReviewText?: string;
 }) {
   const router = useRouter();
   const [rating, setRating] = useState(0);
@@ -68,9 +60,7 @@ export default function LeaveReview({
           Спасибо! Отзыв отправлен на модерацию.
         </p>
         <p className="mt-1 text-sm text-brand-600">
-          {productId
-            ? "После проверки он появится на странице сорта."
-            : "После проверки он появится в разделе «Отзывы»."}
+          После проверки он появится в разделе «Отзывы».
         </p>
       </div>
     );
@@ -78,7 +68,9 @@ export default function LeaveReview({
 
   if (!canReview) {
     return (
-      <div className="card p-5 text-sm text-brand-500">{cannotReviewText}</div>
+      <div className="card p-5 text-sm text-brand-500">
+        Оставить отзыв можно после получения заказа.
+      </div>
     );
   }
 
@@ -89,16 +81,7 @@ export default function LeaveReview({
       return;
     }
     setBusy(true);
-    const res = productId
-      ? await submitProductReview({
-          productId,
-          rating,
-          text,
-          authorName: name,
-        })
-      : orderId
-      ? await submitReview({ orderId, rating, text, authorName: name })
-      : { error: "Не указано, о чём отзыв" };
+    const res = await submitReview({ orderId, rating, text, authorName: name });
     if (res.error) {
       setError(res.error);
       setBusy(false);
@@ -145,7 +128,7 @@ export default function LeaveReview({
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={placeholder}
+        placeholder="Расскажите о сортах, всхожести, упаковке и доставке…"
         className="input mt-3 min-h-28"
       />
 
