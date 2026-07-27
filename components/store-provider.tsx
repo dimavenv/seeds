@@ -13,8 +13,12 @@ import {
 import { loadUserStore, saveUserStore } from "@/app/store-actions";
 import {
   SYNC_KEY,
+  clearRemovedPending,
   consumePendingMerge,
+  nextRemovedPending,
+  readRemovedPending,
   resolveCartOnLoad,
+  writeRemovedPending,
 } from "@/lib/cart-sync";
 import { cartReducer, toggleWishlist, type CartAction } from "@/lib/cart-store";
 import ScrollToTop from "@/components/scroll-to-top";
@@ -105,7 +109,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         // Подтверждён именно этот снимок; более новый (если появился за время
         // запроса) допишет уже его собственный flush из persist().
-        if (desiredRef.current === want) desiredRef.current = null;
+        if (desiredRef.current === want) {
+          desiredRef.current = null;
+          // Сервер хранит актуальное состояние — надгробия удалённых товаров
+          // больше не нужны.
+          clearRemovedPending();
+        }
       } else if (attempt < PERSIST_RETRIES) {
         setTimeout(() => flush(attempt + 1), 2000 * (attempt + 1));
       } else {
@@ -177,29 +186,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           try {
             localStorage.removeItem(SYNC_KEY);
           } catch {}
+          // Гостевые надгробия чистим: они не должны при будущем входе стирать
+          // товары, лежащие в корзине аккаунта независимо от гостя.
+          clearRemovedPending();
         }
         return;
       }
 
       userIdRef.current = data.userId;
 
-      // Пользователь успел изменить корзину, ПОКА грузился серверный снимок
-      // (в desiredRef лежит неподтверждённая локальная запись): локальное
-      // состояние новее серверного — не перетираем его (иначе удалённое в эти
-      // секунды «воскресало» бы), а наоборот дописываем на сервер.
-      if (desiredRef.current) {
-        try {
-          localStorage.setItem(SYNC_KEY, JSON.stringify(data.userId));
-        } catch {}
-        flush();
-        return;
-      }
+      // Правило принятия решения — чистая функция в lib/cart-sync (покрыта
+      // тестами): keep-local (локальные действия свежее серверного снимка),
+      // trust-server (метка совпадает — сервер источник истины) или merge
+      // (только что вошли / метки нет). Надгробия удалённых товаров вычитаются
+      // из серверной копии, чтобы неподтверждённое удаление не воскресало.
+      const justLoggedIn = consumePendingMerge();
+      const removedPending = readRemovedPending();
+      // При входе в аккаунт гостевые надгробия сгорают (резолвер их и так
+      // игнорирует — см. комментарий там).
+      if (justLoggedIn) clearRemovedPending();
 
-      // Правило слияния — в lib/cart-sync (покрыто тестами):
-      //  - только что вошли на этом устройстве → ВСЕГДА слить (гостевые товары
-      //    не теряем, даже если у аккаунта уже есть непустая корзина);
-      //  - иначе, если запись есть и метка совпадает → сервер источник истины
-      //    (удалённое на другом устройстве не «воскресает»).
       const resolved = resolveCartOnLoad({
         localCart: cartRef.current,
         localWishlist: wishRef.current,
@@ -208,13 +214,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         serverExists: data.exists,
         syncedUser: read<string | null>(SYNC_KEY, null),
         userId: data.userId,
-        justLoggedIn: consumePendingMerge(),
+        justLoggedIn,
+        localIsNewer: desiredRef.current !== null,
+        removedPending,
       });
+
+      if (resolved.action === "keep-local") {
+        // Показываем локальное как есть (оно уже на экране) и дописываем на
+        // сервер неподтверждённый снимок из desiredRef.
+        try {
+          localStorage.setItem(SYNC_KEY, JSON.stringify(data.userId));
+        } catch {}
+        flush();
+        return;
+      }
 
       setCartSync(resolved.cart);
       setWishSync(resolved.wishlist);
-      if (resolved.action === "merge") {
-        // Слитый результат сразу закрепляем на сервере и помечаем устройство.
+      if (resolved.action === "merge" || removedPending.length > 0) {
+        // Слитый (или очищенный от надгробий) результат сразу закрепляем на
+        // сервере и помечаем устройство. Надгробия сгорят при подтверждении
+        // этой записи (см. flush); если она не пройдёт — сработают снова.
         try {
           localStorage.setItem(SYNC_KEY, JSON.stringify(data.userId));
         } catch {}
@@ -242,7 +262,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // замыкания — см. комментарий у cartRef), показываем его и СРАЗУ пишем на
     // сервер (write-through, без дебаунса).
     const dispatch = (action: CartAction) => {
-      const next = cartReducer(cartRef.current, action);
+      const prev = cartRef.current;
+      const next = cartReducer(prev, action);
+      // Надгробия удалённых товаров (переживают перезагрузку): если запись на
+      // сервер не дойдёт, при следующей загрузке удалённое вычтется из
+      // устаревшей серверной копии, а не воскреснет. См. lib/cart-sync.
+      writeRemovedPending(nextRemovedPending(readRemovedPending(), prev, next));
       setCartSync(next);
       persist(next, wishRef.current);
     };

@@ -151,27 +151,23 @@ export default function ReturnsPage() {
           </p>
 
           <H2>6. Контакты по вопросам возврата</H2>
-          <ul className="list-disc space-y-1 pl-6">
-            <li>
-              E-mail:{" "}
-              <a
-                href="mailto:info@tomatsemena.ru"
-                className="font-semibold underline hover:text-brand-800"
-              >
-                info@tomatsemena.ru
-              </a>
-            </li>
-            <li>
-              Телефон:{" "}
-              <a
-                href="tel:+79034549010"
-                className="font-semibold underline hover:text-brand-800"
-              >
-                +7 903 454-90-10
-              </a>
-            </li>
-            <li>Режим работы: Пн–Вс, 9:00–20:00</li>
-          </ul>
+          <p>
+            По всем вопросам возврата пишите на{" "}
+            <a
+              href="mailto:info@tomatsemena.ru"
+              className="font-semibold underline hover:text-brand-800"
+            >
+              info@tomatsemena.ru
+            </a>{" "}
+            или через{" "}
+            <a
+              href="/support"
+              className="font-semibold underline hover:text-brand-800"
+            >
+              форму поддержки
+            </a>
+            .
+          </p>
         </div>
       </div>
     </div>

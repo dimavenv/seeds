@@ -91,14 +91,6 @@ export default function PrivacyPage() {
               >
                 info@tomatsemena.ru
               </a>
-              <br />
-              Телефон:{" "}
-              <a
-                href="tel:+79034549010"
-                className="font-semibold underline hover:text-brand-800"
-              >
-                +7 903 454-90-10
-              </a>
             </p>
           </div>
           <p>
@@ -462,15 +454,8 @@ export default function PrivacyPage() {
               className="font-semibold underline hover:text-brand-800"
             >
               info@tomatsemena.ru
-            </a>{" "}
-            или по телефону{" "}
-            <a
-              href="tel:+79034549010"
-              className="font-semibold underline hover:text-brand-800"
-            >
-              +7 903 454-90-10
-            </a>{" "}
-            (пн–вс, 9:00–20:00).
+            </a>
+            .
           </p>
         </div>
       </div>

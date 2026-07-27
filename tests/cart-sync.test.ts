@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   capQty,
   mergeCartsWithStock,
+  nextRemovedPending,
   resolveCartOnLoad,
+  subtractRemoved,
 } from "@/lib/cart-sync";
 import { MAX_QTY_PER_ITEM } from "@/lib/checkout";
 import type { CartItem } from "@/lib/types";
@@ -136,6 +138,136 @@ describe("обычная загрузка страницы (без входа): 
     );
     expect(r.action).toBe("merge");
     expect(ids(r.cart)).toEqual([ACC_ID, GUEST_ID].sort());
+  });
+});
+
+describe("локальное новее серверного снимка (keep-local)", () => {
+  it("действия во время загрузки снимка не перетираются сервером", () => {
+    // Пользователь удалил ACC_ID из корзины, пока грузился loadUserStore();
+    // серверный снимок сделан ДО удаления — верить ему нельзя.
+    const r = resolveCartOnLoad(
+      loginInput({
+        justLoggedIn: false,
+        syncedUser: USER,
+        localCart: [ci(GUEST_ID, 2)],
+        serverCart: [ci(GUEST_ID, 2), ci(ACC_ID, 1)],
+        localIsNewer: true,
+      })
+    );
+    expect(r.action).toBe("keep-local");
+    expect(ids(r.cart)).toEqual([GUEST_ID]);
+    expect(r.wishlist).toEqual([GUEST_ID]); // и избранное локальное
+  });
+
+  it("keep-local важнее правила «слить при входе»", () => {
+    const r = resolveCartOnLoad(loginInput({ localIsNewer: true }));
+    expect(r.action).toBe("keep-local");
+    expect(ids(r.cart)).toEqual([GUEST_ID]);
+  });
+});
+
+describe("надгробия удалённых товаров (removedPending)", () => {
+  // Приоритетный сценарий: удалил товар → запись на сервер полностью не
+  // прошла (провайдер снял SYNC_KEY после исчерпания повторов) → перезагрузка.
+  // Без надгробия merge объединил бы корзины и товар воскрес из устаревшей
+  // серверной копии.
+  it("удалил товар → запись не прошла → перезагрузка: товар остаётся удалённым", () => {
+    const r = resolveCartOnLoad(
+      loginInput({
+        justLoggedIn: false,
+        syncedUser: null, // SYNC_KEY снята после неудачной записи
+        localCart: [ci(GUEST_ID, 2)], // удалённого ACC_ID уже нет
+        serverCart: [ci(GUEST_ID, 2), ci(ACC_ID, 1)], // сервер устарел
+        removedPending: [ACC_ID],
+      })
+    );
+    expect(r.action).toBe("merge");
+    expect(ids(r.cart)).toEqual([GUEST_ID]);
+  });
+
+  it("перезагрузка, пока запись ещё в полёте (trust-server): надгробие тоже вычитается", () => {
+    const r = resolveCartOnLoad(
+      loginInput({
+        justLoggedIn: false,
+        syncedUser: USER, // метка на месте — запись не «провалилась», а не успела
+        localCart: [ci(GUEST_ID, 2)],
+        serverCart: [ci(GUEST_ID, 2), ci(ACC_ID, 1)],
+        removedPending: [ACC_ID],
+      })
+    );
+    expect(r.action).toBe("trust-server");
+    expect(ids(r.cart)).toEqual([GUEST_ID]);
+  });
+
+  it("при входе в аккаунт гостевые надгробия игнорируются", () => {
+    // Гость удалял из СВОЕЙ корзины; тот же товар в корзине аккаунта — чужое
+    // состояние, его стирать нельзя.
+    const r = resolveCartOnLoad(
+      loginInput({ removedPending: [ACC_ID] }) // justLoggedIn: true
+    );
+    expect(r.action).toBe("merge");
+    expect(ids(r.cart)).toEqual([ACC_ID, GUEST_ID].sort());
+  });
+
+  // Явная проверка семантики количества: общий товар в двух снимках с разным
+  // qty даёт БОЛЬШЕЕ из двух (max), а не сумму — иначе каждое слияние
+  // локальной и серверной копий одной корзины удваивало бы количество.
+  it("общий товар с разным количеством: max, а не сумма (2 и 5 → 5, не 7)", () => {
+    const r = resolveCartOnLoad(
+      loginInput({
+        justLoggedIn: false,
+        syncedUser: null,
+        localCart: [ci(GUEST_ID, 2)],
+        serverCart: [ci(GUEST_ID, 5)],
+      })
+    );
+    expect(r.cart).toHaveLength(1);
+    expect(r.cart[0].qty).toBe(5);
+  });
+
+  it("…и в другую сторону (5 локально, 2 на сервере → 5)", () => {
+    const r = resolveCartOnLoad(
+      loginInput({
+        justLoggedIn: false,
+        syncedUser: null,
+        localCart: [ci(GUEST_ID, 5)],
+        serverCart: [ci(GUEST_ID, 2)],
+      })
+    );
+    expect(r.cart[0].qty).toBe(5);
+  });
+});
+
+describe("nextRemovedPending / subtractRemoved", () => {
+  it("удаление добавляет надгробие, повторное добавление — снимает", () => {
+    const a = ci("itemaaaaaaaaaaa");
+    const b = ci("itembbbbbbbbbbb");
+    let tombs = nextRemovedPending([], [a, b], [b]); // удалили a
+    expect(tombs).toEqual([a.id]);
+    tombs = nextRemovedPending(tombs, [b], [b, a]); // вернули a
+    expect(tombs).toEqual([]);
+  });
+
+  it("очистка корзины ставит надгробия на все позиции", () => {
+    const a = ci("itemaaaaaaaaaaa");
+    const b = ci("itembbbbbbbbbbb");
+    expect(nextRemovedPending([], [a, b], []).sort()).toEqual(
+      [a.id, b.id].sort()
+    );
+  });
+
+  it("старые надгробия сохраняются между действиями", () => {
+    const a = ci("itemaaaaaaaaaaa");
+    const b = ci("itembbbbbbbbbbb");
+    const tombs = nextRemovedPending([a.id], [b], []); // ранее удалён a, теперь b
+    expect(tombs.sort()).toEqual([a.id, b.id].sort());
+  });
+
+  it("subtractRemoved убирает только перечисленные id", () => {
+    const a = ci("itemaaaaaaaaaaa");
+    const b = ci("itembbbbbbbbbbb");
+    expect(subtractRemoved([a, b], [a.id])).toEqual([b]);
+    expect(subtractRemoved([a, b], [])).toEqual([a, b]);
   });
 });
 

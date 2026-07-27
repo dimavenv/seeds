@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/components/store-provider";
-import { CartIcon } from "@/components/icons";
+import AddToCartButton from "@/components/add-to-cart-button";
 import type { Product } from "@/lib/types";
 
-// Кнопка «Заказать ещё раз»: складывает товары заказа обратно в корзину.
+// Кнопка «Заказать ещё раз»: складывает товары заказа обратно в корзину и
+// ведёт в неё. Использует общую кнопку добавления — короткая вспышка
+// «Добавлено ✓» перед переходом, как у остальных кнопок «В корзину».
 export default function ReorderButton({
   items,
 }: {
@@ -18,16 +20,18 @@ export default function ReorderButton({
 
   if (items.length === 0) return null;
 
-  function reorder() {
-    setBusy(true);
-    for (const { product, qty } of items) addToCart(product, qty);
-    router.push("/cart");
-  }
-
   return (
-    <button onClick={reorder} disabled={busy} className="btn-accent w-full sm:w-auto">
-      <CartIcon className="h-5 w-5" />
-      {busy ? "Добавляем…" : "Заказать ещё раз"}
-    </button>
+    <AddToCartButton
+      label="Заказать ещё раз"
+      className="w-full sm:w-auto"
+      disabled={busy}
+      onAdd={() => {
+        if (busy) return;
+        setBusy(true);
+        for (const { product, qty } of items) addToCart(product, qty);
+        // Небольшая пауза, чтобы успех был виден, — затем в корзину.
+        setTimeout(() => router.push("/cart"), 600);
+      }}
+    />
   );
 }

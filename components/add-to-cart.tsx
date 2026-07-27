@@ -1,25 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useStore } from "@/components/store-provider";
-import { CartIcon, CheckIcon, HeartIcon } from "@/components/icons";
+import { HeartIcon } from "@/components/icons";
+import AddToCartButton from "@/components/add-to-cart-button";
 import type { Product } from "@/lib/types";
 
 export default function AddToCart({ product }: { product: Product }) {
   const { addToCart, toggleWish, isWished, ready } = useStore();
   const [qty, setQty] = useState(1);
-  const [added, setAdded] = useState(false);
   const wished = ready && isWished(product.id);
   const inStock = product.stock > 0;
-
-  // Таймер «Добавлено ✓» гасим при размонтировании, чтобы не дёргать setState
-  // на снятом компоненте.
-  const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    return () => {
-      if (addedTimer.current) clearTimeout(addedTimer.current);
-    };
-  }, []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -47,26 +38,10 @@ export default function AddToCart({ product }: { product: Product }) {
           </div>
         )}
         {inStock ? (
-          <button
-            onClick={() => {
-              addToCart(product, qty);
-              setAdded(true);
-              if (addedTimer.current) clearTimeout(addedTimer.current);
-              addedTimer.current = setTimeout(() => setAdded(false), 1500);
-            }}
-            className={`btn flex-1 text-white ${
-              added
-                ? "bg-brand-500 hover:bg-brand-600"
-                : "bg-accent-500 hover:bg-accent-600"
-            }`}
-          >
-            {added ? (
-              <CheckIcon className="h-5 w-5 motion-safe:animate-pop-in" />
-            ) : (
-              <CartIcon className="h-5 w-5" />
-            )}
-            {added ? "Добавлено!" : "В корзину"}
-          </button>
+          <AddToCartButton
+            onAdd={() => addToCart(product, qty)}
+            className="flex-1"
+          />
         ) : (
           <span className="flex flex-1 items-center justify-center rounded-full bg-brand-100 px-4 py-3 font-semibold text-brand-400">
             Нет в наличии

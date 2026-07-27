@@ -280,14 +280,6 @@ export default function OfferPage() {
               <br />
               Адрес: 350000, Россия, Краснодарский край, г. Краснодар
               <br />
-              Телефон:{" "}
-              <a
-                href="tel:+79034549010"
-                className="font-semibold underline hover:text-brand-800"
-              >
-                +7 903 454-90-10
-              </a>
-              <br />
               E-mail:{" "}
               <a
                 href="mailto:info@tomatsemena.ru"
@@ -295,8 +287,6 @@ export default function OfferPage() {
               >
                 info@tomatsemena.ru
               </a>
-              <br />
-              Режим работы: Пн–Вс, 9:00–20:00
             </p>
           </div>
         </div>

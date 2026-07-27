@@ -3,7 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useStore } from "@/components/store-provider";
-import { HeartIcon, CartIcon } from "@/components/icons";
+import { HeartIcon } from "@/components/icons";
+import AddToCartButton from "@/components/add-to-cart-button";
 import { formatPrice, seedsLabel } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
@@ -68,14 +69,12 @@ export default function ProductCard({ product }: { product: Product }) {
             {formatPrice(product.price)}
           </span>
           {product.stock > 0 ? (
-            <button
-              onClick={() => addToCart(product)}
-              className="btn-accent !px-3 !py-2"
-              aria-label="В корзину"
-            >
-              <CartIcon className="h-4 w-4" />
-              <span className="hidden sm:inline">В корзину</span>
-            </button>
+            <AddToCartButton
+              onAdd={() => addToCart(product)}
+              className="!px-3 !py-2"
+              iconClassName="h-4 w-4"
+              hideLabelOnMobile
+            />
           ) : (
             <span className="rounded-full bg-brand-100 px-3 py-2 text-xs font-semibold text-brand-400">
               Нет в наличии
