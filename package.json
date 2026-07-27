@@ -11,7 +11,8 @@
     "pb:fetch": "node scripts/fetch-pocketbase.mjs",
     "db:schema": "node scripts/pb-import-schema.mjs",
     "db:slugs": "node scripts/pb-backfill-slugs.mjs",
-    "db:images": "node scripts/pb-backfill-image-variants.mjs"
+    "db:images": "node scripts/pb-backfill-image-variants.mjs",
+    "img:optimize": "node scripts/optimize-public-images.mjs"
   },
   "dependencies": {
     "next": "14.2.35",
