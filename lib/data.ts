@@ -214,6 +214,44 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   }
 }
 
+// Поиск товара по СТАРОМУ адресу — по id записи PocketBase или по legacy_id
+// (числовой идентификатор, оставшийся от переезда с Supabase). Нужен только
+// странице товара: если по слагу ничего не нашлось, но ссылка вида
+// /product/<id> уже где-то проиндексирована, отдаём 301 на адрес со слагом,
+// а не 404 (см. app/product/[slug]/page.tsx).
+export async function getProductByLegacyRef(
+  ref: string
+): Promise<Product | null> {
+  const numeric = /^\d+$/.test(ref) ? Number(ref) : null;
+  if (!isValidRecordId(ref) && numeric === null) return null;
+  if (!isDbConfigured()) return null;
+  const pb = createPublicPb();
+  try {
+    const conditions: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (isValidRecordId(ref)) {
+      conditions.push("id = {:ref}");
+      params.ref = ref;
+    }
+    if (numeric !== null) {
+      conditions.push("legacy_id = {:legacyId}");
+      params.legacyId = numeric;
+    }
+    const rec = await pb
+      .collection("products")
+      .getFirstListItem(pb.filter(conditions.join(" || "), params), {
+        expand: "category",
+      });
+    return mapProduct(rec);
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    // Ничего не нашлось (404 от PocketBase) — это нормальный исход: адрес
+    // просто не существует, страница отдаст свой 404.
+    return null;
+  }
+}
+
 // Переехало в lib/pb/shared (нужно и клиенту); реэкспорт — для существующих
 // серверных импортов.
 export { isValidRecordId };

@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test": "vitest run",
     "pb:fetch": "node scripts/fetch-pocketbase.mjs",
-    "db:schema": "node scripts/pb-import-schema.mjs"
+    "db:schema": "node scripts/pb-import-schema.mjs",
+    "db:slugs": "node scripts/pb-backfill-slugs.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

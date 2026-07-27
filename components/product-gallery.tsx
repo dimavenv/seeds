@@ -4,6 +4,10 @@ import { useState } from "react";
 import Image from "next/image";
 
 // Галерея фото товара: крупное главное изображение + лента миниатюр.
+//
+// alt приходит с названием сорта («Семена Бычье сердце») — по нему картинку
+// находят в Яндекс.Картинках и Google Images, а для семян это заметный
+// источник трафика: люди ищут, как выглядит плод.
 export default function ProductGallery({
   images,
   alt,
@@ -44,14 +48,21 @@ export default function ProductGallery({
               key={url}
               type="button"
               onClick={() => setActive(i)}
-              aria-label={`Фото ${i + 1}`}
               className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-brand-50 transition ${
                 i === active
                   ? "border-brand-600"
                   : "border-transparent hover:border-brand-200"
               }`}
             >
-              <Image src={url} alt="" fill sizes="80px" className="object-cover" />
+              {/* alt миниатюры служит и подписью кнопки для скринридера,
+                  поэтому отдельный aria-label здесь не нужен. */}
+              <Image
+                src={url}
+                alt={`${alt} — фото ${i + 1}`}
+                fill
+                sizes="80px"
+                className="object-cover"
+              />
             </button>
           ))}
         </div>
