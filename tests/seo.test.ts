@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { slugify } from "@/lib/slug";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
@@ -176,4 +178,49 @@ describe("verificationCodes", () => {
     delete process.env.GOOGLE_SITE_VERIFICATION;
     expect(verificationCodes()).toEqual({ yandex: "abc123" });
   });
+});
+
+// Регрессионная защита для настоящего 404 (см. app/product/[slug]/page.tsx).
+//
+// Любая loading.tsx выше по дереву включает стриминг: заголовки ответа уходят
+// браузеру раньше, чем выполнится notFound(), и вместо 404 страница отдаёт
+// 200 с версткой «не найдено» — мягкий 404, который Search Console считает
+// ошибкой, а Яндекс тащит в индекс. Правило легко нарушить случайно, добавив
+// индикатор загрузки «на весь раздел», поэтому проверяем его тестом.
+describe("границы loading.tsx и настоящий 404", () => {
+  const appDir = path.join(__dirname, "..", "app");
+
+  function walk(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      return entry.isDirectory() ? walk(full) : [full];
+    });
+  }
+
+  const files = walk(appDir);
+  const pagesWithNotFound = files.filter(
+    (f) =>
+      path.basename(f) === "page.tsx" &&
+      /\bnotFound\(\)/.test(fs.readFileSync(f, "utf8"))
+  );
+
+  it("страницы, вызывающие notFound(), в проекте есть — иначе тест бессмысленен", () => {
+    expect(pagesWithNotFound.length).toBeGreaterThan(0);
+  });
+
+  it.each(pagesWithNotFound.map((f) => [path.relative(appDir, f), f]))(
+    "над %s нет ни одной loading-границы",
+    (_label, file) => {
+      const offenders: string[] = [];
+      // Поднимаемся от страницы до app/ включительно.
+      let dir = path.dirname(file as string);
+      for (;;) {
+        if (fs.existsSync(path.join(dir, "loading.tsx")))
+          offenders.push(path.relative(appDir, path.join(dir, "loading.tsx")));
+        if (path.resolve(dir) === path.resolve(appDir)) break;
+        dir = path.dirname(dir);
+      }
+      expect(offenders).toEqual([]);
+    }
+  );
 });

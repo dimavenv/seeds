@@ -50,11 +50,18 @@ const config: Config = {
           "0%": { opacity: "0", transform: "scale(0.96)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // Бегунок полоски перехода: длительность перехода заранее неизвестна,
+        // поэтому не «проценты загрузки», а бесконечная пробежка слева направо.
+        navProgress: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
       },
       animation: {
         "fade-up": "fadeUp 0.5s ease-out both",
         "fade-in": "fadeIn 0.6s ease-out both",
         "pop-in": "popIn 0.35s ease-out both",
+        "nav-progress": "navProgress 1.1s ease-in-out infinite",
       },
     },
   },

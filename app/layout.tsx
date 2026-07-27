@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import "./globals.css";
 import { StoreProvider } from "@/components/store-provider";
@@ -6,6 +7,7 @@ import Footer from "@/components/footer";
 import VacationBanner from "@/components/vacation-banner";
 import CookieConsent from "@/components/cookie-consent";
 import Analytics from "@/components/analytics";
+import NavigationProgress from "@/components/navigation-progress";
 import JsonLd from "@/components/json-ld";
 import { getCategories, getVacationUntil } from "@/lib/data";
 import {
@@ -121,6 +123,12 @@ export default async function RootLayout({
         <JsonLd data={siteJsonLd()} />
       </head>
       <body className="flex min-h-screen flex-col">
+        {/* Индикатор перехода между страницами. Suspense обязателен: внутри
+            используется useSearchParams, и без границы Next выводит из
+            статической генерации вообще все страницы сайта. */}
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <StoreProvider>
           {/* Для клавиатуры/скринридеров: перепрыгнуть шапку сразу к содержимому. */}
           <a href="#main" className="skip-link">
