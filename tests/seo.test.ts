@@ -2,6 +2,73 @@ import { afterEach, describe, expect, it } from "vitest";
 import { slugify } from "@/lib/slug";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
 import { absoluteUrl, siteUrl, verificationCodes } from "@/lib/seo";
+import { approvedOnly, ratingSummary } from "@/lib/reviews";
+import type { Review, ReviewStatus } from "@/lib/types";
+
+function review(rating: number, status: ReviewStatus = "approved"): Review {
+  return {
+    id: Math.random().toString(36).slice(2),
+    user_id: null,
+    order_id: null,
+    product_id: "p1",
+    author_name: "Покупатель",
+    rating,
+    text: "текст",
+    status,
+    source: null,
+    created_at: "2026-01-01T00:00:00Z",
+  };
+}
+
+describe("ratingSummary", () => {
+  it("считает среднюю и количество по одобренным отзывам", () => {
+    expect(ratingSummary([review(5), review(4)])).toEqual({
+      value: 4.5,
+      count: 2,
+    });
+  });
+
+  it("отзывы на модерации и отклонённые не влияют ни на среднюю, ни на счётчик", () => {
+    const summary = ratingSummary([
+      review(5),
+      review(1, "pending"),
+      review(1, "rejected"),
+    ]);
+    expect(summary).toEqual({ value: 5, count: 1 });
+  });
+
+  it("без одобренных отзывов отдаёт null — блок рейтинга и разметка не выводятся", () => {
+    expect(ratingSummary([])).toBeNull();
+    expect(ratingSummary([review(5, "pending")])).toBeNull();
+    expect(ratingSummary([review(5, "rejected")])).toBeNull();
+  });
+
+  it("округляет до десятых — то же число уходит и на страницу, и в aggregateRating", () => {
+    // 4+5+5 = 14/3 = 4.666…
+    expect(ratingSummary([review(4), review(5), review(5)])?.value).toBe(4.7);
+  });
+
+  it("оценки вне 1–5 отбрасываются: schema.org требует значение внутри диапазона", () => {
+    expect(ratingSummary([review(5), review(0), review(9)])).toEqual({
+      value: 5,
+      count: 1,
+    });
+  });
+
+  it("средняя всегда остаётся в допустимом диапазоне 1–5", () => {
+    const summary = ratingSummary([review(1), review(1), review(5)]);
+    expect(summary!.value).toBeGreaterThanOrEqual(1);
+    expect(summary!.value).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("approvedOnly", () => {
+  it("отдаёт ровно те отзывы, что видит покупатель — из них же строится разметка", () => {
+    const approved = review(5);
+    const list = [approved, review(3, "pending"), review(2, "rejected")];
+    expect(approvedOnly(list)).toEqual([approved]);
+  });
+});
 
 describe("slugify", () => {
   it("транслитерирует название сорта в адрес карточки", () => {

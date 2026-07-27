@@ -1164,6 +1164,20 @@
         "type": "relation"
       },
       {
+        "cascadeDelete": false,
+        "collectionId": "pbc_4092854851",
+        "help": "",
+        "hidden": false,
+        "id": "relation_review_product",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "product",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation"
+      },
+      {
         "autogeneratePattern": "",
         "help": "",
         "hidden": false,
@@ -1283,7 +1297,9 @@
         "type": "autodate"
       }
     ],
-    "indexes": [],
+    "indexes": [
+      "CREATE INDEX idx_reviews_product_status ON reviews (product, status)"
+    ],
     "created": "2026-07-12 21:44:05.203Z",
     "updated": "2026-07-12 21:44:05.203Z",
     "system": false

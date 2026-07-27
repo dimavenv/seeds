@@ -25,9 +25,12 @@ export default async function AdminReviews() {
   const pb = createServerPb();
   let reviews: Review[] = [];
   try {
-    const list = await pb
-      .collection("reviews")
-      .getFullList({ sort: "-published_at" });
+    const list = await pb.collection("reviews").getFullList({
+      sort: "-published_at",
+      // Название сорта — чтобы модератор сразу видел, о чём отзыв: от этого
+      // зависит рейтинг конкретной карточки в поисковой выдаче.
+      expand: "product",
+    });
     reviews = list.map(mapReview);
   } catch {
     reviews = [];
@@ -76,6 +79,13 @@ export default async function AdminReviews() {
                     {formatDate(r.created_at)}
                     {r.order_id ? " · по заказу" : ""}
                   </div>
+                  {r.product_id && (
+                    <div className="mt-1.5">
+                      <span className="badge bg-brand-100 text-brand-700">
+                        🌱 о сорте: {r.product_name || r.product_id}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <span className={`badge ${STATUS_BADGE[r.status]}`}>
                   {STATUS_LABEL[r.status]}

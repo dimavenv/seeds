@@ -68,6 +68,9 @@ export default async function ReviewsPage() {
       const page = await pb.collection("reviews").getList(1, 100, {
         filter: 'status = "approved"',
         sort: "-published_at",
+        // Отзывы о конкретных сортах тоже попадают в общий список — подписываем
+        // их названием сорта, иначе непонятно, о чём речь.
+        expand: "product",
       });
       reviews = page.items.map(mapReview);
     } catch {

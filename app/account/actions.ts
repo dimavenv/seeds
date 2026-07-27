@@ -8,6 +8,105 @@ import { notifyNewReview } from "@/lib/admin-mail";
 
 export type ReviewFormState = { error?: string; ok?: boolean };
 
+// Отзыв о конкретном сорте — со страницы товара.
+//
+// Право оставить отзыв проверяется ровно так же, как для отзыва о заказе:
+// нужен вход и полученный заказ, в котором этот сорт действительно был.
+// Открытая форма «для всех» здесь была бы дырой: отзывы формируют рейтинг в
+// поисковой выдаче, поэтому это первая мишень для накрутки. Проверка идёт
+// ЧЕРЕЗ КЛИЕНТ ПОЛЬЗОВАТЕЛЯ: правила PocketBase отдают ему только его
+// собственные позиции заказов, так что чужой заказ подставить нельзя.
+export async function submitProductReview(input: {
+  productId: string;
+  rating: number;
+  text: string;
+  authorName: string;
+}): Promise<ReviewFormState> {
+  const { session, pb } = await getSessionPb();
+  if (!session.userId) return { error: "Войдите, чтобы оставить отзыв" };
+  if (!isValidRecordId(input.productId)) return { error: "Товар не найден" };
+
+  const rating = Math.min(5, Math.max(1, Math.round(input.rating || 0)));
+  const text = (input.text || "").trim();
+  if (!rating) return { error: "Поставьте оценку" };
+  if (!text) return { error: "Напишите текст отзыва" };
+
+  // Ищем позицию заказа с этим товаром в полученном заказе покупателя.
+  let orderId: string | null = null;
+  let customerName = "";
+  try {
+    const items = await pb.collection("order_items").getList(1, 1, {
+      filter: pb.filter(
+        'product = {:product} && (order.status = "shipped" || order.status = "done")',
+        { product: input.productId }
+      ),
+      expand: "order",
+      sort: "-created",
+    });
+    const item = items.items[0];
+    if (item) {
+      orderId = String(item.order ?? "") || null;
+      const order = item.expand?.order as { customer_name?: string } | undefined;
+      customerName = String(order?.customer_name ?? "");
+    }
+  } catch {
+    return { error: "Не удалось проверить заказ" };
+  }
+  if (!orderId)
+    return { error: "Отзыв о сорте можно оставить после получения заказа с ним" };
+
+  // Один отзыв на сорт от покупателя — иначе один человек накрутит рейтинг
+  // повторными отправками.
+  const existing = await pb
+    .collection("reviews")
+    .getList(1, 1, {
+      filter: pb.filter("product = {:product} && user = {:user}", {
+        product: input.productId,
+        user: session.userId,
+      }),
+    })
+    .catch(() => null);
+  if (existing && existing.items.length > 0)
+    return { error: "Вы уже оставили отзыв на этот сорт" };
+
+  const authorName = (input.authorName || customerName || "Покупатель")
+    .trim()
+    .slice(0, 80);
+  let productSlug = "";
+  try {
+    const admin = await pbAdmin();
+    await admin.collection("reviews").create({
+      user: session.userId,
+      order: orderId,
+      product: input.productId,
+      author_name: authorName,
+      rating,
+      text: text.slice(0, 2000),
+      // Та же модерация, что и у отзывов о магазине: до одобрения отзыв не
+      // виден и в рейтинг сорта не входит.
+      status: "pending",
+      published_at: new Date().toISOString(),
+    });
+    const product = await admin
+      .collection("products")
+      .getOne(input.productId)
+      .catch(() => null);
+    productSlug = String(product?.slug ?? "");
+  } catch {
+    return { error: "Не удалось отправить отзыв" };
+  }
+
+  void notifyNewReview({
+    author: authorName,
+    rating,
+    text: text.slice(0, 2000),
+    orderNumber: null,
+  }).catch(() => {});
+
+  if (productSlug) revalidatePath(`/product/${productSlug}`);
+  return { ok: true };
+}
+
 // Оставить отзыв к своему заказу (после получения). Уходит на модерацию.
 export async function submitReview(input: {
   orderId: string;

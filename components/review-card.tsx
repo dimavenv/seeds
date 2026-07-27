@@ -27,9 +27,12 @@ const CLAMP_LENGTH = 280;
 export default function ReviewCard({
   review,
   index,
+  hideProductName = false,
 }: {
   review: Review;
   index: number;
+  /** На странице самого сорта подпись «о сорте …» избыточна. */
+  hideProductName?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const name = review.author_name || "Покупатель";
@@ -84,6 +87,17 @@ export default function ReviewCard({
 
       {/* Звёзды */}
       <Stars value={review.rating} />
+
+      {/* Для отзыва о конкретном сорте — о каком именно. На странице самого
+          сорта подпись не нужна: там это и так очевидно из заголовка. */}
+      {review.product_name && !hideProductName && (
+        <div className="-mt-1 text-xs text-brand-500">
+          о сорте{" "}
+          <span className="font-semibold text-brand-600">
+            {review.product_name}
+          </span>
+        </div>
+      )}
 
       {/* Текст с кавычкой */}
       <div className="relative flex-1 pl-4">

@@ -116,6 +116,13 @@ export type Review = {
   id: string;
   user_id: string | null;
   order_id: string | null;
+  // Сорт, к которому относится отзыв. null — отзыв о магазине целиком
+  // (так работали все отзывы до появления отзывов по сортам, и такие
+  // по-прежнему создаются со страницы заказа).
+  product_id: string | null;
+  // Название сорта из expand — только для админки, чтобы модератор видел,
+  // о чём отзыв, без второго запроса.
+  product_name?: string | null;
   author_name: string;
   rating: number;
   text: string;

@@ -5,9 +5,10 @@ import {
   isValidRecordId,
   mapCategory,
   mapProduct,
+  mapReview,
 } from "@/lib/pb/shared";
 import { demoCategories, demoProducts } from "@/lib/demo-data";
-import type { Category, Product } from "@/lib/types";
+import type { Category, Product, Review } from "@/lib/types";
 
 // Демо-каталог показываем ТОЛЬКО когда база вообще не настроена, либо когда
 // демо-режим включён явным флагом DEMO_MODE=true. Иначе (боевая база временно
@@ -214,6 +215,35 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     return demoAllowed()
       ? demoProducts.find((p) => p.slug === slug) ?? null
       : null;
+  }
+}
+
+// ===== Отзывы по сорту =====
+// Читаем ТОЛЬКО одобренные: их же видит покупатель на странице, из них же
+// считается рейтинг в микроразметке. Правила PocketBase и так отдают чужие
+// неодобренные только админу, но полагаться на это нельзя — админ, открывший
+// карточку товара, иначе увидел бы (и получил в разметку) отзывы на модерации.
+export async function getApprovedProductReviews(
+  productId: string
+): Promise<Review[]> {
+  if (!isValidRecordId(productId)) return [];
+  if (!isDbConfigured()) return [];
+  const pb = createPublicPb();
+  try {
+    const page = await pb.collection("reviews").getList(1, 50, {
+      filter: pb.filter('product = {:product} && status = "approved"', {
+        product: productId,
+      }),
+      sort: "-published_at",
+    });
+    return page.items.map(mapReview);
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД
+    onDbError("getApprovedProductReviews", e);
+    // База недоступна — карточка товара должна открыться и без отзывов:
+    // пустой список означает «блока отзывов и рейтинга нет», а не ошибку.
+    return [];
   }
 }
 
