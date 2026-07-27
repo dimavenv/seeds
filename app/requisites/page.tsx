@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ORGANIZATION } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "Реквизиты продавца",
@@ -8,8 +9,11 @@ export const metadata: Metadata = {
   alternates: { canonical: "/requisites" },
 };
 
-// ВАЖНО: заполните реквизиты ИП реальными данными — их проверяет банк при
-// подключении эквайринга и требует закон. Значения в [квадратных скобках].
+// Реквизиты продавца берём из lib/seo: те же значения уходят в микроразметку
+// Organization в корневом layout. Держать их в одном месте важно — расхождение
+// между видимой страницей и разметкой поисковик трактует как недостоверные
+// данные, а Яндекс отдельно смотрит на полноту контактов («коммерческие
+// факторы»).
 export default function RequisitesPage() {
   return (
     <div className="container-page py-10">
@@ -21,11 +25,17 @@ export default function RequisitesPage() {
           </p>
           <table className="w-full text-sm">
             <tbody className="[&_td]:border-t [&_td]:border-brand-100 [&_td]:py-2 [&_td:first-child]:pr-4 [&_td:first-child]:text-brand-500">
-              <tr><td>Наименование</td><td><strong>ИП Кутушева Вера Евгеньевна</strong></td></tr>
-              <tr><td>ИНН</td><td>231214684650</td></tr>
-              <tr><td>ОГРНИП</td><td>322237500354090</td></tr>
-              <tr><td>Адрес</td><td>350000, Россия, Краснодарский край, г. Краснодар</td></tr>
-              <tr><td>E-mail</td><td>info@tomatsemena.ru</td></tr>
+              <tr><td>Наименование</td><td><strong>{ORGANIZATION.legalName}</strong></td></tr>
+              <tr><td>ИНН</td><td>{ORGANIZATION.taxId}</td></tr>
+              <tr><td>ОГРНИП</td><td>{ORGANIZATION.registrationId}</td></tr>
+              <tr>
+                <td>Адрес</td>
+                <td>
+                  {ORGANIZATION.postalCode}, Россия,{" "}
+                  {ORGANIZATION.addressRegion}, г. {ORGANIZATION.addressLocality}
+                </td>
+              </tr>
+              <tr><td>E-mail</td><td>{ORGANIZATION.email}</td></tr>
             </tbody>
           </table>
         </div>

@@ -17,7 +17,14 @@ export async function generateMetadata({
   searchParams: CatalogSearchParams;
 }): Promise<Metadata> {
   const category = await getCategoryBySlug(params.category);
-  if (!category) return { title: "Категория не найдена", robots: { index: false } };
+  // Категории нет: страница отдаст вёрстку 404, но со статусом 200 (причина —
+  // в комментарии у компонента ниже), поэтому закрываем адрес от индексации
+  // мета-тегом.
+  if (!category)
+    return {
+      title: "Категория не найдена",
+      robots: { index: false, follow: false },
+    };
 
   const title =
     category.seo_title?.trim() ||
@@ -59,6 +66,11 @@ export default async function CategoryPage({
   searchParams: CatalogSearchParams;
 }) {
   const category = await getCategoryBySlug(params.category);
+  // ВНИМАНИЕ: Next отдаёт здесь вёрстку 404, но со статусом 200 — корневой
+  // app/loading.tsx включает стриминг, ответ уходит клиенту раньше, чем
+  // выполняется notFound(), и код ответа поменять уже нельзя. Настоящий 404
+  // вернётся, если убрать глобальный loading.tsx (ценой индикатора загрузки
+  // при переходах). Пока адрес закрыт от индексации noindex'ом выше.
   if (!category) notFound();
 
   return (

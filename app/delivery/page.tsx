@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import JsonLd from "@/components/json-ld";
+import { DELIVERY_COST, FREE_DELIVERY_FROM } from "@/lib/delivery";
+import { formatPrice } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Доставка и оплата семян почтой по России",
@@ -8,6 +11,60 @@ export const metadata: Metadata = {
     "бесплатно. Оплата картой на сайте. Сроки, ограничения по регионам.",
   alternates: { canonical: "/delivery" },
 };
+
+// Частые вопросы. Один и тот же массив рисует видимый блок на странице и
+// кормит разметку FAQPage — разметка обязана дословно повторять то, что видит
+// покупатель, иначе поисковик считает её недостоверной и снимает сниппет.
+// Ответы здесь — пересказ того, что уже написано выше на этой же странице;
+// цены подставляются из констант доставки, чтобы текст не разошёлся с корзиной.
+const FAQ: { q: string; a: string }[] = [
+  {
+    q: "Сколько стоит доставка семян?",
+    a:
+      `Доставка Ozon и Почтой России — ${formatPrice(DELIVERY_COST)}. ` +
+      `При заказе от ${formatPrice(FREE_DELIVERY_FROM)} доставка любым ` +
+      `способом бесплатна.`,
+  },
+  {
+    q: "Как быстро приходит заказ?",
+    a:
+      "Ozon и Почта России доставляют заказ за 2–5 дней. Мы собираем и " +
+      "передаём посылку в службу доставки сразу после успешной оплаты и " +
+      "отдельно сообщаем, когда заказ отправлен.",
+  },
+  {
+    q: "Как оплатить заказ?",
+    a:
+      "Оплата производится картой прямо на сайте: мы работаем по 100% " +
+      "предоплате. После оформления заказа вы автоматически переходите на " +
+      "страницу онлайн-оплаты.",
+  },
+  {
+    q: "Доставляете ли вы в Крым, Калининград и на Камчатку?",
+    a:
+      "Через Ozon доставка в Крым, Калининград и на Камчатку невозможна — " +
+      "это ограничение самой службы. Если вы живёте в этих регионах, " +
+      "выбирайте при оформлении доставку Почтой России.",
+  },
+  {
+    q: "Отправляете ли вы семена за границу?",
+    a:
+      "Нет, в зарубежные страны заказы не отправляются: пересылка семян за " +
+      "границу запрещена законодательством РФ.",
+  },
+];
+
+function faqJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  };
+}
 
 const STEPS: { title: string; body: React.ReactNode }[] = [
   {
@@ -99,6 +156,7 @@ const IMPORTANT: { icon: string; title: string; body: React.ReactNode }[] = [
 export default function DeliveryPage() {
   return (
     <div className="container-page py-12">
+      <JsonLd data={faqJsonLd()} />
       <h1 className="text-center text-3xl font-extrabold uppercase tracking-tight text-brand-800 sm:text-4xl">
         Доставка <span className="text-accent-500">и оплата</span>
       </h1>
@@ -175,6 +233,28 @@ export default function DeliveryPage() {
                 <p className="mt-0.5 text-[15px] text-brand-600">{it.body}</p>
               </div>
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Частые вопросы: видимый блок + та же разметка FAQPage. */}
+      <div className="mx-auto mt-14 max-w-3xl">
+        <h2 className="text-center text-2xl font-extrabold text-brand-800 sm:text-3xl">
+          Частые вопросы
+        </h2>
+        <div className="mt-6 space-y-3">
+          {FAQ.map((item) => (
+            <details key={item.q} className="card group p-5">
+              <summary className="cursor-pointer list-none font-bold text-brand-800 marker:content-none">
+                <span className="mr-2 text-accent-500 transition group-open:rotate-90 inline-block">
+                  ▸
+                </span>
+                {item.q}
+              </summary>
+              <p className="mt-3 pl-6 text-[15px] leading-relaxed text-brand-600">
+                {item.a}
+              </p>
+            </details>
           ))}
         </div>
       </div>

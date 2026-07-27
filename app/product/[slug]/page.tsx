@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -16,6 +17,22 @@ import { ORGANIZATION_ID, SITE_NAME, absoluteUrl, siteUrl } from "@/lib/seo";
 import type { Product } from "@/lib/types";
 
 export const revalidate = 60;
+
+// Товар для одного запроса читаем один раз: generateMetadata и сам компонент
+// вызываются оба, а запросы к PocketBase идут с no-store и штатным fetch-кэшем
+// Next не склеиваются. cache() из React дедуплицирует их в пределах запроса.
+const loadProduct = cache((slug: string) => getProductBySlug(slug));
+
+// Товара по слагу нет. Если ссылка пришла со старого адреса /product/<id> —
+// уводим 301 на канонический адрес со слагом, чтобы не терять уже набранный
+// вес страницы. Иначе возвращаем управление вызывающему коду.
+//
+// Вызывается и из generateMetadata, и из компонента: редирект должен
+// сработать в обоих случаях, а cache() выше не даёт сходить в базу дважды.
+async function redirectLegacyUrl(slug: string): Promise<void> {
+  const legacy = await getProductByLegacyRef(slug);
+  if (legacy?.slug) permanentRedirect(`/product/${legacy.slug}`);
+}
 
 // Заголовок карточки — главный сигнал релевантности для запроса «<сорт>
 // семена купить»: название сорта идёт первым словом, дальше — коммерческие
@@ -47,8 +64,18 @@ export async function generateMetadata({
 }: {
   params: { slug: string };
 }): Promise<Metadata> {
-  const product = await getProductBySlug(params.slug);
-  if (!product) return { title: "Товар не найден", robots: { index: false } };
+  const product = await loadProduct(params.slug);
+  if (!product) {
+    await redirectLegacyUrl(params.slug);
+    // Товара нет и старой ссылки тоже — страница ответит 404-версткой, но со
+    // статусом 200 (см. комментарий в компоненте ниже). Поэтому здесь важен
+    // noindex: он не даёт несуществующему адресу попасть в индекс, даже пока
+    // код ответа «мягкий».
+    return {
+      title: "Товар не найден",
+      robots: { index: false, follow: false },
+    };
+  }
 
   const title = productTitle(product);
   const description = productDescription(product);
@@ -140,13 +167,15 @@ export default async function ProductPage({
 }: {
   params: { slug: string };
 }) {
-  const product = await getProductBySlug(params.slug);
+  const product = await loadProduct(params.slug);
   if (!product) {
-    // Ссылка могла остаться со старого адреса вида /product/<id> — тогда
-    // отдаём 301 на канонический адрес со слагом, чтобы не терять уже
-    // набранный вес страницы и не отдавать поисковику 404.
-    const legacy = await getProductByLegacyRef(params.slug);
-    if (legacy?.slug) permanentRedirect(`/product/${legacy.slug}`);
+    await redirectLegacyUrl(params.slug);
+    // ВНИМАНИЕ: здесь Next отдаёт вёрстку 404, но со статусом 200 — из-за
+    // корневого app/loading.tsx ответ начинает стримиться раньше, чем
+    // выполняется notFound(), и заголовки уже отправлены. Полноценный 404
+    // вернётся, если убрать глобальный loading.tsx (тогда пропадёт индикатор
+    // загрузки при переходах). От индексации мусорных адресов страхует
+    // noindex из generateMetadata выше.
     notFound();
   }
 
