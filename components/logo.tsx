@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { LeafIcon } from "@/components/icons";
 
-// Светлая тема: public/logo.png, тёмная: public/logo-dark.png.
-// Если файл не найден — LeafIcon как фолбэк.
+// Светлая тема: public/logo.webp, тёмная: public/logo-dark.webp.
+// Если файл не найден — LeafIcon как фолбэк (onError ниже), поэтому сайт не
+// ломается, даже если файл ещё не залит.
 export default function Logo({ className = "h-9 w-9" }: { className?: string }) {
   const [lightFailed, setLightFailed] = useState(false);
   const [darkFailed, setDarkFailed] = useState(false);
@@ -19,7 +20,7 @@ export default function Logo({ className = "h-9 w-9" }: { className?: string }) 
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src="/logo.png"
+          src="/logo.webp"
           alt="Tomat Semena"
           className={`${imgClass} dark:hidden`}
           onError={() => setLightFailed(true)}
@@ -32,7 +33,7 @@ export default function Logo({ className = "h-9 w-9" }: { className?: string }) 
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src="/logo-dark.png"
+          src="/logo-dark.webp"
           alt="Tomat Semena"
           className={`${imgClass} hidden dark:block`}
           onError={() => setDarkFailed(true)}

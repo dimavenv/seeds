@@ -1,6 +1,7 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { slugify } from "@/lib/slug";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
 import { absoluteUrl, siteUrl, verificationCodes } from "@/lib/seo";
@@ -279,5 +280,46 @@ describe("варианты изображений", () => {
 
   it("запись без единого валидного варианта не попадает в карту", () => {
     expect(parseVariantMap({ "https://pb/a.jpg": { "999": "x" } })).toEqual({});
+  });
+});
+
+// Баннеры главной: список собирается из public/banners по именам файлов.
+describe("отбор баннеров", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "banners-"));
+  const cwd = process.cwd();
+
+  beforeAll(() => {
+    fs.mkdirSync(path.join(dir, "public", "banners"), { recursive: true });
+    const put = (name: string, bytes: number) =>
+      fs.writeFileSync(
+        path.join(dir, "public", "banners", name),
+        Buffer.alloc(bytes, 1)
+      );
+    put("2.webp", 50_000);
+    put("10.webp", 50_000);
+    put("3.jpg", 50_000); // старый формат ещё лежит рядом — тоже берём
+    put("4.jpg", 2); // файл-заглушка: раньше показывался битым слайдом
+    put("readme.txt", 50_000); // не картинка
+    put("banner.webp", 50_000); // имя не числовое
+    process.chdir(dir);
+  });
+
+  afterAll(() => {
+    process.chdir(cwd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("берёт только числовые имена картинок, по порядку номеров", async () => {
+    const { getBannerImages } = await import("@/lib/banners");
+    expect(getBannerImages()).toEqual([
+      "/banners/2.webp",
+      "/banners/3.jpg",
+      "/banners/10.webp",
+    ]);
+  });
+
+  it("двухбайтовые заглушки отсеиваются, а не рендерятся битым слайдом", async () => {
+    const { getBannerImages } = await import("@/lib/banners");
+    expect(getBannerImages()).not.toContain("/banners/4.jpg");
   });
 });
