@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Публичная оферта — Tomat Semena",
+  title: "Публичная оферта",
+  description:
+    "Договор публичной оферты интернет-магазина семян «Томат Семена»: " +
+    "условия заказа, оплаты и доставки товара.",
+  alternates: { canonical: "/offer" },
 };
 
 function H2({ children }: { children: React.ReactNode }) {

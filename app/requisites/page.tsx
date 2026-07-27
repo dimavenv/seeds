@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Реквизиты — Tomat Semena",
+  title: "Реквизиты продавца",
+  description:
+    "Полные реквизиты продавца интернет-магазина «Томат Семена»: " +
+    "наименование ИП, ИНН, ОГРНИП, адрес и контактный e-mail.",
+  alternates: { canonical: "/requisites" },
 };
 
 // ВАЖНО: заполните реквизиты ИП реальными данными — их проверяет банк при

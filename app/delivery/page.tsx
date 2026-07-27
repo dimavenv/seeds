@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Доставка и оплата — Tomat Semena" };
+export const metadata: Metadata = {
+  title: "Доставка и оплата семян почтой по России",
+  description:
+    "Как заказать семена: доставка Ozon и Почтой России — 300 ₽, от 3000 ₽ " +
+    "бесплатно. Оплата картой на сайте. Сроки, ограничения по регионам.",
+  alternates: { canonical: "/delivery" },
+};
 
 const STEPS: { title: string; body: React.ReactNode }[] = [
   {

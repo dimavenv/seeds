@@ -3,7 +3,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { getProducts } from "@/lib/data";
 
-export const metadata: Metadata = { title: "О нас — Tomat Semena" };
+export const metadata: Metadata = {
+  title: "О нас — коллекционные семена от частного семеновода",
+  description:
+    "Кто выращивает семена: только сортовые (не гибридные) томаты и овощи, " +
+    "выращенные и отобранные вручную на Кубани. Доставка по всей России.",
+  alternates: { canonical: "/about" },
+};
 export const revalidate = 300;
 
 const FACTS: { icon: string; title: string; text: string }[] = [

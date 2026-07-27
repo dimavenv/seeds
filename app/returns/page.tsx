@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Возврат товара — Tomat Semena",
+  title: "Возврат товара",
+  description:
+    "Условия возврата и обмена семян: сроки, порядок обращения и случаи, " +
+    "когда возврат товара надлежащего качества невозможен.",
+  alternates: { canonical: "/returns" },
 };
 
 function H2({ children }: { children: React.ReactNode }) {

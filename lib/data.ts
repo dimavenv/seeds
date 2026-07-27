@@ -286,19 +286,27 @@ export async function getVacationUntil(): Promise<string | null> {
 // Отдельный кэшируемый читатель: sitemap.xml пересобирается по ISR (revalidate
 // 3600), поэтому здесь нужна кэшируемая выборка — с no-store карта сайта
 // вываливалась из статической генерации и запекалась без товаров (или, до
-// гейтинга демо-режима, с ФЕЙКОВЫМИ демо-URL). Берём только slug и дату.
-export type SitemapProduct = { slug: string; created_at: string };
+// гейтинга демо-режима, с ФЕЙКОВЫМИ демо-URL). Берём только slug и даты.
+//
+// updated_at идёт в <lastmod>: поисковику важна дата последней ПРАВКИ карточки
+// (переписали описание сорта — приходи переобходить), а не дата её создания.
+export type SitemapProduct = {
+  slug: string;
+  created_at: string;
+  updated_at: string;
+};
 
 const getSitemapProductsCached = unstable_cache(
   async (): Promise<SitemapProduct[]> => {
     const pb = createPublicPb("force-cache");
     const list = await pb
       .collection("products")
-      .getFullList({ fields: "slug,created", sort: "-created" });
+      .getFullList({ fields: "slug,created,updated", sort: "-created" });
     return list
       .map((r) => ({
         slug: typeof r.slug === "string" ? r.slug : "",
         created_at: typeof r.created === "string" ? r.created : "",
+        updated_at: typeof r.updated === "string" ? r.updated : "",
       }))
       .filter((p) => p.slug);
   },
@@ -308,7 +316,11 @@ const getSitemapProductsCached = unstable_cache(
 
 export async function getSitemapProducts(): Promise<SitemapProduct[]> {
   const fromDemo = (): SitemapProduct[] =>
-    demoProducts.map((p) => ({ slug: p.slug, created_at: p.created_at }));
+    demoProducts.map((p) => ({
+      slug: p.slug,
+      created_at: p.created_at,
+      updated_at: p.created_at,
+    }));
   if (!isDbConfigured()) return fromDemo();
   try {
     return await getSitemapProductsCached();

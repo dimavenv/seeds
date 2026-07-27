@@ -6,7 +6,13 @@ import Stars from "@/components/stars";
 import ReviewCard from "@/components/review-card";
 import type { Review } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Отзывы — Tomat Semena" };
+export const metadata: Metadata = {
+  title: "Отзывы покупателей о семенах",
+  description:
+    "Реальные отзывы покупателей о всхожести семян, сортах и доставке " +
+    "магазина «Томат Семена». Оценки и комментарии после полученных заказов.",
+  alternates: { canonical: "/reviews" },
+};
 export const dynamic = "force-dynamic";
 
 // «на основе 1 отзыва / 5 отзывов / 21 отзыва» — прежний вариант давал

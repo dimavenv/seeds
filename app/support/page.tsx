@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import SupportForm from "@/components/support-form";
 
-export const metadata: Metadata = { title: "Поддержка — Tomat Semena" };
+export const metadata: Metadata = {
+  title: "Поддержка — связаться с магазином",
+  description:
+    "Вопрос о заказе, доставке или сорте? Напишите нам — отвечаем на все " +
+    "обращения по электронной почте.",
+  alternates: { canonical: "/support" },
+};
 
 export default function SupportPage() {
   return (

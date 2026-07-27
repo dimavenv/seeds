@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Политика конфиденциальности — Tomat Semena",
+  title: "Политика конфиденциальности",
+  description:
+    "Как магазин «Томат Семена» обрабатывает и защищает персональные данные " +
+    "покупателей.",
+  alternates: { canonical: "/privacy" },
 };
 
 // Заголовок раздела политики.
