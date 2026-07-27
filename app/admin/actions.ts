@@ -7,6 +7,7 @@ import { isValidRecordId } from "@/lib/data";
 import { decryptField } from "@/lib/crypto";
 import { mailOrderStatus, mailPayment, mailTracking } from "@/lib/order-mail";
 import { slugify } from "@/lib/slug";
+import { parseVariantMap, type ImageVariantMap } from "@/lib/image-variants";
 import type { OrderStatus, ReviewStatus } from "@/lib/types";
 
 // Данные заказа для письма покупателю (почта хранится зашифрованной).
@@ -70,6 +71,17 @@ export async function saveProduct(
   } catch {
     images = [];
   }
+  // Карта облегчённых WebP-вариантов по каждому фото. Значение приходит из
+  // формы уже собранным; parseVariantMap отсекает всё, что не похоже на
+  // «оригинал → { ширина: адрес }», чтобы в базу не попал мусор.
+  let imageVariants: ImageVariantMap = {};
+  try {
+    imageVariants = parseVariantMap(
+      JSON.parse(String(formData.get("image_variants") ?? "{}"))
+    );
+  } catch {
+    imageVariants = {};
+  }
   const imageUrl = images[0] ?? "";
   const stock = Number(formData.get("stock") ?? 0);
   const seedsRaw = String(formData.get("seeds_per_pack") ?? "").trim();
@@ -100,6 +112,7 @@ export async function saveProduct(
     description,
     image_url: imageUrl,
     images,
+    image_variants: imageVariants,
     // В схеме PocketBase эти поля целочисленные (onlyInt).
     stock: Math.round(stock),
     seeds_per_pack: Math.round(seedsPerPack),

@@ -1,5 +1,6 @@
 // Общие помощники PocketBase — без серверных зависимостей,
 // используются и на сервере, и на клиенте.
+import { parseVariantMap } from "@/lib/image-variants";
 import type {
   Category,
   Order,
@@ -77,6 +78,7 @@ export function mapProduct(r: R): Product {
     category_id: s(r.category) || null,
     image_url: s(r.image_url) || images[0] || null,
     images,
+    image_variants: parseVariantMap(r.image_variants),
     stock: n(r.stock),
     seeds_per_pack: n(r.seeds_per_pack) || null,
     is_new: !!r.is_new,

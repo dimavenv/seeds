@@ -5,6 +5,11 @@ import { slugify } from "@/lib/slug";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
 import { absoluteUrl, siteUrl, verificationCodes } from "@/lib/seo";
 import { approvedOnly, ratingSummary } from "@/lib/reviews";
+import {
+  parseVariantMap,
+  variantsFor,
+  webpSrcSet,
+} from "@/lib/image-variants";
 import type { Review, ReviewStatus } from "@/lib/types";
 
 function review(rating: number, status: ReviewStatus = "approved"): Review {
@@ -223,4 +228,56 @@ describe("границы loading.tsx и настоящий 404", () => {
       expect(offenders).toEqual([]);
     }
   );
+});
+
+describe("варианты изображений", () => {
+  const map = {
+    "https://pb/orig.jpg": {
+      "400": "https://pb/orig-400.webp",
+      "800": "https://pb/orig-800.webp",
+      "1200": "https://pb/orig-1200.webp",
+    },
+  };
+
+  it("srcset собирается по возрастанию ширины", () => {
+    expect(webpSrcSet(map["https://pb/orig.jpg"])).toBe(
+      "https://pb/orig-400.webp 400w, https://pb/orig-800.webp 800w, https://pb/orig-1200.webp 1200w"
+    );
+  });
+
+  it("частично сгенерированные варианты не ломают srcset", () => {
+    expect(webpSrcSet({ "800": "https://pb/only-800.webp" })).toBe(
+      "https://pb/only-800.webp 800w"
+    );
+  });
+
+  it("без вариантов srcset пустой — <source> не рисуется, остаётся оригинал", () => {
+    expect(webpSrcSet({})).toBe("");
+    expect(variantsFor(null, "https://pb/orig.jpg")).toEqual({});
+    expect(variantsFor(map, "https://pb/drugoe.jpg")).toEqual({});
+    expect(variantsFor(map, null)).toEqual({});
+  });
+
+  it("варианты находятся по адресу оригинала", () => {
+    expect(variantsFor(map, "https://pb/orig.jpg")).toEqual(
+      map["https://pb/orig.jpg"]
+    );
+  });
+
+  it("мусор из базы не роняет карточку, а отбрасывается", () => {
+    expect(parseVariantMap(null)).toEqual({});
+    expect(parseVariantMap("строка")).toEqual({});
+    expect(parseVariantMap([1, 2, 3])).toEqual({});
+    expect(parseVariantMap({ "https://pb/a.jpg": "не объект" })).toEqual({});
+    // Неизвестные ширины и нестроковые адреса игнорируются.
+    expect(
+      parseVariantMap({
+        "https://pb/a.jpg": { "800": "https://pb/a-800.webp", "999": "x", "400": 5 },
+      })
+    ).toEqual({ "https://pb/a.jpg": { "800": "https://pb/a-800.webp" } });
+  });
+
+  it("запись без единого валидного варианта не попадает в карту", () => {
+    expect(parseVariantMap({ "https://pb/a.jpg": { "999": "x" } })).toEqual({});
+  });
 });

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import ProductImage from "@/components/product-image";
+import { variantsFor, type ImageVariantMap } from "@/lib/image-variants";
 
 // Галерея фото товара: крупное главное изображение + лента миниатюр.
 //
@@ -11,9 +12,12 @@ import Image from "next/image";
 export default function ProductGallery({
   images,
   alt,
+  variants,
 }: {
   images: string[];
   alt: string;
+  /** Облегчённые варианты фото; нет — покажем оригиналы. */
+  variants?: ImageVariantMap;
 }) {
   const [active, setActive] = useState(0);
 
@@ -30,13 +34,13 @@ export default function ProductGallery({
   return (
     <div className="flex flex-col gap-3">
       <div className="card relative aspect-square overflow-hidden bg-brand-50">
-        <Image
+        <ProductImage
           key={current}
           src={current}
           alt={alt}
-          fill
+          variants={variantsFor(variants, current)}
           sizes="(max-width: 1024px) 100vw, 50vw"
-          className="object-cover"
+          className="absolute inset-0 h-full w-full object-cover"
           priority
         />
       </div>
@@ -56,12 +60,12 @@ export default function ProductGallery({
             >
               {/* alt миниатюры служит и подписью кнопки для скринридера,
                   поэтому отдельный aria-label здесь не нужен. */}
-              <Image
+              <ProductImage
                 src={url}
                 alt={`${alt} — фото ${i + 1}`}
-                fill
+                variants={variantsFor(variants, url)}
                 sizes="80px"
-                className="object-cover"
+                className="absolute inset-0 h-full w-full object-cover"
               />
             </button>
           ))}

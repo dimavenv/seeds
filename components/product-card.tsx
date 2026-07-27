@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import ProductImage from "@/components/product-image";
+import { variantsFor } from "@/lib/image-variants";
 import { useStore } from "@/components/store-provider";
 import { HeartIcon } from "@/components/icons";
 import AddToCartButton from "@/components/add-to-cart-button";
@@ -17,12 +18,12 @@ export default function ProductCard({ product }: { product: Product }) {
       <div className="relative aspect-square overflow-hidden bg-brand-50">
         <Link href={`/product/${product.slug}`}>
           {product.image_url ? (
-            <Image
+            <ProductImage
               src={product.image_url}
-              alt={product.name}
-              fill
+              alt={`Семена ${product.name}`}
+              variants={variantsFor(product.image_variants, product.image_url)}
               sizes="(max-width: 768px) 50vw, 25vw"
-              className="object-cover transition duration-300 group-hover:scale-105"
+              className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-105"
             />
           ) : (
             <div className="flex h-full items-center justify-center text-brand-300">

@@ -251,7 +251,11 @@ export default async function ProductPage({
       </nav>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <ProductGallery images={galleryImages} alt={`Семена ${product.name}`} />
+        <ProductGallery
+          images={galleryImages}
+          alt={`Семена ${product.name}`}
+          variants={product.image_variants}
+        />
 
         <div>
           <div className="flex gap-2">

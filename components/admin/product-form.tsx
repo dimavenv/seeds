@@ -3,9 +3,8 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { getPb } from "@/lib/pb/client";
-import { fileUrl } from "@/lib/pb/shared";
 import { saveProduct } from "@/app/admin/actions";
+import type { ImageVariantMap } from "@/lib/image-variants";
 import type { Category, Product } from "@/lib/types";
 
 export default function ProductForm({
@@ -24,6 +23,11 @@ export default function ProductForm({
       ? [product.image_url]
       : [];
   const [images, setImages] = useState<string[]>(initialImages);
+  // Облегчённые WebP-варианты по каждому фото. У фото, загруженных раньше,
+  // их нет — карточка тогда показывает оригинал (см. ProductImage).
+  const [variants, setVariants] = useState<ImageVariantMap>(
+    product?.image_variants ?? {}
+  );
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,16 +38,33 @@ export default function ProductForm({
     setUploading(true);
     setError(null);
     try {
-      // Файлы уходят в коллекцию media PocketBase (доступно только админу),
-      // а в товаре хранится готовый публичный URL.
-      const pb = getPb();
+      // Файл идёт через наш сервер (/api/admin/media), а не напрямую в
+      // PocketBase: там он один раз пережимается в WebP на 400/800/1200 px.
+      // Оптимизатор Next при этом остаётся выключенным — пережимать на каждый
+      // запрос на одном VPS нечем.
       const uploaded: string[] = [];
+      const uploadedVariants: ImageVariantMap = {};
       for (const file of files) {
         try {
           const fd = new FormData();
           fd.append("file", file);
-          const rec = await pb.collection("media").create(fd);
-          uploaded.push(fileUrl("media", rec.id, String(rec.file)));
+          const res = await fetch("/api/admin/media", {
+            method: "POST",
+            body: fd,
+          });
+          const json = (await res.json()) as {
+            url?: string;
+            variants?: Record<string, string>;
+            error?: string;
+          };
+          if (!res.ok || !json.url) {
+            setError("Не удалось загрузить фото: " + (json.error ?? "ошибка"));
+            continue;
+          }
+          uploaded.push(json.url);
+          // Вариантов может не быть (битый файл) — тогда останется оригинал.
+          if (json.variants && Object.keys(json.variants).length > 0)
+            uploadedVariants[json.url] = json.variants;
         } catch (e) {
           setError(
             "Не удалось загрузить фото: " +
@@ -52,6 +73,8 @@ export default function ProductForm({
         }
       }
       if (uploaded.length) setImages((prev) => [...prev, ...uploaded]);
+      if (Object.keys(uploadedVariants).length > 0)
+        setVariants((prev) => ({ ...prev, ...uploadedVariants }));
     } finally {
       setUploading(false);
       e.target.value = ""; // позволить выбрать те же файлы снова
@@ -77,6 +100,16 @@ export default function ProductForm({
     setError(null);
     const formData = new FormData(e.currentTarget);
     formData.set("images", JSON.stringify(images));
+    // Отправляем варианты только для фото, оставшихся в списке: удалённые
+    // фото не должны тащить за собой мусор в поле image_variants.
+    formData.set(
+      "image_variants",
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(variants).filter(([url]) => images.includes(url))
+        )
+      )
+    );
     const res = await saveProduct({}, formData);
     if (res.error) {
       setError(res.error);

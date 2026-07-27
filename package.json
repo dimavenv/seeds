@@ -10,7 +10,8 @@
     "test": "vitest run",
     "pb:fetch": "node scripts/fetch-pocketbase.mjs",
     "db:schema": "node scripts/pb-import-schema.mjs",
-    "db:slugs": "node scripts/pb-backfill-slugs.mjs"
+    "db:slugs": "node scripts/pb-backfill-slugs.mjs",
+    "db:images": "node scripts/pb-backfill-image-variants.mjs"
   },
   "dependencies": {
     "next": "14.2.35",
@@ -18,7 +19,8 @@
     "pocketbase": "^0.27.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

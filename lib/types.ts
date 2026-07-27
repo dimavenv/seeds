@@ -1,3 +1,5 @@
+import type { ImageVariantMap } from "@/lib/image-variants";
+
 // ID записей — строки PocketBase (15 символов). У заказов дополнительно есть
 // человекочитаемый номер `number` (у перенесённых из Supabase заказов он
 // совпадает со старым числовым id).
@@ -25,6 +27,10 @@ export type Product = {
   category_id: string | null;
   image_url: string | null;
   images?: string[] | null;
+  // Облегчённые WebP-варианты: «адрес оригинала → { ширина: адрес }».
+  // Пусто у фото, загруженных до появления вариантов, — тогда показывается
+  // оригинал (см. components/product-image.tsx).
+  image_variants?: ImageVariantMap;
   stock: number;
   seeds_per_pack?: number | null;
   is_new: boolean;
