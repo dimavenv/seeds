@@ -60,6 +60,53 @@ body {
   @apply bg-brand-50 text-brand-900 antialiased;
 }
 
+/* Полоса прокрутки страницы — в цветах магазина вместо серой системной.
+   Цвета заданы переменными темы, поэтому в тёмной теме полоса перекрашивается
+   сама вместе с остальным интерфейсом (см. блок .dark выше).
+
+   Ширину намеренно НЕ делаем волосяной: слишком тонкую полосу трудно поймать
+   мышью, а на странице каталога с сотнями сортов ей реально пользуются.
+   12px — заметно уже системных ~17px, но остаётся удобной для перетаскивания. */
+
+/* Firefox: у него нет ::-webkit-scrollbar, зато есть стандартные свойства.
+   Условие важно: Chromium ПОДДЕРЖИВАЕТ и то и другое, но при заданном
+   scrollbar-width он игнорирует ::-webkit-правила и рисует свою тонкую полосу
+   без скруглений. Поэтому стандартные свойства включаем только там, где
+   псевдоэлемента нет. */
+@supports not selector(::-webkit-scrollbar) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--brand-400)) rgb(var(--brand-50));
+  }
+}
+
+/* Chrome, Яндекс.Браузер, Edge, Safari. */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(var(--brand-50));
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--brand-400));
+  border-radius: 9999px;
+  /* Прозрачная рамка + background-clip даёт «воздух» вокруг бегунка: он
+     выглядит тонкой пилюлей, но зона захвата остаётся во всю ширину. */
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--brand-500));
+}
+::-webkit-scrollbar-thumb:active {
+  background-color: rgb(var(--brand-600));
+}
+/* Угол между вертикальной и горизонтальной полосами — чтобы не белел. */
+::-webkit-scrollbar-corner {
+  background: rgb(var(--brand-50));
+}
+
 /* Уважаем системную настройку «уменьшить движение». */
 @media (prefers-reduced-motion: reduce) {
   *,

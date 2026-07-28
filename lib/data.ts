@@ -324,10 +324,15 @@ export async function getVacationUntil(): Promise<string | null> {
 }
 
 // ===== Карта сайта =====
-// Отдельный кэшируемый читатель: sitemap.xml пересобирается по ISR (revalidate
-// 3600), поэтому здесь нужна кэшируемая выборка — с no-store карта сайта
-// вываливалась из статической генерации и запекалась без товаров (или, до
-// гейтинга демо-режима, с ФЕЙКОВЫМИ демо-URL). Берём только slug и даты.
+// Читаем БЕЗ кэша. Роут /sitemap.xml объявлен динамическим (см. app/sitemap.ts),
+// поэтому вылета из статической генерации здесь уже не будет, а карта всегда
+// отражает текущее состояние базы.
+//
+// Раньше тут стоял кэш на час — и после массовой правки (например,
+// переименования артикулов скриптом) карта ещё час отдавала старые адреса.
+// Сбросить его извне нельзя: sitemap.xml — метаданные Next, revalidateTag и
+// revalidatePath его не задевают. Проще не кэшировать вовсе: карту запрашивают
+// роботы несколько раз в сутки, а запрос — один, на три поля.
 //
 // updated_at идёт в <lastmod>: поисковику важна дата последней ПРАВКИ карточки
 // (переписали описание сорта — приходи переобходить), а не дата её создания.
@@ -336,24 +341,6 @@ export type SitemapProduct = {
   created_at: string;
   updated_at: string;
 };
-
-const getSitemapProductsCached = unstable_cache(
-  async (): Promise<SitemapProduct[]> => {
-    const pb = createPublicPb("force-cache");
-    const list = await pb
-      .collection("products")
-      .getFullList({ fields: "slug,created,updated", sort: "-created" });
-    return list
-      .map((r) => ({
-        slug: typeof r.slug === "string" ? r.slug : "",
-        created_at: typeof r.created === "string" ? r.created : "",
-        updated_at: typeof r.updated === "string" ? r.updated : "",
-      }))
-      .filter((p) => p.slug);
-  },
-  ["sitemap-products-v1"],
-  { revalidate: 3600, tags: ["products"] }
-);
 
 export async function getSitemapProducts(): Promise<SitemapProduct[]> {
   const fromDemo = (): SitemapProduct[] =>
@@ -364,7 +351,17 @@ export async function getSitemapProducts(): Promise<SitemapProduct[]> {
     }));
   if (!isDbConfigured()) return fromDemo();
   try {
-    return await getSitemapProductsCached();
+    const pb = createPublicPb();
+    const list = await pb
+      .collection("products")
+      .getFullList({ fields: "slug,created,updated", sort: "-created" });
+    return list
+      .map((r) => ({
+        slug: typeof r.slug === "string" ? r.slug : "",
+        created_at: typeof r.created === "string" ? r.created : "",
+        updated_at: typeof r.updated === "string" ? r.updated : "",
+      }))
+      .filter((p) => p.slug);
   } catch (e) {
     const dsu = dynamicServerUsageError(e);
     if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД

@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { revalidateSite } from "./lib/revalidate.mjs";
 
 const PREFIX = "ozon-";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -162,9 +163,14 @@ if (DRY_RUN) {
 } else if (done > 0) {
   console.log(
     "\nСтарые адреса /product/ozon-… продолжат работать: сайт отдаёт с них\n" +
-      "постоянный редирект на новый адрес. Карта сайта пересоберётся\n" +
-      "сама в течение часа; в Вебмастере и Search Console её можно отправить\n" +
-      "заново, чтобы новые адреса переобошли быстрее."
+      "постоянный редирект на новый адрес."
+  );
+  // Адреса товаров изменились — карту сайта надо пересобрать немедленно,
+  // иначе поисковик ещё до часа читал бы старые ссылки.
+  await revalidateSite();
+  console.log(
+    "В Вебмастере и Search Console карту сайта можно отправить заново,\n" +
+      "чтобы новые адреса переобошли быстрее."
   );
 }
 process.exit(failed > 0 ? 1 : 0);

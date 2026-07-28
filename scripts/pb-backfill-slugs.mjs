@@ -18,6 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { revalidateSite } from "./lib/revalidate.mjs";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -151,10 +152,6 @@ if (DRY_RUN) {
   console.log("Пробный прогон: в базу ничего не записано.");
 } else {
   console.log(`Готово. Обновлено: ${done}. Ошибок: ${failed}.`);
-  if (done > 0) {
-    console.log(
-      "Карта сайта пересоберётся сама в течение часа (ISR), либо перезапустите сайт."
-    );
-  }
+  if (done > 0) await revalidateSite();
 }
 process.exit(failed > 0 ? 1 : 0);

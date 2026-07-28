@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import { revalidateSite } from "./lib/revalidate.mjs";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -215,6 +216,5 @@ console.log(
     `Уже были варианты: ${skipped}. Внешних ссылок (пропущены): ${external}. Ошибок: ${failed}.`
 );
 if (DRY_RUN) console.log("Пробный прогон: в базу ничего не записано.");
-else if (processed > 0)
-  console.log("Каталог обновится в течение минуты (ISR) или после перезапуска сайта.");
+else if (processed > 0) await revalidateSite();
 process.exit(failed > 0 ? 1 : 0);
