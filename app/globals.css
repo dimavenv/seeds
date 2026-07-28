@@ -80,15 +80,18 @@ body {
   }
 }
 
-/* Chrome, Яндекс.Браузер, Edge, Safari. */
-::-webkit-scrollbar {
+/* Chrome, Яндекс.Браузер, Edge, Safari.
+   Селектор именно html, а не голый ::-webkit-scrollbar: иначе жирная зелёная
+   полоса появлялась бы ВНУТРИ каждого прокручиваемого блока — выпадашки
+   поиска, подсказок адреса, таблиц админки, — где она только мешает. */
+html::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
-::-webkit-scrollbar-track {
+html::-webkit-scrollbar-track {
   background: rgb(var(--brand-50));
 }
-::-webkit-scrollbar-thumb {
+html::-webkit-scrollbar-thumb {
   background-color: rgb(var(--brand-400));
   border-radius: 9999px;
   /* Прозрачная рамка + background-clip даёт «воздух» вокруг бегунка: он
@@ -96,14 +99,14 @@ body {
   border: 3px solid transparent;
   background-clip: content-box;
 }
-::-webkit-scrollbar-thumb:hover {
+html::-webkit-scrollbar-thumb:hover {
   background-color: rgb(var(--brand-500));
 }
-::-webkit-scrollbar-thumb:active {
+html::-webkit-scrollbar-thumb:active {
   background-color: rgb(var(--brand-600));
 }
 /* Угол между вертикальной и горизонтальной полосами — чтобы не белел. */
-::-webkit-scrollbar-corner {
+html::-webkit-scrollbar-corner {
   background: rgb(var(--brand-50));
 }
 
@@ -146,6 +149,16 @@ body {
   /* Единый стиль сообщения об ошибке формы (используется с role="alert"). */
   .alert-error {
     @apply rounded-xl bg-accent-500/10 px-4 py-2 text-sm text-accent-600;
+  }
+  /* Лента, которую листают жестом или кнопками: системная полоса под ней —
+     лишний шум, о возможности прокрутки говорят стрелки и градиенты по краям
+     (см. components/category-nav.tsx). */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
   /* Ссылка «перейти к содержимому»: невидима, пока не получит фокус с клавиатуры. */
   .skip-link {

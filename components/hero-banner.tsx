@@ -56,7 +56,10 @@ export default function HeroBanner({ images }: { images: string[] }) {
   return (
     <section
       ref={sectionRef}
-      className="group relative overflow-hidden rounded-3xl bg-brand-100"
+      // mx-auto max-w-5xl: баннер уже сетки товаров и стоит по центру —
+      // так он читается как отдельный блок, а не как «шапка на всю ширину».
+      // На телефоне max-w не срабатывает, там баннер по-прежнему во всю ширину.
+      className="group relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-brand-100"
       aria-roledescription="карусель"
       aria-label="Акции и предложения"
       onMouseEnter={() => setPaused(true)}
@@ -92,7 +95,9 @@ export default function HeroBanner({ images }: { images: string[] }) {
               src={src}
               alt=""
               fill
-              sizes="(max-width: 1280px) 100vw, 1280px"
+              // Баннер не шире max-w-5xl (1024px) — просить у браузера
+              // вариант под 1280px больше незачем.
+              sizes="(max-width: 1024px) 100vw, 1024px"
               priority={i === 0}
               loading={i === 0 ? undefined : "lazy"}
               className="object-cover"
@@ -158,7 +163,7 @@ function ArrowButton({
 
 function FallbackHero() {
   return (
-    <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white sm:p-10">
+    <section className="mx-auto max-w-5xl overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white sm:p-10">
       <div className="max-w-2xl">
         <span className="badge bg-white/15 text-white">
           <LeafIcon className="mr-1 h-4 w-4" /> Сезон посадки открыт
