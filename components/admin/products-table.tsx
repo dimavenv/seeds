@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateProductInline, deleteProduct } from "@/app/admin/actions";
 import { formatPrice } from "@/lib/format";
-import { getCategoryEmoji } from "@/lib/categories";
+import CategoryIcon from "@/components/category-icon";
 import type { Category, Product } from "@/lib/types";
 
 type Tab = "on_sale" | "ready";
@@ -195,7 +195,10 @@ export default function ProductsTable({
               onClick={() => setCategoryId(c.id)}
               className={catChip(categoryId === c.id)}
             >
-              {getCategoryEmoji(c.slug)} {c.name}
+              <span className="inline-flex items-center gap-1.5">
+                <CategoryIcon slug={c.slug} className="h-5 w-5" />
+                {c.name}
+              </span>
             </button>
           ))}
         </nav>
