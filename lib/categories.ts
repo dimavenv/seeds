@@ -29,6 +29,7 @@ const CATEGORY_ICONS = new Set([
   "arbuz",
   "dynya",
   "kartofel",
+  "kukuruza",
   // TODO: кукурузы (kukuruza) в присланном наборе не было — пока эмодзи 🌽.
   // Появится файл public/categories/kukuruza.webp — допишите сюда слаг.
 ]);
