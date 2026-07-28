@@ -12,7 +12,8 @@
     "db:schema": "node scripts/pb-import-schema.mjs",
     "db:slugs": "node scripts/pb-backfill-slugs.mjs",
     "db:images": "node scripts/pb-backfill-image-variants.mjs",
-    "img:optimize": "node scripts/optimize-public-images.mjs"
+    "img:optimize": "node scripts/optimize-public-images.mjs",
+    "db:strip-prefix": "node scripts/pb-strip-slug-prefix.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

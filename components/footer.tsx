@@ -19,7 +19,10 @@ export default function Footer({ categories }: { categories: Category[] }) {
         <div>
           <h3 className="mb-3 text-sm font-semibold text-brand-800">Каталог</h3>
           <ul className="space-y-1.5 text-sm text-brand-600">
-            {categories.slice(0, 6).map((c) => (
+            {/* Показываем ВСЕ категории: раньше стояло slice(0, 6), и последние
+                разделы (дыня, арбуз) просто не попадали в футер — ни покупателю,
+                ни поисковику, для которого это ещё и внутренняя перелинковка. */}
+            {categories.map((c) => (
               <li key={c.id}>
                 <Link href={`/catalog/${c.slug}`} className="hover:text-brand-800">
                   {c.name}

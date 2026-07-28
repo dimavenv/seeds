@@ -23,13 +23,31 @@ export const revalidate = 60;
 // Next не склеиваются. cache() из React дедуплицирует их в пределах запроса.
 const loadProduct = cache((slug: string) => getProductBySlug(slug));
 
-// Товара по слагу нет. Если ссылка пришла со старого адреса /product/<id> —
-// уводим 301 на канонический адрес со слагом, чтобы не терять уже набранный
-// вес страницы. Иначе возвращаем управление вызывающему коду.
+// Приставки, которые когда-то были у артикулов, а потом их убрали
+// (scripts/pb-strip-slug-prefix.mjs). Адрес карточки — это и есть артикул,
+// поэтому переименование сделало все прежние ссылки битыми; здесь мы их
+// подхватываем и уводим на новый адрес постоянным редиректом (Next отдаёт
+// 308; поисковики считают его равнозначным 301 и переносят вес страницы).
+const HISTORIC_SLUG_PREFIXES = ["ozon-"];
+
+// Товара по слагу нет. Пытаемся понять, не пришла ли ссылка со старого адреса,
+// и увести на текущий — чтобы не терять уже набранный страницей вес и не
+// отвечать поисковику 404. Иначе возвращаем управление вызывающему коду.
 //
 // Вызывается и из generateMetadata, и из компонента: редирект должен
 // сработать в обоих случаях, а cache() выше не даёт сходить в базу дважды.
 async function redirectLegacyUrl(slug: string): Promise<void> {
+  // Старый артикул с приставкой: /product/ozon-tomat-x → /product/tomat-x.
+  for (const prefix of HISTORIC_SLUG_PREFIXES) {
+    if (!slug.startsWith(prefix)) continue;
+    const stripped = slug.slice(prefix.length);
+    // Проверяем, что товар с таким артикулом реально есть: иначе увели бы
+    // на ещё один несуществующий адрес, то есть на цепочку редиректов в 404.
+    if (stripped && (await loadProduct(stripped)))
+      permanentRedirect(`/product/${stripped}`);
+  }
+
+  // Ссылка вида /product/<id записи> или /product/<номер из старой базы>.
   const legacy = await getProductByLegacyRef(slug);
   if (legacy?.slug) permanentRedirect(`/product/${legacy.slug}`);
 }
