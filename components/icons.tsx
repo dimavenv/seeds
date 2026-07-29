@@ -41,28 +41,6 @@ export function CloseIcon({ className = "h-5 w-5" }: IconProps) {
   );
 }
 
-// Шеврон для пролистывания карусели. direction меняет только поворот, чтобы
-// стрелки влево и вправо были зеркально одинаковыми.
-export function ChevronIcon({
-  className = "h-5 w-5",
-  direction = "right",
-}: IconProps & { direction?: "left" | "right" }) {
-  return (
-    <svg
-      className={`${className} ${direction === "left" ? "rotate-180" : ""}`}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m9 5 7 7-7 7" />
-    </svg>
-  );
-}
-
 export function LeafIcon({ className = "h-6 w-6" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
