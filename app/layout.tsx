@@ -8,7 +8,6 @@ import VacationBanner from "@/components/vacation-banner";
 import CookieConsent from "@/components/cookie-consent";
 import Analytics from "@/components/analytics";
 import NavigationProgress from "@/components/navigation-progress";
-import PageScrollbar from "@/components/page-scrollbar";
 import JsonLd from "@/components/json-ld";
 import { getCategories, getVacationUntil } from "@/lib/data";
 import {
@@ -130,7 +129,6 @@ export default async function RootLayout({
         <Suspense fallback={null}>
           <NavigationProgress />
         </Suspense>
-        <PageScrollbar />
         <StoreProvider>
           {/* Для клавиатуры/скринридеров: перепрыгнуть шапку сразу к содержимому. */}
           <a href="#main" className="skip-link">
