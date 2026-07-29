@@ -87,7 +87,11 @@ export default function CategoryNav({
   const chip = (active: boolean) =>
     // pl-2 при pr-4: у иконки есть свои поля внутри картинки, поэтому слева
     // отступ меньше — иначе чип выглядит перекошенным.
-    `inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-1.5 pr-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:gap-2 sm:text-sm ${
+    // На телефоне чипы держат свою ширину и лента листается (shrink-0).
+    // На десктопе они делят строку поровну (sm:flex-1) и занимают её от края
+    // до края — иначе восемь коротких названий жались к левому краю, а справа
+    // оставалась пустота.
+    `inline-flex shrink-0 snap-start items-center justify-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-1.5 pr-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:flex-1 sm:py-2 sm:text-sm ${
       active
         ? "bg-brand-600 text-white shadow-sm"
         : "bg-brand-50 text-brand-700 hover:bg-brand-100"
