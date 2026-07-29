@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronIcon, LeafIcon } from "@/components/icons";
+import { useCallback, useEffect, useState } from "react";
+import { LeafIcon } from "@/components/icons";
 
 // Карусель баннеров главной. Список картинок приходит с сервера
 // (lib/banners.ts читает public/banners при рендере страницы) — браузер больше
@@ -14,14 +14,16 @@ import { ChevronIcon, LeafIcon } from "@/components/icons";
 // баннер — верх первого экрана, и чем он ниже, тем раньше видно каталог.
 // 16:6 — та же пропорция, что рекомендована в public/banners/README.txt, так
 // что на десктопе картинка показывается без обрезки.
-const AUTOPLAY_MS = 5000;
+
+// Листаем чаще прежних 5 секунд: баннеров дюжина, и при медленной смене
+// посетитель успевает увидеть от силы пару штук.
+const AUTOPLAY_MS = 3500;
 
 export default function HeroBanner({ images }: { images: string[] }) {
   const [index, setIndex] = useState(0);
   // Пауза автопрокрутки, пока пользователь читает баннер: наведён курсор или
   // фокус стоит на одной из кнопок (клавиатурная навигация).
   const [paused, setPaused] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
 
   const count = images.length;
   const go = useCallback(
@@ -55,7 +57,6 @@ export default function HeroBanner({ images }: { images: string[] }) {
 
   return (
     <section
-      ref={sectionRef}
       // mx-auto max-w-5xl: баннер уже сетки товаров и стоит по центру —
       // так он читается как отдельный блок, а не как «шапка на всю ширину».
       // На телефоне max-w не срабатывает, там баннер по-прежнему во всю ширину.
@@ -107,12 +108,12 @@ export default function HeroBanner({ images }: { images: string[] }) {
       </div>
 
       {count > 1 && (
-        <>
-          <ArrowButton side="left" onClick={() => go(-1)} />
-          <ArrowButton side="right" onClick={() => go(1)} />
-
-          {/* Точки: показывают, сколько всего баннеров и где мы сейчас. */}
-          <div className="absolute bottom-2.5 left-1/2 flex -translate-x-1/2 gap-2 sm:bottom-3">
+        <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 sm:bottom-3">
+          {/* Точки: показывают, сколько всего баннеров и где мы сейчас, и
+              переключают слайд. Стрелок по краям нет намеренно — они лезли
+              под палец поверх самой картинки; листать можно точками, а с
+              клавиатуры — стрелками (см. onKeyDown выше). */}
+          <div className="flex gap-2">
             {images.map((src, i) => (
               <button
                 key={src}
@@ -128,36 +129,9 @@ export default function HeroBanner({ images }: { images: string[] }) {
               />
             ))}
           </div>
-        </>
+        </div>
       )}
     </section>
-  );
-}
-
-// Круглая стеклянная кнопка по краю баннера.
-//
-// Видна всегда, а не только при наведении: на телефоне наводить нечем, а на
-// десктопе скрытая стрелка не подсказывает, что баннеров несколько. Чтобы она
-// читалась и на светлом, и на тёмном снимке, под полупрозрачным белым лежит
-// тонкая тёмная обводка.
-function ArrowButton({
-  side,
-  onClick,
-}: {
-  side: "left" | "right";
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={side === "left" ? "Предыдущий баннер" : "Следующий баннер"}
-      className={`absolute top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 text-brand-800 shadow-lg ring-1 ring-black/10 backdrop-blur transition hover:scale-105 hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/30 active:scale-95 sm:h-11 sm:w-11 ${
-        side === "left" ? "left-2 sm:left-4" : "right-2 sm:right-4"
-      }`}
-    >
-      <ChevronIcon direction={side} className="h-5 w-5 sm:h-6 sm:w-6" />
-    </button>
   );
 }
 

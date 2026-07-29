@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/components/store-provider";
 import Logo from "@/components/logo";
+import ScrollIndicator from "@/components/scroll-indicator";
 import SearchBox from "@/components/search-box";
 import {
   CartIcon,
@@ -21,6 +22,7 @@ const ICON_BTN =
 export default function Header() {
   const { cartCount, wishlist, ready } = useStore();
   const [searchOpen, setSearchOpen] = useState(false);
+  const navRef = useRef<HTMLDivElement>(null);
 
   // Блокируем прокрутку страницы, пока открыт мобильный поиск; Escape закрывает.
   useEffect(() => {
@@ -92,7 +94,14 @@ export default function Header() {
       </div>
 
       <div className="bg-brand-600 shadow-sm">
-        <div className="container-page flex items-center gap-1 overflow-x-auto py-2 text-base sm:justify-between">
+        <div className="container-page pb-1.5 pt-2">
+          {/* Меню шире экрана на телефоне — листается пальцем, а под ним свой
+              индикатор прокрутки: системную полосу на телефоне не перекрасить
+              (браузер рисует её наложенной). */}
+          <div
+            ref={navRef}
+            className="scrollbar-none flex items-center gap-1 overflow-x-auto text-base sm:justify-between"
+          >
           <Link href="/catalog" className="whitespace-nowrap rounded-full px-4 py-2 font-bold text-white hover:bg-white/15">
             Каталог
           </Link>
@@ -108,6 +117,14 @@ export default function Header() {
           <Link href="/support" className="whitespace-nowrap rounded-full px-4 py-2 font-medium text-white/90 hover:bg-white/15 hover:text-white">
             Поддержка
           </Link>
+          </div>
+          {/* На тёмно-зелёной подложке зелёный ползунок не читается —
+              берём белый. sm:hidden: на десктопе меню помещается целиком. */}
+          <ScrollIndicator
+            targetRef={navRef}
+            className="mt-1.5 bg-white/20 sm:hidden"
+            thumbClassName="bg-white/70 hover:bg-white active:bg-white"
+          />
         </div>
       </div>
 

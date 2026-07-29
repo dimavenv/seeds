@@ -5,19 +5,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Category } from "@/lib/types";
 import CategoryIcon from "@/components/category-icon";
 import { ChevronIcon, LeafIcon } from "@/components/icons";
+import ScrollIndicator from "@/components/scroll-indicator";
 
 // Лента категорий каталога: «Все семена» + категории с иконками.
 //
-// Листается кнопками по краям, колесом мыши, свайпом и с клавиатуры.
-// Системную полосу прокрутки под лентой прячем (.no-scrollbar): категорий
-// немного, лента вылезает за экран всего на пару чипов, и полоса под ней
-// ездила на считаные миллиметры — выглядело как брак. О том, что есть куда
-// листать, теперь говорят стрелки и градиент у края: они появляются ровно с
-// той стороны, куда ещё можно прокрутить.
+// На телефоне листается как обычно — пальцем, под лентой виден собственный
+// индикатор прокрутки (ScrollIndicator): системную полосу на телефонах браузер
+// рисует наложенной и не даёт перекрасить. Кнопки со стрелками там не
+// показываем: пальцем удобнее, а мелкие кнопки у края только мешают.
+//
+// На десктопе к свайпу и колесу добавляются стрелки по краям — мышью тянуть
+// горизонтальную полосу неудобно. Появляются они только с той стороны, куда
+// действительно можно прокрутить.
 
 // На сколько листать за один клик — доля видимой ширины. Не весь экран:
 // так на границе всегда остаётся один общий чип и не теряется контекст.
 const PAGE_FRACTION = 0.8;
+
+// Если листать осталось меньше этого, кнопки не показываем вовсе. Когда лента
+// вылезает за экран на десяток пикселей, стрелка сдвигает ленту на волосок —
+// выглядит как неисправность. Проще не предлагать её вообще: такой хвост видно
+// и так, а дотянуться до него можно колесом или пальцем.
+const MIN_SCROLLABLE_PX = 48;
 
 export default function CategoryNav({
   categories,
@@ -29,6 +38,7 @@ export default function CategoryNav({
   const trackRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(true);
+  const [scrollable, setScrollable] = useState(false);
 
   const sync = useCallback(() => {
     const el = trackRef.current;
@@ -36,6 +46,7 @@ export default function CategoryNav({
     // 2px допуск: дробные размеры после масштабирования не дают scrollLeft
     // дойти ровно до максимума, и стрелка «вправо» иначе не гасла бы никогда.
     const max = el.scrollWidth - el.clientWidth;
+    setScrollable(max >= MIN_SCROLLABLE_PX);
     setAtStart(el.scrollLeft <= 2);
     setAtEnd(el.scrollLeft >= max - 2);
   }, []);
@@ -76,7 +87,7 @@ export default function CategoryNav({
   const chip = (active: boolean) =>
     // pl-2 при pr-4: у иконки есть свои поля внутри картинки, поэтому слева
     // отступ меньше — иначе чип выглядит перекошенным.
-    `inline-flex shrink-0 snap-start items-center gap-2 whitespace-nowrap rounded-full py-1.5 pl-2 pr-4 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 ${
+    `inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-1.5 pr-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:gap-2 sm:text-sm ${
       active
         ? "bg-brand-600 text-white shadow-sm"
         : "bg-brand-50 text-brand-700 hover:bg-brand-100"
@@ -87,10 +98,10 @@ export default function CategoryNav({
       <div
         ref={trackRef}
         // snap-x + scroll-px: чип не «зависает» наполовину срезанным у края.
-        className="no-scrollbar -mx-1 flex snap-x scroll-px-1 gap-2 overflow-x-auto px-1 py-1"
+        className="scrollbar-none -mx-1 flex snap-x scroll-px-1 gap-1.5 overflow-x-auto px-1 py-1"
       >
         <Link href="/catalog" className={chip(!activeSlug)}>
-          <LeafIcon className="h-5 w-5 shrink-0" />
+          <LeafIcon className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
           Все семена
         </Link>
         {categories.map((c) => (
@@ -100,14 +111,24 @@ export default function CategoryNav({
             href={`/catalog/${c.slug}`}
             className={chip(activeSlug === c.slug)}
           >
-            <CategoryIcon slug={c.slug} className="h-7 w-7" />
+            <CategoryIcon slug={c.slug} className="h-5 w-5 sm:h-6 sm:w-6" />
             {c.name}
           </Link>
         ))}
       </div>
 
-      <EdgeControl side="left" hidden={atStart} onClick={() => scrollBy(-1)} />
-      <EdgeControl side="right" hidden={atEnd} onClick={() => scrollBy(1)} />
+      <ScrollIndicator targetRef={trackRef} className="mt-1.5 bg-brand-200/50" />
+
+      <EdgeControl
+        side="left"
+        hidden={!scrollable || atStart}
+        onClick={() => scrollBy(-1)}
+      />
+      <EdgeControl
+        side="right"
+        hidden={!scrollable || atEnd}
+        onClick={() => scrollBy(1)}
+      />
     </div>
   );
 }
@@ -128,7 +149,7 @@ function EdgeControl({
     <div
       // pointer-events-none у обёртки: градиент не должен перехватывать клики
       // по чипам под ним, кликается только сама кнопка.
-      className={`pointer-events-none absolute inset-y-0 z-10 flex items-center transition-opacity duration-200 ${
+      className={`pointer-events-none absolute inset-y-0 z-10 hidden items-center transition-opacity duration-200 sm:flex ${
         isLeft ? "left-0 pr-8" : "right-0 pl-8"
       } ${hidden ? "opacity-0" : "opacity-100"}`}
       aria-hidden={hidden}
