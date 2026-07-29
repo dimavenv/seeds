@@ -85,15 +85,25 @@ export default function CategoryNav({
   }
 
   const chip = (active: boolean) =>
-    // pl-2 при pr-4: у иконки есть свои поля внутри картинки, поэтому слева
-    // отступ меньше — иначе чип выглядит перекошенным.
+    // pl-2 при pr-3: у иконки внутри картинки есть своё поле (иконки приведены
+    // к общему виду скриптом scripts/normalize-category-icons.mjs), поэтому
+    // слева отступ меньше — иначе чип выглядит перекошенным.
+    //
+    // Отступы именно такие, а не меньше: чип — круглая «пилюля» радиусом в
+    // половину высоты, и у верхнего края граница уже заметно ушла внутрь. При
+    // прежних 6/10px хвостик буквы «й» в «Перце сладком» и верх иконки
+    // оказывались вплотную к этому изгибу и выглядели вылезшими за чип.
+    // Место под них взято из промежутков (gap-1 вместо gap-1.5 и здесь, и
+    // между чипами): строка из девяти чипов и так занимает контейнер целиком,
+    // свободного места в ней меньше 20px — проверено измерением.
+    //
     // На телефоне чипы держат свою ширину и лента листается (shrink-0).
     // На десктопе они делят строку поровну (sm:flex-1) и занимают её от края
     // до края — иначе восемь коротких названий жались к левому краю, а справа
     // оставалась пустота.
     // Рамка есть в обоих состояниях: без неё выбранный чип был бы на 2px
     // крупнее остальных и строка бы дёргалась при переключении.
-    `inline-flex shrink-0 snap-start items-center justify-center gap-1.5 whitespace-nowrap rounded-full border py-1 pl-1.5 pr-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:flex-1 sm:py-2 sm:text-sm ${
+    `inline-flex shrink-0 snap-start items-center justify-center gap-1 whitespace-nowrap rounded-full border py-1 pl-2 pr-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:flex-1 sm:py-2 sm:text-sm ${
       active
         ? "border-brand-600 bg-brand-600 text-white shadow-sm"
         : // bg-surface, а НЕ bg-brand-50: brand-50 — это и есть фон страницы,
@@ -107,7 +117,7 @@ export default function CategoryNav({
       <div
         ref={trackRef}
         // snap-x + scroll-px: чип не «зависает» наполовину срезанным у края.
-        className="scrollbar-none -mx-1 flex snap-x scroll-px-1 gap-1.5 overflow-x-auto px-1 py-1"
+        className="scrollbar-none -mx-1 flex snap-x scroll-px-1 gap-1 overflow-x-auto px-1 py-1"
       >
         <Link href="/catalog" className={chip(!activeSlug)}>
           <LeafIcon className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
