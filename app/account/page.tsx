@@ -8,6 +8,9 @@ import { formatPrice, formatDate } from "@/lib/format";
 import { ORDER_STATUS_LABELS, type Order, type OrderStatus } from "@/lib/types";
 import LogoutButton from "@/components/logout-button";
 import ThemeToggle from "@/components/theme-toggle";
+import { servicePageMetadata } from "@/lib/seo";
+
+export const metadata = servicePageMetadata("/account", "Личный кабинет");
 
 export const dynamic = "force-dynamic";
 

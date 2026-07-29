@@ -11,6 +11,11 @@ import { ORDER_STATUS_LABELS, type Product, type Review } from "@/lib/types";
 import OrderStatusSteps from "@/components/order-status-steps";
 import ReorderButton from "@/components/reorder-button";
 import LeaveReview from "@/components/leave-review";
+import { servicePageMetadata } from "@/lib/seo";
+
+export function generateMetadata({ params }: { params: { id: string } }) {
+  return servicePageMetadata(`/account/orders/${params.id}`, "Заказ");
+}
 
 export const dynamic = "force-dynamic";
 

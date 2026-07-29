@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { formatPrice } from "@/lib/format";
 import ClearCartOnPaid from "@/components/clear-cart-on-paid";
+import { servicePageMetadata } from "@/lib/seo";
+
+// canonical свой у каждого заказа: страница подтверждения существует по своему
+// адресу, и объявлять её копией главной (как было по умолчанию из layout)
+// нельзя. Индексировать при этом нечего — см. servicePageMetadata.
+export function generateMetadata({ params }: { params: { id: string } }) {
+  return servicePageMetadata(`/order/${params.id}`, `Заказ №${params.id}`);
+}
 
 export default function OrderConfirmationPage({
   params,

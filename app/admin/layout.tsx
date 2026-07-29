@@ -1,6 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
 import AdminNav from "@/components/admin/admin-nav";
+
+// Админка целиком закрыта от поисковиков. canonical здесь снят совсем
+// (alternates: null), а не подменён: у каждой страницы раздела свой адрес, и
+// один canonical на всех был бы неправдой — а по умолчанию из корневого layout
+// они и вовсе объявляли себя копиями главной.
+export const metadata: Metadata = {
+  title: { default: "Админка", template: "%s | Админка" },
+  alternates: null,
+  robots: { index: false, follow: false },
+};
 
 export const dynamic = "force-dynamic";
 

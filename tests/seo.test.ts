@@ -185,6 +185,64 @@ describe("verificationCodes", () => {
   });
 });
 
+// Каждая страница должна сама решать, какой у неё canonical.
+//
+// Умолчание опасно тем, что молчит: страница без своих метаданных наследует
+// alternates из корневого layout, то есть объявляет себя копией ГЛАВНОЙ. Так
+// жили /cart, /login, /checkout и вся админка — поисковику сообщалось, что это
+// один и тот же документ. Ошибку не видно ни в сборке, ни на глаз: страница
+// открывается, тег в разметке есть, просто указывает не туда.
+//
+// Проверяем по исходникам, а не по отрендеренной разметке: тест должен ловить
+// новую страницу сразу, без поднятого сервера и базы.
+describe("canonical у каждой страницы свой", () => {
+  const appDir = path.join(__dirname, "..", "app");
+
+  function walk(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      return entry.isDirectory() ? walk(full) : [full];
+    });
+  }
+
+  // Страница закрыта, если она сама или layout раздела объявляет canonical
+  // (в том числе через servicePageMetadata или снимая его целиком).
+  //
+  // Корневой app/layout.tsx намеренно НЕ считается: там canonical "/", и
+  // засчитывать его — значит засчитывать ровно ту ошибку, которую ищем.
+  // Единственная страница, которой он подходит, — сама главная.
+  function declaresCanonical(file: string): boolean {
+    const marks = /alternates\s*:|servicePageMetadata/;
+    if (marks.test(fs.readFileSync(file, "utf8"))) return true;
+    let dir = path.dirname(file);
+    while (path.resolve(dir) !== path.resolve(appDir)) {
+      const layout = path.join(dir, "layout.tsx");
+      if (fs.existsSync(layout) && marks.test(fs.readFileSync(layout, "utf8")))
+        return true;
+      dir = path.dirname(dir);
+    }
+    return false;
+  }
+
+  const pages = walk(appDir)
+    .filter((f) => path.basename(f) === "page.tsx")
+    // Страницы-редиректы содержимого не имеют: индексируется цель перехода.
+    .filter((f) => !/\b(permanentRedirect|redirect)\(/.test(fs.readFileSync(f, "utf8")))
+    // Главная — единственная, кому canonical "/" из корневого layout подходит.
+    .filter((f) => path.relative(appDir, f) !== "page.tsx");
+
+  it("страницы найдены — иначе тест бессмысленен", () => {
+    expect(pages.length).toBeGreaterThan(10);
+  });
+
+  it.each(pages.map((f) => [path.relative(appDir, f), f]))(
+    "%s задаёт свой canonical",
+    (_label, file) => {
+      expect(declaresCanonical(file as string)).toBe(true);
+    }
+  );
+});
+
 // Регрессионная защита для настоящего 404 (см. app/product/[slug]/page.tsx).
 //
 // Любая loading.tsx выше по дереву включает стриминг: заголовки ответа уходят

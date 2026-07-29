@@ -5,6 +5,8 @@
 // Порядок источников: NEXT_PUBLIC_SITE_URL (виден и клиенту) → SITE_URL (уже
 // используется для returnUrl Альфа-Банка) → боевой домен как последний фолбэк.
 
+import type { Metadata } from "next";
+
 const FALLBACK_SITE_URL = "https://tomatsemena.ru";
 
 export function siteUrl(): string {
@@ -18,6 +20,27 @@ export function siteUrl(): string {
 // Абсолютный URL страницы: absoluteUrl("/catalog/tomaty").
 export function absoluteUrl(path = "/"): string {
   return `${siteUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+// Метаданные служебной страницы — корзины, входа, кабинета и прочего, что
+// поисковику показывать незачем.
+//
+// Дают две вещи. Во-первых, свой canonical: без него страница наследует
+// canonical корневого layout, то есть объявляет себя копией ГЛАВНОЙ. Это прямой
+// сигнал поисковику «эти адреса — одно и то же», и он заведомо неверный.
+// Во-вторых, noindex, follow: не индексировать саму страницу, но переходить по
+// ссылкам с неё.
+//
+// Эти же адреса закрыты в robots.txt. Одно другому не мешает, но и не заменяет:
+// закрытую в robots страницу робот не скачивает и мету на ней не читает.
+// Запрет здесь — на случай, если адрес всё-таки окажется доступен (например,
+// его уберут из Disallow), и чтобы неверный canonical не жил в разметке.
+export function servicePageMetadata(path: string, title: string): Metadata {
+  return {
+    title,
+    alternates: { canonical: path },
+    robots: { index: false, follow: true },
+  };
 }
 
 // Бренд в мете — по-русски: в Яндексе ищут «томат семена», а не латиницей.
