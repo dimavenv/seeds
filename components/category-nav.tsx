@@ -58,7 +58,7 @@ export default function CategoryNav({
     //
     // Рамка есть в обоих состояниях: без неё выбранный чип был бы на 2px
     // крупнее остальных и строка бы дёргалась при переключении.
-    `inline-flex shrink-0 snap-start items-center justify-center gap-1 whitespace-nowrap rounded-full border py-1 pl-2 pr-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:py-2 sm:pl-2.5 sm:text-sm ${
+    `inline-flex shrink-0 snap-start items-center justify-center gap-1 whitespace-nowrap rounded-full border py-1 pl-2 pr-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:py-2 sm:text-sm ${
       active
         ? "border-brand-600 bg-brand-600 text-white shadow-sm"
         : // bg-surface, а НЕ bg-brand-50: brand-50 — это и есть фон страницы,
@@ -75,7 +75,7 @@ export default function CategoryNav({
         // дают чипу зависнуть наполовину срезанным у края.
         //
         // От sm вместо прокрутки перенос по строкам. На широком экране всё
-        // помещается в одну: девять чипов занимают ~1120px при контейнере
+        // помещается в одну: девять чипов занимают ~1140px при контейнере
         // 1216px. Запас невелик, и держится он на ширине шрифта, а она у всех
         // разная — здесь замерено на DejaVu Sans, самом широком из доступных;
         // у Segoe UI и SF Pro, которые реально достаются посетителю, те же
@@ -85,7 +85,7 @@ export default function CategoryNav({
         className="scrollbar-none -mx-1 flex snap-x scroll-px-1 gap-1 overflow-x-auto px-1 py-1 sm:flex-wrap sm:justify-center sm:gap-1.5"
       >
         <Link href="/catalog" className={chip(!activeSlug)}>
-          <LeafIcon className="h-4 w-4 shrink-0" />
+          <LeafIcon className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
           Все семена
         </Link>
         {categories.map((c) => (
@@ -95,11 +95,10 @@ export default function CategoryNav({
             href={`/catalog/${c.slug}`}
             className={chip(activeSlug === c.slug)}
           >
-            {/* На десктопе значок меньше, чем на телефоне: там лента листается
-                и место не ограничено, а тут все девять чипов должны уместиться
-                в одну строку. 16px — примерно размер эмодзи, которые стояли
-                здесь до нарисованных иконок. */}
-            <CategoryIcon slug={c.slug} className="h-5 w-5 sm:h-4 sm:w-4" />
+            {/* 20px — тот же размер, что у значков категорий в админке и в
+                подвале. Больше (24px, как было) не помещается: девять чипов
+                перестают влезать в строку и переносятся на вторую. */}
+            <CategoryIcon slug={c.slug} className="h-5 w-5" />
             {c.name}
           </Link>
         ))}
