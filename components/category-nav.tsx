@@ -91,10 +91,15 @@ export default function CategoryNav({
     // На десктопе они делят строку поровну (sm:flex-1) и занимают её от края
     // до края — иначе восемь коротких названий жались к левому краю, а справа
     // оставалась пустота.
-    `inline-flex shrink-0 snap-start items-center justify-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-1.5 pr-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:flex-1 sm:py-2 sm:text-sm ${
+    // Рамка есть в обоих состояниях: без неё выбранный чип был бы на 2px
+    // крупнее остальных и строка бы дёргалась при переключении.
+    `inline-flex shrink-0 snap-start items-center justify-center gap-1.5 whitespace-nowrap rounded-full border py-1 pl-1.5 pr-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:flex-1 sm:py-2 sm:text-sm ${
       active
-        ? "bg-brand-600 text-white shadow-sm"
-        : "bg-brand-50 text-brand-700 hover:bg-brand-100"
+        ? "border-brand-600 bg-brand-600 text-white shadow-sm"
+        : // bg-surface, а НЕ bg-brand-50: brand-50 — это и есть фон страницы,
+          // поэтому невыбранные чипы были невидимы, а выбранный висел в
+          // пустоте зелёным пятном. Теперь строка читается как набор кнопок.
+          "border-brand-100 bg-surface text-brand-700 hover:border-brand-200 hover:bg-brand-100"
     }`;
 
   return (
