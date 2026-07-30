@@ -6,6 +6,7 @@
 // используется для returnUrl Альфа-Банка) → боевой домен как последний фолбэк.
 
 import type { Metadata } from "next";
+import { DELIVERY_COST } from "@/lib/delivery";
 
 const FALLBACK_SITE_URL = "https://tomatsemena.ru";
 
@@ -46,6 +47,77 @@ export function servicePageMetadata(path: string, title: string): Metadata {
 // Бренд в мете — по-русски: в Яндексе ищут «томат семена», а не латиницей.
 export const SITE_NAME = "Томат Семена";
 export const SITE_NAME_LATIN = "Tomat Semena";
+
+// ---------------------------------------------------------------------------
+// Условия сделки в разметке товара: offers.shippingDetails и
+// offers.hasMerchantReturnPolicy. Оба поля Google ждёт в товарных карточках и
+// без них пишет «Отсутствует поле» в отчёте «Товарные объявления».
+//
+// Значения берём из тех же источников, что видит покупатель: стоимость
+// доставки — из lib/delivery.ts, сроки и условия возврата — со страниц
+// /delivery и /returns. Разметка, расходящаяся с видимой страницей, — прямое
+// нарушение правил, а не мелкая неточность.
+// ---------------------------------------------------------------------------
+
+// Доставка. Порог бесплатной доставки (от 3000 ₽) здесь НЕ указан намеренно:
+// он считается от суммы всей корзины, а разметка описывает один товар. Пакетик
+// семян стоит 45–80 ₽, так что обещать в выдаче бесплатную доставку значило бы
+// вводить в заблуждение почти каждого, кто по ней придёт.
+//
+// handlingTime 0–1 день: «собираем и передаём посылку в службу доставки сразу
+// после успешной оплаты» (/delivery). transitTime 2–5 дней — оттуда же, у обеих
+// служб срок одинаковый. Страна только RU: пересылка семян за границу запрещена
+// законодательством РФ, и об этом там же сказано.
+export function shippingDetailsJsonLd() {
+  return {
+    "@type": "OfferShippingDetails",
+    shippingRate: {
+      "@type": "MonetaryAmount",
+      value: DELIVERY_COST,
+      currency: "RUB",
+    },
+    shippingDestination: {
+      "@type": "DefinedRegion",
+      addressCountry: "RU",
+    },
+    deliveryTime: {
+      "@type": "ShippingDeliveryTime",
+      handlingTime: {
+        "@type": "QuantitativeValue",
+        minValue: 0,
+        maxValue: 1,
+        unitCode: "DAY",
+      },
+      transitTime: {
+        "@type": "QuantitativeValue",
+        minValue: 2,
+        maxValue: 5,
+        unitCode: "DAY",
+      },
+    },
+  };
+}
+
+// Возврат. MerchantReturnNotPermitted — это не «мы не хотим», а закон:
+// по Постановлению Правительства РФ № 2463 от 31.12.2020 семена, посадочный
+// материал и растения надлежащего качества возврату и обмену не подлежат.
+// Ровно это написано на /returns, и разметка обязана совпадать со страницей.
+//
+// Права на замену или возврат денег за товар НЕНАДЛЕЖАЩЕГО качества это не
+// отменяет: returnPolicyCategory описывает добровольный возврат исправного
+// товара, брак в него не входит.
+//
+// Если в каталоге появятся сопутствующие товары (инвентарь, горшки), значение
+// у них другое — 7 дней с обратной пересылкой за счёт покупателя, — и поле
+// придётся считать от вида товара, а не отдавать одно на всех.
+export function returnPolicyJsonLd() {
+  return {
+    "@type": "MerchantReturnPolicy",
+    applicableCountry: "RU",
+    returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
+    url: absoluteUrl("/returns"),
+  };
+}
 
 export const SITE_DESCRIPTION =
   "Коллекционные семена томатов, перцев, баклажанов, кукурузы, картофеля, " +

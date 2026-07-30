@@ -4,7 +4,14 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { slugify } from "@/lib/slug";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
-import { absoluteUrl, siteUrl, verificationCodes } from "@/lib/seo";
+import {
+  absoluteUrl,
+  returnPolicyJsonLd,
+  shippingDetailsJsonLd,
+  siteUrl,
+  verificationCodes,
+} from "@/lib/seo";
+import { DELIVERY_COST } from "@/lib/delivery";
 import { approvedOnly, ratingSummary } from "@/lib/reviews";
 import {
   parseVariantMap,
@@ -284,6 +291,62 @@ describe("границы loading.tsx и настоящий 404", () => {
         dir = path.dirname(dir);
       }
       expect(offenders).toEqual([]);
+    }
+  );
+});
+
+// Условия сделки в разметке товара. Проверяем не «поле есть», а что значения
+// совпадают с теми, что видит покупатель: разметка, разошедшаяся с сайтом, —
+// повод снять расширенный сниппет вручную.
+describe("доставка и возврат в разметке товара", () => {
+  it("стоимость доставки берётся из lib/delivery, а не вписана числом", () => {
+    const shipping = shippingDetailsJsonLd();
+    expect(shipping.shippingRate).toMatchObject({
+      value: DELIVERY_COST,
+      currency: "RUB",
+    });
+  });
+
+  it("доставка только по России — за границу семена не отправляются", () => {
+    expect(shippingDetailsJsonLd().shippingDestination.addressCountry).toBe("RU");
+  });
+
+  it("срок доставки — те же 2–5 дней, что и на странице «Доставка»", () => {
+    const { transitTime } = shippingDetailsJsonLd().deliveryTime;
+    expect([transitTime.minValue, transitTime.maxValue]).toEqual([2, 5]);
+    expect(transitTime.unitCode).toBe("DAY");
+  });
+
+  it("возврат семян не предусмотрен — как и написано на /returns", () => {
+    const policy = returnPolicyJsonLd();
+    expect(policy.returnPolicyCategory).toBe(
+      "https://schema.org/MerchantReturnNotPermitted"
+    );
+    expect(policy.applicableCountry).toBe("RU");
+    expect(policy.url).toBe(absoluteUrl("/returns"));
+  });
+});
+
+// Search Console пишет «Отсутствует поле aggregateRating/review» на карточках
+// товара. Это предупреждение, и закрывать его нечем: отзывы в магазине — про
+// магазин целиком. Общий рейтинг, подставленный в карточку сорта, — разметка,
+// не подтверждённая содержимым страницы, за такое снимают сниппеты вручную.
+// Тест держит соблазн на расстоянии: чтобы вернуть поля, придётся сначала
+// показать на странице отзывы именно об этом сорте и переписать тест осознанно.
+describe("в карточке сорта нет чужого рейтинга", () => {
+  const page = fs.readFileSync(
+    path.join(__dirname, "..", "app", "product", "[slug]", "page.tsx"),
+    "utf8"
+  );
+  // Комментарии выкидываем: в них эти слова как раз объясняют запрет.
+  const code = page
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+
+  it.each(["aggregateRating", "reviewCount", "ratingValue"])(
+    "%s не попадает в разметку товара",
+    (field) => {
+      expect(code).not.toContain(field);
     }
   );
 });

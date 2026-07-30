@@ -13,7 +13,14 @@ import {
 } from "@/lib/data";
 import { formatPrice, seedsLabel } from "@/lib/format";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
-import { ORGANIZATION_ID, SITE_NAME, absoluteUrl, siteUrl } from "@/lib/seo";
+import {
+  ORGANIZATION_ID,
+  SITE_NAME,
+  absoluteUrl,
+  returnPolicyJsonLd,
+  shippingDetailsJsonLd,
+  siteUrl,
+} from "@/lib/seo";
 import type { Product } from "@/lib/types";
 
 export const revalidate = 60;
@@ -113,11 +120,16 @@ export async function generateMetadata({
 // Микроразметка карточки: цена, наличие и хлебные крошки. Из неё поисковик
 // строит расширенный сниппет (цена и «в наличии» прямо в выдаче).
 //
-// aggregateRating здесь НЕТ намеренно: отзывы в магазине относятся к магазину
-// целиком, а не к конкретному сорту. Подставить в карточку сорта общий
-// рейтинг магазина — ровно тот случай, за который снимают расширенные
+// aggregateRating и review здесь НЕТ намеренно: отзывы в магазине относятся к
+// магазину целиком, а не к конкретному сорту. Подставить в карточку сорта
+// общий рейтинг магазина — ровно тот случай, за который снимают расширенные
 // сниппеты вручную: разметка не подтверждена видимым содержимым страницы.
 // Рейтинг магазина размечен там, где ему место, — на /reviews.
+//
+// Search Console пишет про них «Отсутствует поле» — это ПРЕДУПРЕЖДЕНИЕ, а не
+// ошибка: карточка остаётся действительной и попадает в выдачу. Добавлять их
+// можно будет только тогда, когда на странице сорта появятся отзывы именно об
+// этом сорте — и ровно те, что уйдут в разметку.
 function productJsonLd(product: Product) {
   const url = absoluteUrl(`/product/${product.slug}`);
   const images = (
@@ -137,7 +149,13 @@ function productJsonLd(product: Product) {
           ? { description: product.description.replace(/\s+/g, " ").trim() }
           : {}),
         sku: product.id,
-        ...(product.category?.name ? { category: product.category.name } : {}),
+        // Поля category здесь нет намеренно. Раньше в него уходило русское
+        // название раздела («Перец сладкий»), и Google отвечал «Недопустимое
+        // значение»: он ждёт значение из своей товарной таксономии, а не
+        // произвольный текст. Отсутствующее необязательное поле ошибкой не
+        // считается, а неверное — считается; к какому разделу относится товар,
+        // поисковик и так видит по BreadcrumbList ниже. Вернуть поле можно,
+        // только подставив официальную строку таксономии Google.
         brand: { "@type": "Brand", name: SITE_NAME },
         offers: {
           "@type": "Offer",
@@ -150,6 +168,8 @@ function productJsonLd(product: Product) {
               : "https://schema.org/OutOfStock",
           itemCondition: "https://schema.org/NewCondition",
           seller: { "@id": ORGANIZATION_ID() },
+          shippingDetails: shippingDetailsJsonLd(),
+          hasMerchantReturnPolicy: returnPolicyJsonLd(),
         },
       },
       {
