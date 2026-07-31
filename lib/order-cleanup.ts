@@ -1,6 +1,7 @@
 import "server-only";
 import type PocketBase from "pocketbase";
 import { restockOrderItems } from "@/lib/stock";
+import { releasePromoUseByOrder } from "@/lib/promo-server";
 
 // Уборка зависших неоплаченных заказов ("пустышек"): покупатель ушёл с платёжной
 // формы и callback от банка так и не пришёл. Такие заказы (новые, ждут оплаты
@@ -52,8 +53,11 @@ export async function cleanupStalePendingOrders(
         continue;
       }
     }
-    // Возвращаем резерв на склад и удаляем состав + сам заказ.
+    // Возвращаем резерв на склад и удаляем состав + сам заказ. Промокод,
+    // потраченный на этот заказ, тоже возвращаем покупателю: заказ не
+    // состоялся, а код одноразовый.
     const items = await restockOrderItems(pb, o.id);
+    await releasePromoUseByOrder(pb, o.id);
     for (const l of items) {
       await pb.collection("order_items").delete(l.id).catch(() => {});
     }

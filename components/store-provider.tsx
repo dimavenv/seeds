@@ -22,6 +22,12 @@ import {
   writeRemovedPending,
 } from "@/lib/cart-sync";
 import { cartReducer, toggleWishlist, type CartAction } from "@/lib/cart-store";
+import {
+  promoDiscount,
+  readStoredPromo,
+  writeStoredPromo,
+  type PromoRule,
+} from "@/lib/promo";
 import ScrollToTop from "@/components/scroll-to-top";
 import type { CartItem, Product } from "@/lib/types";
 
@@ -41,6 +47,16 @@ type StoreContextValue = {
   isWished: (id: string) => boolean;
   toggleWish: (id: string) => void;
   ready: boolean;
+  // Применённый промокод — ТОЛЬКО для показа скидки в корзине и на оформлении.
+  // Описание скидки приходит от сервера (POST /api/promo), а окончательную
+  // сумму всё равно считает /api/checkout: подправленный в localStorage объект
+  // изменит только картинку, но не цену заказа.
+  promo: PromoRule | null;
+  // Скидка в рублях от текущей суммы товаров (0, если кода нет или сумма
+  // меньше порога).
+  discount: number;
+  applyPromo: (rule: PromoRule) => void;
+  clearPromo: () => void;
 };
 
 const StoreContext = createContext<StoreContextValue | null>(null);
@@ -72,6 +88,7 @@ const PERSIST_RETRIES = 3;
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
+  const [promo, setPromo] = useState<PromoRule | null>(null);
   const [ready, setReady] = useState(false);
 
   // Рефы для записи из обработчиков действий (без устаревших замыканий).
@@ -150,6 +167,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [flush]
   );
 
+  // Промокод: ссылки на функции стабильны (useCallback) — страница оформления
+  // перепроверяет код в useEffect, и «новая функция на каждый рендер» гоняла бы
+  // проверку по кругу.
+  const applyPromo = useCallback((rule: PromoRule) => {
+    setPromo(rule);
+    writeStoredPromo(rule);
+  }, []);
+  const clearPromo = useCallback(() => {
+    setPromo(null);
+    writeStoredPromo(null);
+  }, []);
+
   // Единые сеттеры: обновляют реф синхронно, состояние — как обычно.
   const setCartSync = useCallback((next: CartItem[]) => {
     cartRef.current = next;
@@ -168,6 +197,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         (x): x is string => typeof x === "string"
       )
     );
+    // Промокод храним только локально: он привязан к аккаунту, а не к
+    // устройству, и сервер всё равно перепроверяет его при оформлении.
+    setPromo(readStoredPromo());
     setReady(true);
   }, [setCartSync, setWishSync]);
 
@@ -297,6 +329,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<StoreContextValue>(() => {
     const cartCount = cart.reduce((s, i) => s + i.qty, 0);
     const cartTotal = cart.reduce((s, i) => s + i.qty * i.price, 0);
+    const discount = promo ? promoDiscount(promo, cartTotal) : 0;
 
     // Каждое действие: редьюсер считает новое состояние ОТ РЕФА (не от
     // замыкания — см. комментарий у cartRef), показываем его и СРАЗУ пишем на
@@ -328,8 +361,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         persist(cartRef.current, next);
       },
       ready,
+      promo,
+      discount,
+      applyPromo,
+      clearPromo,
     };
-  }, [cart, wishlist, ready, persist, setCartSync, setWishSync]);
+  }, [
+    cart,
+    wishlist,
+    promo,
+    ready,
+    persist,
+    setCartSync,
+    setWishSync,
+    applyPromo,
+    clearPromo,
+  ]);
 
   return (
     <StoreContext.Provider value={value}>

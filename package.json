@@ -12,6 +12,7 @@
     "db:schema": "node scripts/pb-import-schema.mjs",
     "db:slugs": "node scripts/pb-backfill-slugs.mjs",
     "db:images": "node scripts/pb-backfill-image-variants.mjs",
+    "db:categories": "node scripts/pb-categories-singular.mjs",
     "img:optimize": "node scripts/optimize-public-images.mjs",
     "img:icons": "node scripts/normalize-category-icons.mjs",
     "db:strip-prefix": "node scripts/pb-strip-slug-prefix.mjs"

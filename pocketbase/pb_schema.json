@@ -826,6 +826,34 @@
         "type": "number"
       },
       {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text1704208430",
+        "max": 32,
+        "min": 0,
+        "name": "promo_code",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "number2265113176",
+        "max": null,
+        "min": 0,
+        "name": "discount",
+        "onlyInt": false,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
         "hidden": false,
         "id": "autodate2990389176",
         "name": "created",
@@ -1451,6 +1479,114 @@
     ],
     "created": "2026-07-12 21:44:05.216Z",
     "updated": "2026-07-12 21:44:05.216Z",
+    "system": false
+  },
+  {
+    "id": "pbc_2841003917",
+    "listRule": "@request.auth.id != \"\" && user = @request.auth.id || @request.auth.role = \"admin\"",
+    "viewRule": "@request.auth.id != \"\" && user = @request.auth.id || @request.auth.role = \"admin\"",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "name": "promo_uses",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": true,
+        "collectionId": "_pb_users_auth_",
+        "help": "",
+        "hidden": false,
+        "id": "relation2375276105",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "user",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "autogeneratePattern": "",
+        "help": "",
+        "hidden": false,
+        "id": "text2461358142",
+        "max": 32,
+        "min": 1,
+        "name": "code",
+        "pattern": "",
+        "presentable": true,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_3527180448",
+        "help": "",
+        "hidden": false,
+        "id": "relation3479234172",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "order",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "help": "",
+        "hidden": false,
+        "id": "date3218151234",
+        "max": "",
+        "min": "",
+        "name": "used_at",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX idx_promo_uses_user_code ON promo_uses (user, code)"
+    ],
+    "created": "2026-07-31 00:00:00.000Z",
+    "updated": "2026-07-31 00:00:00.000Z",
     "system": false
   },
   {

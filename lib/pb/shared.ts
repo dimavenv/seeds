@@ -101,6 +101,8 @@ export function mapOrder(r: R, items?: OrderItem[]): Order {
     total: n(r.total),
     delivery_method: s(r.delivery_method) || null,
     delivery_cost: n(r.delivery_cost),
+    promo_code: s(r.promo_code) || null,
+    discount: n(r.discount),
     tracking_number: s(r.tracking_number) || null,
     payment_status: (s(r.payment_status) || "unpaid") as Order["payment_status"],
     alfa_order_id: s(r.alfa_order_id) || null,

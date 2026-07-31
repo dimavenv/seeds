@@ -4,10 +4,14 @@ import { formatPrice } from "@/lib/format";
 
 // Служебные уведомления ПРОДАВЦУ: новый заказ, новый отзыв, вопрос в поддержку.
 //
-// Куда слать — ADMIN_NOTIFY_EMAIL в .env.production (например,
-// service@tomatsemena.ru; можно несколько адресов через запятую). Пока
-// переменная не задана — уведомления выключены, сайт работает как раньше.
-// Пароль от ящика-ПОЛУЧАТЕЛЯ сайту не нужен — он на него только шлёт.
+// Куда слать — две переменные в .env.production, обе можно списком через
+// запятую, адреса складываются и дубли отбрасываются:
+//   ADMIN_NOTIFY_EMAIL       — служебный ящик магазина (service@tomatsemena.ru)
+//   ADMIN_NOTIFY_EMAIL_EXTRA — вторая, обычная почта (Яндекс, Gmail, Mail.ru)
+// Вторая переменная отдельная нарочно: её правят чаще (сменил личную почту —
+// поменял одну строку), и служебный адрес при этом не потеряется.
+// Пока не задана ни одна — уведомления выключены, сайт работает как раньше.
+// Пароль от ящиков-ПОЛУЧАТЕЛЕЙ сайту не нужен — он на них только шлёт.
 //
 // От кого приходят — три варианта, от простого к «паутине»:
 // 1) Ничего не настраивать: письма идут с основного ящика (SMTP_USER), но с
@@ -36,9 +40,40 @@ const FROM_NAME: Record<Category, string> = {
   support: "Поддержка · Томат Семена",
 };
 
+// Похоже ли на почтовый адрес. Нарочно грубая проверка: задача — не пустить в
+// заголовок письма мусор и перевод строки (заголовочная инъекция), а не
+// валидировать почту по RFC.
+function looksLikeEmail(addr: string): boolean {
+  return /^[^\s@,;:<>"'\\]+@[^\s@,;:<>"'\\]+\.[a-z]{2,}$/i.test(addr);
+}
+
+// Получатели уведомлений: служебный ящик + дополнительная почта, обе
+// переменные могут содержать список через запятую. Возвращает готовую строку
+// «a@x.ru, b@y.ru» или null, если ничего не задано.
+export function notifyRecipients(): string[] {
+  const raw = `${process.env.ADMIN_NOTIFY_EMAIL || ""},${
+    process.env.ADMIN_NOTIFY_EMAIL_EXTRA || ""
+  }`;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/[,;]+/)) {
+    const addr = part.trim();
+    if (!addr) continue;
+    if (!looksLikeEmail(addr)) {
+      console.error(`[mail] адрес уведомлений «${addr}» не похож на почту — пропускаю`);
+      continue;
+    }
+    const key = addr.toLowerCase();
+    if (seen.has(key)) continue; // один и тот же адрес в обеих переменных
+    seen.add(key);
+    out.push(addr);
+  }
+  return out;
+}
+
 function notifyTo(): string | null {
-  const raw = (process.env.ADMIN_NOTIFY_EMAIL || "").trim();
-  return raw || null;
+  const list = notifyRecipients();
+  return list.length > 0 ? list.join(", ") : null;
 }
 
 // Отправитель и (если задан) отдельный ящик для категории.
@@ -136,6 +171,10 @@ export async function notifyNewOrder(order: {
   total: number;
   deliveryCost: number;
   deliveryMethod: string | null;
+  // Скидка по промокоду (0 — без неё): без отдельной строки «итого» в письме
+  // не сходится с суммой позиций.
+  discount?: number;
+  promoCode?: string | null;
   paid: boolean;
   customer: {
     name: string;
@@ -182,6 +221,17 @@ export async function notifyNewOrder(order: {
       <p style="margin:0 0 14px;">${payBadge}</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">
         ${itemRows}
+        ${
+          (order.discount ?? 0) > 0
+            ? `<tr>
+          <td style="padding:7px 0;color:#2e7d32;">Скидка по промокоду${
+            order.promoCode ? ` ${escapeHtml(order.promoCode)}` : ""
+          }</td>
+          <td></td>
+          <td style="padding:7px 0;text-align:right;white-space:nowrap;color:#2e7d32;">−${formatPrice(order.discount ?? 0)}</td>
+        </tr>`
+            : ""
+        }
         <tr>
           <td style="padding:7px 0;color:#5c6b5c;">Доставка (${escapeHtml(deliveryMethodLabel(order.deliveryMethod ?? ""))})</td>
           <td></td>

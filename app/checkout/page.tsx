@@ -13,6 +13,7 @@ import {
   type DeliveryMethodId,
 } from "@/lib/delivery";
 import DeliveryMethodCards from "@/components/delivery-method-cards";
+import { parsePromoRule } from "@/lib/promo";
 import {
   secureGet,
   secureSet,
@@ -44,8 +45,20 @@ type SavedProfile = {
 };
 
 export default function CheckoutPage() {
-  const { cart, cartTotal, clearCart, ready } = useStore();
+  const {
+    cart,
+    cartTotal,
+    clearCart,
+    ready,
+    promo,
+    discount,
+    applyPromo,
+    clearPromo,
+  } = useStore();
   const router = useRouter();
+  // Сообщение о промокоде, который перестал действовать (использован с
+  // другого устройства, отключён продавцом, вышли из аккаунта).
+  const [promoNotice, setPromoNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -71,7 +84,9 @@ export default function CheckoutPage() {
   // Стоимость доставки зависит от способа: Почтой России — бесплатно от
   // FREE_DELIVERY_FROM, Ozon — всегда DELIVERY_COST.
   const deliveryCost = deliveryCostFor(deliveryMethod, cartTotal);
-  const grandTotal = cartTotal + deliveryCost;
+  // Скидка по промокоду снимается только с товаров: порог бесплатной доставки
+  // считается от суммы ДО скидки — так же, как в корзине и на сервере.
+  const grandTotal = Math.max(0, cartTotal - discount) + deliveryCost;
 
   // Подставить сохранённые («Запомнить меня») данные при загрузке.
   useEffect(() => {
@@ -90,6 +105,46 @@ export default function CheckoutPage() {
       cancelled = true;
     };
   }, []);
+
+  // Перед оплатой перепроверяем промокод на сервере: в localStorage он мог
+  // остаться от прошлого заказа, быть потрачен с другого устройства или
+  // подправлен вручную. Показанная скидка после этого совпадает с той, что
+  // посчитает /api/checkout, а не расходится с суммой списания.
+  const promoCode = promo?.code ?? null;
+  useEffect(() => {
+    if (!promoCode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/promo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: promoCode }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          promo?: unknown;
+          error?: string;
+        };
+        if (cancelled) return;
+        if (res.ok && data.ok) {
+          const rule = parsePromoRule(data.promo);
+          if (rule) applyPromo(rule);
+          return;
+        }
+        // 503 — база/сеть не ответили: код не трогаем, его всё равно
+        // перепроверит оформление.
+        if (res.status === 503) return;
+        clearPromo();
+        setPromoNotice(data.error ?? "Промокод больше не действует");
+      } catch {
+        // сеть недоступна — решение примет сервер при оформлении
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [promoCode, applyPromo, clearPromo]);
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -170,12 +225,20 @@ export default function CheckoutPage() {
           delivery_method: deliveryMethod,
           region_kladr: deliveryMethod === "ozon" ? pvzRegionKladr : null,
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
+          // Только сам код: размер скидки сервер считает по своим правилам.
+          promo_code: promo?.code ?? null,
           captchaToken,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Ошибка оформления заказа");
+        // Заказ отклонён из-за промокода — снимаем его, чтобы повторная
+        // отправка прошла уже без скидки, а не упёрлась в ту же ошибку.
+        if (data.promoError) {
+          clearPromo();
+          setPromoNotice(null);
+        }
         setSubmitting(false);
         // Токен капчи одноразовый — сбрасываем виджет для повторной попытки.
         setCaptchaToken("");
@@ -199,6 +262,7 @@ export default function CheckoutPage() {
 
       // Заказ без онлайн-оплаты оформлен окончательно — корзину можно чистить.
       clearCart();
+      clearPromo(); // код уже потрачен на этом заказе
       const qs = new URLSearchParams({
         total: String(data.total),
         name: form.first_name || customer_name,
@@ -360,7 +424,18 @@ export default function CheckoutPage() {
                 <span>{formatPrice(deliveryCost)}</span>
               )}
             </div>
+            {discount > 0 && (
+              <div className="flex justify-between font-semibold text-brand-600">
+                <span>Промокод {promo?.code}</span>
+                <span>−{formatPrice(discount)}</span>
+              </div>
+            )}
           </div>
+          {promoNotice && (
+            <p role="status" className="mt-3 rounded-xl bg-accent-500/10 px-3 py-2 text-xs text-accent-600">
+              {promoNotice}
+            </p>
+          )}
           <div className="mt-3 flex justify-between border-t border-brand-100 pt-3 text-lg font-extrabold text-brand-800">
             <span>Итого</span>
             <span>{formatPrice(grandTotal)}</span>

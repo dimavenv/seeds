@@ -133,10 +133,30 @@ for (const [label, suffix, name] of CATEGORIES) {
 if (ok) {
   console.log(`\nПроверьте входящие (и «Спам») на ${to}.`);
   console.log("Если письма в спаме — настройте SPF/DKIM у почтового провайдера (SETUP-MAIL-RU.md).");
-  if (process.env.ADMIN_NOTIFY_EMAIL) {
-    console.log(`Уведомления продавцу идут на: ${process.env.ADMIN_NOTIFY_EMAIL}`);
+  // Получателей уведомлений двое: служебный ящик и «обычная» почта. Логика
+  // разбора повторяет notifyRecipients() из lib/admin-mail.ts.
+  const looksLikeEmail = (a) => /^[^\s@,;:<>"'\\]+@[^\s@,;:<>"'\\]+\.[a-z]{2,}$/i.test(a);
+  const notify = [];
+  const bad = [];
+  for (const part of `${process.env.ADMIN_NOTIFY_EMAIL || ""},${
+    process.env.ADMIN_NOTIFY_EMAIL_EXTRA || ""
+  }`.split(/[,;]+/)) {
+    const addr = part.trim();
+    if (!addr) continue;
+    if (!looksLikeEmail(addr)) bad.push(addr);
+    else if (!notify.some((x) => x.toLowerCase() === addr.toLowerCase())) notify.push(addr);
+  }
+  if (notify.length > 0) {
+    console.log(`Уведомления продавцу идут на: ${notify.join(", ")}`);
   } else {
-    console.log("ADMIN_NOTIFY_EMAIL не задан — уведомления продавцу выключены.");
+    console.log(
+      "ADMIN_NOTIFY_EMAIL и ADMIN_NOTIFY_EMAIL_EXTRA не заданы — уведомления продавцу выключены."
+    );
+  }
+  if (bad.length > 0) {
+    console.error(
+      `❌ Не похожи на адрес и будут пропущены: ${bad.join(", ")} — проверьте ADMIN_NOTIFY_EMAIL / ADMIN_NOTIFY_EMAIL_EXTRA.`
+    );
   }
 } else {
   process.exit(1);

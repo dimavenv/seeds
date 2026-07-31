@@ -7,6 +7,7 @@ import { isValidRecordId } from "@/lib/data";
 import { decryptField } from "@/lib/crypto";
 import { mailOrderStatus, mailPayment, mailTracking } from "@/lib/order-mail";
 import { slugify } from "@/lib/slug";
+import { releasePromoUseByOrder } from "@/lib/promo-server";
 import { parseVariantMap, type ImageVariantMap } from "@/lib/image-variants";
 import type { OrderStatus, ReviewStatus } from "@/lib/types";
 
@@ -265,6 +266,9 @@ export async function refundOrder(
     total: number;
     payment_status: string;
     refunded_amount: number;
+    // Скидка по промокоду: за товары покупатель заплатил меньше их
+    // прайсовой стоимости, и возврат по позициям обязан это учитывать.
+    discount: number;
   };
   let items: { id: string; name: string; price: number; qty: number; refunded_qty: number }[];
   try {
@@ -274,6 +278,7 @@ export async function refundOrder(
       total: Number(rec.total ?? 0),
       payment_status: String(rec.payment_status ?? ""),
       refunded_amount: Number(rec.refunded_amount ?? 0),
+      discount: Number(rec.discount ?? 0),
     };
     items = (
       await pb
@@ -313,6 +318,15 @@ export async function refundOrder(
     }
     amount = refundedItems.reduce((s, r) => s + r.price * r.take, 0);
     if (amount <= 0) return { error: "Не выбраны товары для возврата" };
+    // Заказ был со скидкой по промокоду — возвращаем ту долю, которую
+    // покупатель за эти позиции реально заплатил. Иначе возврат «по прайсу»
+    // отдал бы больше, чем было списано: скидка вернулась бы деньгами.
+    const goodsTotal = items.reduce((s, it) => s + it.price * it.qty, 0);
+    if (order.discount > 0 && goodsTotal > 0) {
+      const paidShare = Math.max(0, goodsTotal - order.discount) / goodsTotal;
+      amount = Math.round(amount * paidShare * 100) / 100;
+      if (amount <= 0) return { error: "Сумма возврата по этим позициям — 0 ₽" };
+    }
     // Не больше остатка по платежу (например, если доставка уже возвращена).
     amount = Math.min(amount, remaining);
   } else {
@@ -394,6 +408,16 @@ export async function deleteOrder(
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
   try {
+    // Промокод, потраченный на этот заказ, возвращаем покупателю — иначе он
+    // «сгорел» бы на удалённом (тестовом или мусорном) заказе. Делать это надо
+    // ДО удаления заказа: после него связь promo_uses → order уже не найти.
+    // Коллекцию promo_uses правит только суперпользователь, поэтому отдельный
+    // клиент; сбой здесь не должен мешать удалению заказа.
+    try {
+      await releasePromoUseByOrder(await pbAdmin(), id);
+    } catch (e) {
+      console.error(`[promo] заказ ${id} удаляется, промокод не возвращён:`, e);
+    }
     const items = await pb.collection("order_items").getFullList({
       filter: pb.filter("order = {:id}", { id }),
     });

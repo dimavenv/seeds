@@ -13,6 +13,13 @@ import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
 import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
+import { normalizePromoCode, promoDiscount } from "@/lib/promo";
+import {
+  attachPromoUseToOrder,
+  findPromoRule,
+  releasePromoUse,
+  reservePromoUse,
+} from "@/lib/promo-server";
 
 type IncomingItem = { id: string; qty: number };
 
@@ -51,6 +58,7 @@ export async function POST(request: Request) {
     delivery_method?: string;
     region_kladr?: string | null;
     items?: IncomingItem[];
+    promo_code?: string | null;
     captchaToken?: string;
   };
   try {
@@ -63,6 +71,10 @@ export async function POST(request: Request) {
   const delivery_method = normalizeDeliveryMethod(body.delivery_method);
   // Целые количества, потолок на позицию и на число позиций, дубли слиты.
   const items = normalizeCheckoutItems(body.items);
+  // Промокод: с клиента приходит ТОЛЬКО код. Правило скидки и сам факт, что
+  // код ещё не потрачен, проверяются ниже по базе — присланному размеру
+  // скидки здесь верить нечему, его просто нет.
+  const promoCode = normalizePromoCode(body.promo_code);
 
   if (!customer_name?.trim() || !phone?.trim() || !address?.trim()) {
     return NextResponse.json(
@@ -114,6 +126,16 @@ export async function POST(request: Request) {
 
   // Демо-режим без PocketBase: цены проверить негде — отдаём псевдо-номер.
   if (!isDbConfigured() || !hasAdminCredentials()) {
+    if (promoCode) {
+      // Без базы «один раз на аккаунт» не проверить — скидку не даём.
+      return NextResponse.json(
+        {
+          error: "Промокоды временно недоступны — оформите заказ без кода",
+          promoError: true,
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({
       id: Math.floor(Date.now() / 1000) % 1000000,
       total: 0,
@@ -136,10 +158,11 @@ export async function POST(request: Request) {
       params[`id${i}`] = it.id;
       return `id = {:id${i}}`;
     });
-    const [productRecords, userId] = await Promise.all([
+    const [productRecords, bestEffortUser] = await Promise.all([
       pb.collection("products").getFullList({ filter: pb.filter(or.join(" || "), params) }),
       bestEffortUserId(),
     ]);
+    let userId = bestEffortUser;
 
     const priceList = productRecords.map(mapProduct);
 
@@ -159,6 +182,75 @@ export async function POST(request: Request) {
 
     if (lines.length === 0) {
       return NextResponse.json({ error: "Товары не найдены" }, { status: 400 });
+    }
+
+    // Сумма товаров — база и для скидки, и для доставки, и для итога.
+    const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
+
+    // ===== Промокод: проверки ДО любых записей =====
+    // Порядок важен: сначала убеждаемся, что код вообще существует и что
+    // покупатель вошёл в аккаунт, и только потом (после резерва товара)
+    // закрепляем код за аккаунтом. Так неудачная проверка не оставляет за
+    // собой ни списанных остатков, ни «сгоревшего» промокода.
+    const promoRule = promoCode ? findPromoRule(promoCode) : null;
+    if (promoCode && !promoRule) {
+      return NextResponse.json(
+        {
+          error: "Такого промокода нет или он больше не действует",
+          promoError: true,
+        },
+        { status: 400 }
+      );
+    }
+    if (promoRule) {
+      // Привязка к аккаунту здесь обязана быть достоверной: bestEffortUserId
+      // отдаёт null и при медленной проверке сессии, а «не смогли проверить»
+      // не должно превращаться ни в «гость» (обидно), ни тем более в скидку
+      // без учёта использования. Поэтому — строгая проверка.
+      if (!userId) {
+        try {
+          userId = (await getSession()).userId;
+        } catch {
+          return NextResponse.json(
+            {
+              error: "Не удалось проверить аккаунт — попробуйте ещё раз",
+              promoError: true,
+            },
+            { status: 503 }
+          );
+        }
+      }
+      if (!userId) {
+        return NextResponse.json(
+          {
+            error:
+              "Промокод действует только для покупателей с аккаунтом. Войдите в свой аккаунт и оформите заказ ещё раз.",
+            promoError: true,
+            needAuth: true,
+          },
+          { status: 401 }
+        );
+      }
+      if (subtotal < promoRule.minSubtotal) {
+        return NextResponse.json(
+          {
+            error: `Промокод действует при сумме товаров от ${promoRule.minSubtotal} ₽`,
+            promoError: true,
+          },
+          { status: 400 }
+        );
+      }
+      // Нулевая скидка (например, копеечный заказ при скидке в процентах) —
+      // отказываем сразу: иначе одноразовый код сгорел бы впустую.
+      if (promoDiscount(promoRule, subtotal) <= 0) {
+        return NextResponse.json(
+          {
+            error: "Промокод не даёт скидку на эту сумму заказа",
+            promoError: true,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Предпроверка наличия по свежим данным БД — чтобы в типовом случае
@@ -202,12 +294,40 @@ export async function POST(request: Request) {
       );
     }
 
+    // ===== Промокод: закрепление за аккаунтом =====
+    // Ровно один раз на аккаунт обеспечивает уникальный индекс (user, code) в
+    // коллекции promo_uses: одновременные оформления сериализуются базой, и
+    // вставку получает только одно из них. Резерв снимается на всех откатах
+    // ниже (заказ не создался, состав не сохранился, платёж не завёлся).
+    let promoUseId: string | null = null;
+    let discount = 0;
+    if (promoRule && userId) {
+      const reserved = await reservePromoUse(pb, userId, promoRule.code);
+      if (reserved.status !== "reserved") {
+        await releaseStock(pb, reserveLines);
+        return NextResponse.json(
+          {
+            error:
+              reserved.status === "used"
+                ? "Этот промокод уже использован на вашем аккаунте"
+                : "Не удалось проверить промокод — попробуйте ещё раз",
+            promoError: true,
+          },
+          { status: reserved.status === "used" ? 409 : 503 }
+        );
+      }
+      promoUseId = reserved.id;
+      // Скидка считается ЗДЕСЬ, от авторитетных цен из базы.
+      discount = promoDiscount(promoRule, subtotal);
+    }
+
     // Сумма и доставка: стоимость доставки считаем НА СЕРВЕРЕ по тем же
     // правилам, что и на странице оформления (Почта России бесплатно от
-    // порога) — клиенту не доверяем.
-    const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
+    // порога) — клиенту не доверяем. Скидка по промокоду уменьшает только
+    // товары: порог бесплатной доставки берётся от суммы ДО скидки (так же
+    // показано в корзине и на оформлении).
     const deliveryCost = deliveryCostFor(delivery_method, subtotal);
-    const total = subtotal + deliveryCost;
+    const total = Math.max(0, subtotal - discount) + deliveryCost;
 
     // Создание заказа: до 3 попыток на случай гонки за номер.
     let order: { id: string; number: number } | null = null;
@@ -224,6 +344,8 @@ export async function POST(request: Request) {
           comment: comment?.trim() || "",
           delivery_method,
           delivery_cost: deliveryCost,
+          promo_code: promoRule && discount > 0 ? promoRule.code : "",
+          discount,
           total,
           status: "new",
           payment_status: "unpaid",
@@ -236,10 +358,16 @@ export async function POST(request: Request) {
       }
     }
     if (!order) {
-      // Заказ не создался — возвращаем зарезервированный товар.
+      // Заказ не создался — возвращаем зарезервированный товар и промокод.
       await releaseStock(pb, reserveLines);
+      if (promoUseId) await releasePromoUse(pb, promoUseId);
       throw lastError ?? new Error("order create failed");
     }
+
+    // Привязываем использование промокода к заказу: по этой связи код
+    // вернётся покупателю, если заказ потом удалят как неоплаченный
+    // (callback банка или уборка зависших заказов).
+    if (promoUseId) await attachPromoUseToOrder(pb, promoUseId, order.id);
 
     // Фоновая уборка старых зависших неоплаченных заказов — не задерживает
     // текущее оформление и не роняет его при ошибке.
@@ -259,6 +387,7 @@ export async function POST(request: Request) {
       // Состав не сохранился — откатываем заказ и возвращаем резерв,
       // чтобы не осталось «пустышки» с зависшим списанием.
       await releaseStock(pb, reserveLines);
+      if (promoUseId) await releasePromoUse(pb, promoUseId);
       await pb.collection("orders").delete(order.id).catch(() => {});
       return NextResponse.json(
         { error: "Не удалось сохранить состав заказа" },
@@ -310,6 +439,7 @@ export async function POST(request: Request) {
         console.error(`[checkout] заказ №${order.number}: банк отказал — ${reg.errorMessage}`);
       }
       await releaseStock(pb, reserveLines);
+      if (promoUseId) await releasePromoUse(pb, promoUseId);
       for (const l of await pb
         .collection("order_items")
         .getFullList({ filter: pb.filter("order = {:id}", { id: order.id }), fields: "id" })
@@ -333,7 +463,13 @@ export async function POST(request: Request) {
       void mailOrderPlaced(
         { to: email.trim(), number: order.number, name: customer_name.trim() },
         lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
-        { total, deliveryCost, deliveryMethod: delivery_method }
+        {
+          total,
+          deliveryCost,
+          deliveryMethod: delivery_method,
+          discount,
+          promoCode: discount > 0 ? promoRule?.code ?? null : null,
+        }
       ).catch(() => {});
     }
     // Уведомление продавцу «у вас новый заказ». При онлайн-оплате оно уходит
@@ -344,6 +480,8 @@ export async function POST(request: Request) {
       total,
       deliveryCost,
       deliveryMethod: delivery_method,
+      discount,
+      promoCode: discount > 0 ? promoRule?.code ?? null : null,
       paid: false,
       customer: {
         name: customer_name.trim(),

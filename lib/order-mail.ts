@@ -34,7 +34,15 @@ async function send(o: OrderInfo, subject: string, inner: string): Promise<void>
 export async function mailOrderPlaced(
   o: OrderInfo,
   items: { name: string; price: number; qty: number }[],
-  totals: { total: number; deliveryCost: number; deliveryMethod: string }
+  totals: {
+    total: number;
+    deliveryCost: number;
+    deliveryMethod: string;
+    // Скидка по промокоду (0 — без скидки): в письме показываем её отдельной
+    // строкой, иначе «итого» не сходится с суммой позиций.
+    discount?: number;
+    promoCode?: string | null;
+  }
 ): Promise<void> {
   const rows = items
     .map(
@@ -46,6 +54,17 @@ export async function mailOrderPlaced(
     )
     .join("");
 
+  const discountRow =
+    (totals.discount ?? 0) > 0
+      ? `<tr>
+        <td style="padding:7px 0;color:#2e7d32;">Скидка по промокоду${
+          totals.promoCode ? ` ${escapeHtml(totals.promoCode)}` : ""
+        }</td>
+        <td></td>
+        <td style="padding:7px 0;text-align:right;white-space:nowrap;color:#2e7d32;">−${formatPrice(totals.discount ?? 0)}</td>
+      </tr>`
+      : "";
+
   await send(
     o,
     "Принят",
@@ -54,6 +73,7 @@ export async function mailOrderPlaced(
     его и скоро свяжемся с вами для подтверждения.</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">
       ${rows}
+      ${discountRow}
       <tr>
         <td style="padding:7px 0;color:#5c6b5c;">Доставка (${escapeHtml(deliveryMethodLabel(totals.deliveryMethod))})</td>
         <td></td>

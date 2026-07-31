@@ -4,11 +4,14 @@ import type { Category, Product } from "@/lib/types";
 // работал «из коробки» для разработки/превью.
 
 // ID в демо-режиме — строковые (как в PocketBase); используем slug.
+// Названия — в ЕДИНСТВЕННОМ числе («Томат», «Баклажан»), как и в боевой базе
+// (переименование там делает scripts/pb-categories-singular.mjs — правьте оба
+// места вместе, иначе демо-каталог разойдётся с сайтом).
 export const demoCategories: Category[] = [
-  { id: "tomaty", slug: "tomaty", name: "Томаты", sort_order: 10 },
+  { id: "tomaty", slug: "tomaty", name: "Томат", sort_order: 10 },
   { id: "perec-sladkiy", slug: "perec-sladkiy", name: "Перец сладкий", sort_order: 20 },
   { id: "perec-chili", slug: "perec-chili", name: "Перец чили", sort_order: 30 },
-  { id: "baklazhany", slug: "baklazhany", name: "Баклажаны", sort_order: 40 },
+  { id: "baklazhany", slug: "baklazhany", name: "Баклажан", sort_order: 40 },
   { id: "kukuruza", slug: "kukuruza", name: "Кукуруза", sort_order: 50 },
   { id: "kartofel", slug: "kartofel", name: "Картофель", sort_order: 60 },
   { id: "dynya", slug: "dynya", name: "Дыня", sort_order: 70 },

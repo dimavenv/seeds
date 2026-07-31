@@ -4,6 +4,7 @@ import { pbAdmin } from "@/lib/pb/server";
 import { decryptField } from "@/lib/crypto";
 import { restockOrderItems } from "@/lib/stock";
 import { restoreUserCart } from "@/lib/user-cart";
+import { releasePromoUseByOrder } from "@/lib/promo-server";
 import { mailPayment } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 
@@ -80,6 +81,9 @@ export async function GET(req: Request) {
           if (typeof prev.user === "string" && prev.user) {
             await restoreUserCart(pb, prev.user, items);
           }
+          // Заказ не состоялся — возвращаем и промокод, потраченный на него
+          // (иначе одноразовый код сгорел бы на неоплаченном заказе).
+          await releasePromoUseByOrder(pb, orderNumber);
           for (const l of items) {
             await pb.collection("order_items").delete(l.id).catch(() => {});
           }
@@ -221,6 +225,8 @@ export async function GET(req: Request) {
               total: Number(rec.total ?? 0),
               deliveryCost: Number(rec.delivery_cost ?? 0),
               deliveryMethod: (rec.delivery_method as string | null) ?? null,
+              discount: Number(rec.discount ?? 0),
+              promoCode: (rec.promo_code as string | null) || null,
               paid: true,
               customer: {
                 name: String(rec.customer_name ?? ""),

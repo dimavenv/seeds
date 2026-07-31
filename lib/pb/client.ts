@@ -2,6 +2,7 @@
 
 import PocketBase from "pocketbase";
 import { markPendingMerge } from "@/lib/cart-sync";
+import { writeStoredPromo } from "@/lib/promo";
 
 // Единый браузерный клиент PocketBase.
 //
@@ -71,4 +72,8 @@ export async function clearAuth(): Promise<void> {
     // сеть недоступна — cookie истечёт сама; локально всё равно выходим
   }
   getPb().authStore.clear();
+  // Промокод привязан к аккаунту, а localStorage — к устройству: после выхода
+  // он не должен «висеть» у следующего вошедшего в этом браузере. Сервер такой
+  // код всё равно не примет, но и показывать чужую скидку незачем.
+  writeStoredPromo(null);
 }

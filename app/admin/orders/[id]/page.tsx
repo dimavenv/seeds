@@ -53,7 +53,10 @@ export default async function AdminOrderDetail({
 
   const qty = items.reduce((s, i) => s + i.qty, 0);
   const goods = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const delivery = order.delivery_cost ?? Math.max(0, order.total - goods);
+  // Запасной расчёт доставки — с учётом скидки: total = товары − скидка + доставка.
+  const delivery =
+    order.delivery_cost ??
+    Math.max(0, order.total - goods + (order.discount ?? 0));
   const phone = decryptField(order.phone);
   const email = order.email ? decryptField(order.email) : null;
   const address = decryptField(order.address);
@@ -215,6 +218,15 @@ export default async function AdminOrderDetail({
                 </span>
                 <span>{formatPrice(delivery)}</span>
               </div>
+              {(order.discount ?? 0) > 0 && (
+                <div className="flex justify-between font-semibold text-brand-600">
+                  <span>
+                    Скидка по промокоду
+                    {order.promo_code ? ` ${order.promo_code}` : ""}
+                  </span>
+                  <span>−{formatPrice(order.discount ?? 0)}</span>
+                </div>
+              )}
               <div className="mt-2 flex justify-between border-t border-brand-100 pt-2 text-base font-extrabold text-brand-800">
                 <span>Итого</span>
                 <span>{formatPrice(order.total)}</span>

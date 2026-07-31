@@ -6,11 +6,16 @@ import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
 import { DELIVERY_COST, FREE_DELIVERY_FROM } from "@/lib/delivery";
 import { CartIcon } from "@/components/icons";
+import PromoField from "@/components/promo-field";
 import Spinner from "@/components/spinner";
 
 export default function CartPage() {
-  const { cart, cartTotal, setQty, removeFromCart, ready } = useStore();
+  const { cart, cartTotal, discount, setQty, removeFromCart, ready } =
+    useStore();
   const deliveryFree = cartTotal >= FREE_DELIVERY_FROM;
+  // Скидка по промокоду уменьшает только стоимость товаров: порог бесплатной
+  // доставки считается от суммы ДО скидки (так же на оформлении и на сервере).
+  const payable = Math.max(0, cartTotal - discount) + (deliveryFree ? 0 : DELIVERY_COST);
 
   if (!ready) {
     return (
@@ -147,11 +152,19 @@ export default function CartPage() {
               (осталось {formatPrice(FREE_DELIVERY_FROM - cartTotal)}).
             </p>
           )}
+          {/* Промокод — прямо перед строкой «К оплате» */}
+          <PromoField />
+          {discount > 0 && (
+            <div className="mt-3 flex justify-between gap-2 text-sm font-semibold text-brand-600">
+              {/* Код уже показан в плашке выше — здесь только сумма скидки,
+                  иначе строка не помещается в узкую колонку «Итого». */}
+              <span>Скидка по промокоду</span>
+              <span className="whitespace-nowrap">−{formatPrice(discount)}</span>
+            </div>
+          )}
           <div className="mt-4 flex justify-between border-t border-brand-100 pt-4 text-lg font-extrabold text-brand-800">
             <span>К оплате</span>
-            <span>
-              {formatPrice(cartTotal + (deliveryFree ? 0 : DELIVERY_COST))}
-            </span>
+            <span>{formatPrice(payable)}</span>
           </div>
           <Link href="/checkout" className="btn-accent mt-5 w-full">
             Оформить заказ

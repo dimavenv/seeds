@@ -81,6 +81,10 @@ export type Order = {
   total: number;
   delivery_method?: string | null;
   delivery_cost?: number | null;
+  // Промокод, применённый при оформлении, и скидка по нему в рублях.
+  // Скидка снимается только с товаров: total = товары − discount + доставка.
+  promo_code?: string | null;
+  discount?: number;
   tracking_number?: string | null;
   payment_status?: PaymentStatus;
   alfa_order_id?: string | null;
