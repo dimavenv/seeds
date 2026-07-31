@@ -4,28 +4,39 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import { LeafIcon } from "@/components/icons";
+import type { Banner } from "@/lib/banners";
 
 // Карусель баннеров главной. Список картинок приходит с сервера
 // (lib/banners.ts читает public/banners при рендере страницы) — браузер больше
 // не пробует по одному ~12 кандидатов на каждый визит. Если файлов нет —
 // показывается запасной зелёный баннер с текстом.
 //
-// Пропорции намеренно вытянутые (16:7 на телефоне, 16:6 на широком экране):
-// баннер — верх первого экрана, и чем он ниже, тем раньше видно каталог.
-// 16:6 — та же пропорция, что рекомендована в public/banners/README.txt, так
-// что на десктопе картинка показывается без обрезки.
+// ===== Размер и пропорции =====
+//
+// Картинка НИКОГДА не обрезается: блок принимает пропорции текущего файла
+// (aspect-ratio из его настоящих ширины и высоты), а сама картинка вписывается
+// в него целиком (object-contain). Раньше блок был жёстко 16:7/16:6 с
+// object-cover, и у баннеров с пропорцией 1.7:1 срезало больше трети кадра.
+//
+// Насколько баннер крупный — задаёт ВЫСОТА, а не ширина: переменная
+// --banner-h в app/globals.css растёт по семи ступеням, от телефона (280px) до
+// широкого монитора (680px). Ширина считается от неё и пропорций кадра
+// (max-width: --banner-h × соотношение сторон), а на узких экранах упирается
+// в 100% и баннер просто занимает всю доступную ширину. Отсюда и «большой на
+// большом экране, дальше уменьшается»: на каждом размере экрана картинка
+// показывается целиком и настолько крупно, насколько помещается.
 
 // Листаем чаще прежних 5 секунд: баннеров дюжина, и при медленной смене
 // посетитель успевает увидеть от силы пару штук.
 const AUTOPLAY_MS = 3500;
 
-export default function HeroBanner({ images }: { images: string[] }) {
+export default function HeroBanner({ banners }: { banners: Banner[] }) {
   const [index, setIndex] = useState(0);
   // Пауза автопрокрутки, пока пользователь читает баннер: наведён курсор или
   // фокус стоит на одной из кнопок (клавиатурная навигация).
   const [paused, setPaused] = useState(false);
 
-  const count = images.length;
+  const count = banners.length;
   const go = useCallback(
     (delta: number) => setIndex((i) => (i + delta + count) % count),
     [count]
@@ -54,13 +65,19 @@ export default function HeroBanner({ images }: { images: string[] }) {
   if (count === 0) return <FallbackHero />;
 
   const current = index % count;
+  const shown = banners[current];
+  // Пропорции текущего кадра: по ним считается и высота блока, и предельная
+  // ширина. toFixed(4) — чтобы в разметку не попадала строка на 17 знаков.
+  const ratio = Number((shown.width / Math.max(1, shown.height)).toFixed(4));
 
   return (
     <section
-      // mx-auto max-w-5xl: баннер уже сетки товаров и стоит по центру —
-      // так он читается как отдельный блок, а не как «шапка на всю ширину».
-      // На телефоне max-w не срабатывает, там баннер по-прежнему во всю ширину.
-      className="group relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-brand-100"
+      // Ширину ограничивает высота: --banner-h × пропорции кадра (ступени
+      // высоты — в app/globals.css). На узких экранах ограничение не
+      // срабатывает, и баннер занимает всю доступную ширину.
+      // Баннер по центру и уже сетки товаров — читается как отдельный блок.
+      className="hero-banner group relative mx-auto w-full overflow-hidden rounded-2xl bg-brand-50 sm:rounded-3xl"
+      style={{ maxWidth: `calc(var(--banner-h) * ${ratio})` }}
       aria-roledescription="карусель"
       aria-label="Акции и предложения"
       onMouseEnter={() => setPaused(true)}
@@ -69,8 +86,11 @@ export default function HeroBanner({ images }: { images: string[] }) {
       onBlur={() => setPaused(false)}
       onKeyDown={onKeyDown}
     >
-      <div className="relative aspect-[16/7] w-full sm:aspect-[16/6]">
-        {images.map((src, i) => (
+      <div
+        className="hero-banner-frame relative w-full"
+        style={{ aspectRatio: `${shown.width} / ${shown.height}` }}
+      >
+        {banners.map(({ src, width, height }, i) => (
           <Link
             key={src}
             href="/catalog"
@@ -95,13 +115,18 @@ export default function HeroBanner({ images }: { images: string[] }) {
             <Image
               src={src}
               alt=""
-              fill
-              // Баннер не шире max-w-5xl (1024px) — просить у браузера
-              // вариант под 1280px больше незачем.
-              sizes="(max-width: 1024px) 100vw, 1024px"
+              width={width}
+              height={height}
+              // Ширины на ступенях: телефон — вся ширина экрана, дальше блок
+              // ограничен высотой, и самый крупный вариант нужен примерно под
+              // 1500px (широкий монитор, кадр 2.2:1).
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 92vw, (max-width: 1536px) 80vw, 1500px"
               priority={i === 0}
               loading={i === 0 ? undefined : "lazy"}
-              className="object-cover"
+              // object-contain: картинка вписывается целиком. Для текущего
+              // слайда рамка ровно его пропорций, так что полей не остаётся;
+              // поля мелькнут только у соседнего кадра во время перелистывания.
+              className="absolute inset-0 h-full w-full object-contain"
             />
           </Link>
         ))}
@@ -114,7 +139,7 @@ export default function HeroBanner({ images }: { images: string[] }) {
               под палец поверх самой картинки; листать можно точками, а с
               клавиатуры — стрелками (см. onKeyDown выше). */}
           <div className="flex gap-2">
-            {images.map((src, i) => (
+            {banners.map(({ src }, i) => (
               <button
                 key={src}
                 type="button"
@@ -137,7 +162,7 @@ export default function HeroBanner({ images }: { images: string[] }) {
 
 function FallbackHero() {
   return (
-    <section className="mx-auto max-w-5xl overflow-hidden rounded-3xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white sm:p-10">
+    <section className="hero-banner mx-auto w-full overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white sm:rounded-3xl sm:p-10" style={{ maxWidth: "calc(var(--banner-h) * 2.4)" }}>
       <div className="max-w-2xl">
         <span className="badge bg-white/15 text-white">
           <LeafIcon className="mr-1 h-4 w-4" /> Сезон посадки открыт

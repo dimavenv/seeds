@@ -37,3 +37,62 @@ export function getBannerImages(): string[] {
     return [];
   }
 }
+
+// ===== Размеры баннеров =====
+//
+// Карусель показывает каждую картинку ЦЕЛИКОМ, без обрезки: высота блока
+// подстраивается под пропорции текущего баннера (см. components/hero-banner).
+// Для этого нужны настоящие ширина и высота файла — их и отдаёт getBanners().
+//
+// Зачем: у загруженных баннеров пропорции разные (от 1.7:1 до 2.2:1), а блок
+// раньше был жёстко 16:6 с object-cover — у самых высоких срезало больше трети
+// кадра.
+
+export type Banner = { src: string; width: number; height: number };
+
+// Если размеры прочитать не удалось — показываем в привычных 16:6. Лучше один
+// баннер не в своих пропорциях, чем пустая главная.
+const FALLBACK_SIZE = { width: 1600, height: 600 };
+
+// Кэш «файл + время правки + размер → размеры картинки»: страница
+// перегенерируется раз в минуту (ISR), и читать заголовки одних и тех же
+// файлов каждый раз незачем. Ключ включает mtime и размер файла, поэтому
+// заменённая картинка читается заново.
+const sizeCache = new Map<string, { width: number; height: number }>();
+
+async function imageSize(file: string): Promise<{ width: number; height: number }> {
+  let key = file;
+  try {
+    const st = fs.statSync(file);
+    key = `${file}:${st.mtimeMs}:${st.size}`;
+  } catch {
+    /* файла нет — сработает запасной размер ниже */
+  }
+  const cached = sizeCache.get(key);
+  if (cached) return cached;
+
+  try {
+    // sharp уже есть в зависимостях (им же Next оптимизирует картинки).
+    // Читает только заголовок файла, пиксели не декодирует.
+    const sharp = (await import("sharp")).default;
+    const meta = await sharp(file).metadata();
+    if (meta.width && meta.height) {
+      const size = { width: meta.width, height: meta.height };
+      sizeCache.set(key, size);
+      return size;
+    }
+  } catch (e) {
+    console.error(`[banners] не удалось прочитать размеры ${file}:`, e);
+  }
+  sizeCache.set(key, FALLBACK_SIZE);
+  return FALLBACK_SIZE;
+}
+
+export async function getBanners(): Promise<Banner[]> {
+  return Promise.all(
+    getBannerImages().map(async (src) => ({
+      src,
+      ...(await imageSize(path.join(process.cwd(), "public", src))),
+    }))
+  );
+}

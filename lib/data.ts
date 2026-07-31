@@ -56,9 +56,11 @@ const getCategoriesCached = unstable_cache(
     return list.map(mapCategory);
   },
   // Версию в ключе поднимаем при изменении формы Category (добавились
-  // description/seo_*): иначе после деплоя ISR отдавал бы записи старой формы
+  // description/seo_*) — иначе после деплоя ISR отдавал бы записи старой формы
   // из дискового кэша, и вступительные тексты категорий не появились бы.
-  ["categories-v3"],
+  // v4 — названия в единственном числе (mapCategory → categoryDisplayName):
+  // без смены ключа в кэше ещё десять минут лежали бы «Томаты».
+  ["categories-v4"],
   { revalidate: 600, tags: ["categories"] }
 );
 

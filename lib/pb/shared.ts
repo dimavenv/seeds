@@ -1,6 +1,7 @@
 // Общие помощники PocketBase — без серверных зависимостей,
 // используются и на сервере, и на клиенте.
 import { parseVariantMap } from "@/lib/image-variants";
+import { categoryDisplayName } from "@/lib/categories";
 import type {
   Category,
   Order,
@@ -53,10 +54,14 @@ const s = (v: unknown): string => (typeof v === "string" ? v : "");
 const n = (v: unknown): number => (typeof v === "number" ? v : 0);
 
 export function mapCategory(r: R): Category {
+  const slug = s(r.slug);
   return {
     id: r.id,
-    slug: s(r.slug),
-    name: s(r.name),
+    slug,
+    // Единственное число («Томат», «Баклажан») — здесь, а не на каждой
+    // странице: через mapCategory проходят все категории сайта. Правило —
+    // в lib/categories.ts, свои названия из админки оно не трогает.
+    name: categoryDisplayName(slug, s(r.name)),
     sort_order: n(r.sort_order),
     description: s(r.description) || null,
     seo_title: s(r.seo_title) || null,
@@ -84,7 +89,12 @@ export function mapProduct(r: R): Product {
     is_new: !!r.is_new,
     is_featured: !!r.is_featured,
     created_at: s(r.created),
-    category: cat ? { slug: s(cat.slug), name: s(cat.name) } : null,
+    category: cat
+      ? {
+          slug: s(cat.slug),
+          name: categoryDisplayName(s(cat.slug), s(cat.name)),
+        }
+      : null,
   };
 }
 

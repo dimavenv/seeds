@@ -1,7 +1,7 @@
 import Link from "next/link";
 import ProductGrid from "@/components/product-grid";
 import HeroBanner from "@/components/hero-banner";
-import { getBannerImages } from "@/lib/banners";
+import { getBanners } from "@/lib/banners";
 import { getProducts } from "@/lib/data";
 import { DELIVERY_COST, FREE_DELIVERY_FROM } from "@/lib/delivery";
 import { formatPrice } from "@/lib/format";
@@ -9,16 +9,19 @@ import { formatPrice } from "@/lib/format";
 export const revalidate = 60;
 
 export default async function HomePage() {
-  const [featured, fresh] = await Promise.all([
+  const [featured, fresh, banners] = await Promise.all([
     getProducts({ featured: true, limit: 8 }),
     getProducts({ onlyNew: true, limit: 8 }),
+    // Вместе со списком файлов читаем их настоящие размеры: карусель по ним
+    // подбирает высоту блока, чтобы кадр не обрезался (см. lib/banners.ts).
+    getBanners(),
   ]);
 
   return (
     <div className="container-page py-6">
       {/* Баннеры: список файлов public/banners/ собирается на сервере при
           рендере страницы (ISR, revalidate 60) — без клиентского пробинга. */}
-      <HeroBanner images={getBannerImages()} />
+      <HeroBanner banners={banners} />
 
       {/* Хиты */}
       {featured.length > 0 && (

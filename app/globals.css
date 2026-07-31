@@ -161,6 +161,48 @@ body {
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+  /* ===== Размер баннера главной =====
+     Крупность баннера задаёт ВЫСОТА (--banner-h), а не ширина: ширину блок
+     считает от неё и от пропорций текущей картинки (см. components/hero-banner),
+     поэтому кадр никогда не обрезается — только масштабируется.
+     Семь ступеней: от маленького телефона до широкого монитора. */
+  .hero-banner {
+    --banner-h: 280px;
+    /* Ширина меняется вместе с пропорциями следующего слайда — тянем её
+       плавно, в такт затуханию картинки (700 мс). */
+    transition: max-width 700ms ease;
+  }
+  .hero-banner-frame {
+    /* Высота блока следует за пропорциями кадра. aspect-ratio анимируют не все
+       браузеры: где не умеют — просто мгновенная смена, картинка от этого
+       по-прежнему целая. */
+    transition: aspect-ratio 700ms ease;
+  }
+  @media (min-width: 400px) {
+    .hero-banner { --banner-h: 320px; }
+  }
+  @media (min-width: 640px) {
+    .hero-banner { --banner-h: 400px; }
+  }
+  @media (min-width: 768px) {
+    .hero-banner { --banner-h: 460px; }
+  }
+  @media (min-width: 1024px) {
+    .hero-banner { --banner-h: 540px; }
+  }
+  @media (min-width: 1280px) {
+    .hero-banner { --banner-h: 610px; }
+  }
+  @media (min-width: 1536px) {
+    .hero-banner { --banner-h: 680px; }
+  }
+  /* Очень низкий экран (ноутбук 768px по высоте, телефон в альбомной
+     ориентации): баннер не должен занимать больше двух третей первого
+     экрана — иначе каталога не видно совсем. */
+  @media (max-height: 780px) and (min-width: 640px) {
+    .hero-banner { --banner-h: 62vh; }
+  }
+
   /* Ссылка «перейти к содержимому»: невидима, пока не получит фокус с клавиатуры. */
   .skip-link {
     @apply sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[60] focus:rounded-full focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white;
