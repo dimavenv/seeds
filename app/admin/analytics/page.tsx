@@ -360,7 +360,7 @@ function GoalsHelp({ missing }: { missing?: string[] }) {
       <p className="mt-1 text-sm text-brand-600">
         Сайт уже отправляет эти события, но целей с такими идентификаторами в
         счётчике нет — статистика по ним не собирается. Завести: <b>Метрика →
-        Настройка → Цели → Добавить цель → JavaScript-событие</b>.
+        Цели → Добавить цель → JavaScript-событие</b>.
       </p>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[28rem] text-sm">
