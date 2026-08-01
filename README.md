@@ -27,6 +27,13 @@
   обязательно для администратора).
 - **Админка `/admin`:** CRUD товаров с загрузкой фото в PocketBase, список
   заказов со сменой статусов, дашборд.
+- **Аналитика `/admin/analytics`:** посещаемость из Яндекс.Метрики рядом с
+  заказами из своей базы — визиты, посетители, конверсия, выручка, график
+  «Посетители и заказы» за 7/14/28/90 дней, источники трафика, устройства,
+  города и страницы входа. Сайт отправляет в Метрику цели (корзина, оформление,
+  покупка с суммой, промокод, поиск, регистрация, поддержка) и состав заказов
+  в отчёт «Электронная коммерция». Настройка —
+  [`SETUP-ANALYTICS-RU.md`](./SETUP-ANALYTICS-RU.md).
 
 > Без настроенного PocketBase магазин работает в **демо-режиме** на встроенных
 > данных (`lib/demo-data.ts`) — каталог, корзина и оформление доступны для
@@ -105,12 +112,16 @@ app/
   product/[slug]/          # карточка товара
   cart/  checkout/  order/[id]/   favorites/
   login/  register/
-  admin/                   # дашборд, товары (CRUD), заказы + actions.ts
+  admin/                   # дашборд, аналитика, товары (CRUD), заказы + actions.ts
   api/                     # /api/products, /api/checkout
 components/                # Header, Footer, ProductCard, фильтры, формы админки
+  admin/traffic-chart.tsx  # «Посетители и заказы»: две панели с общей осью
 lib/
   pb/{client,server,shared}.ts   # клиенты PocketBase + маппинг записей
   data.ts                  # выборка из PocketBase с фолбэком на демо-данные
+  metrika.ts               # цели и электронная коммерция (браузер)
+  metrika-stats.ts         # чтение Stat API Метрики (только сервер)
+  traffic-series.ts        # визиты + заказы в один ряд, конверсия
   demo-data.ts  types.ts  format.ts  auth.ts  orders.ts  crypto.ts
 pocketbase/
   pb_schema.json           # схема коллекций (импорт: npm run db:schema)

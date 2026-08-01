@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatPrice } from "@/lib/format";
 import ClearCartOnPaid from "@/components/clear-cart-on-paid";
+import MetrikaPurchase from "@/components/metrika-purchase";
 import { servicePageMetadata } from "@/lib/seo";
 
 // canonical свой у каждого заказа: страница подтверждения существует по своему
@@ -31,6 +32,8 @@ export default function OrderConfirmationPage({
 
   return (
     <div className="container-page py-16">
+      {/* Цель «покупка» (или «оплата не прошла») в Яндекс.Метрике. */}
+      <MetrikaPurchase orderId={params.id} failed={failed} />
       <div className="card mx-auto max-w-lg p-8 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-3xl">
           {icon}

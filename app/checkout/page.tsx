@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
@@ -27,6 +27,7 @@ import DadataAddress, {
 } from "@/components/dadata-address";
 import OzonPvzField from "@/components/ozon-pvz-field";
 import Spinner from "@/components/spinner";
+import { GOALS, reachGoal, stashPurchase } from "@/lib/metrika";
 
 const PROFILE_KEY = "checkout_profile";
 
@@ -87,6 +88,19 @@ export default function CheckoutPage() {
   // Скидка по промокоду снимается только с товаров: порог бесплатной доставки
   // считается от суммы ДО скидки — так же, как в корзине и на сервере.
   const grandTotal = Math.max(0, cartTotal - discount) + deliveryCost;
+
+  // Цель «начал оформление» — один раз за загрузку страницы и только когда
+  // корзина уже поднялась из localStorage и в ней что-то есть (пустая корзина
+  // сразу показывает заглушку, засчитывать такой заход нечестно).
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (!ready || cart.length === 0 || checkoutTracked.current) return;
+    checkoutTracked.current = true;
+    reachGoal(GOALS.beginCheckout, {
+      items: cart.reduce((s, i) => s + i.qty, 0),
+      total: cartTotal,
+    });
+  }, [ready, cart, cartTotal]);
 
   // Подставить сохранённые («Запомнить меня») данные при загрузке.
   useEffect(() => {
@@ -212,6 +226,7 @@ export default function CheckoutPage() {
     }
 
     setSubmitting(true);
+    reachGoal(GOALS.submitOrder, { total: grandTotal });
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -245,6 +260,23 @@ export default function CheckoutPage() {
         setCaptchaReset((n) => n + 1);
         return;
       }
+      // Состав заказа для цели «покупка». Саму цель засчитывает страница
+      // подтверждения: при онлайн-оплате между этим моментом и оплатой лежит
+      // форма Альфа-Банка, и заказ ещё может сорваться. Здесь только
+      // складываем состав — на странице «спасибо» его уже неоткуда взять
+      // (корзина к тому времени очищена).
+      stashPurchase({
+        orderId: String(data.id),
+        revenue: Number(data.total) || grandTotal,
+        coupon: promo?.code,
+        products: cart.map((i) => ({
+          id: i.id,
+          name: i.name,
+          price: i.price,
+          quantity: i.qty,
+        })),
+      });
+
       // «Запомнить меня»: сохранить зашифрованно или очистить.
       if (remember) {
         secureSet(PROFILE_KEY, { form, address, pvz, deliveryMethod });

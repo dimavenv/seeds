@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
 
@@ -67,8 +68,11 @@ export default function LoginPage() {
       resetCaptcha();
       return;
     }
-    // Жёсткий переход — надёжнее обновляет сессию.
-    window.location.assign("/account");
+    // Жёсткий переход — надёжнее обновляет сессию. Цель успеваем отправить до
+    // него (см. reachGoalThen).
+    reachGoalThen(GOALS.login, undefined, () =>
+      window.location.assign("/account")
+    );
   }
 
   const dbDown = health && !health.ok;

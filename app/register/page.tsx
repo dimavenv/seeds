@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
@@ -29,11 +30,10 @@ export default function RegisterPage() {
     // кабинет. Если включена капча, авто-вход без токена не пройдёт — тогда
     // просто отправляем на страницу входа с пометкой об успешной регистрации.
     const result = await serverLogin({ email, password });
-    if (result.ok) {
-      window.location.assign("/account");
-    } else {
-      window.location.assign("/login?registered=1");
-    }
+    const to = result.ok ? "/account" : "/login?registered=1";
+    // Цель «регистрация» — до жёсткого перехода, иначе запрос счётчика
+    // оборвётся вместе со страницей (см. reachGoalThen).
+    reachGoalThen(GOALS.signup, undefined, () => window.location.assign(to));
   }
 
   async function submit(e: React.FormEvent) {

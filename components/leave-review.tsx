@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitReview } from "@/app/account/actions";
 import Stars from "@/components/stars";
+import { GOALS, reachGoal } from "@/lib/metrika";
 import type { Review } from "@/lib/types";
 
 const STATUS_TEXT: Record<string, string> = {
@@ -87,6 +88,7 @@ export default function LeaveReview({
       setBusy(false);
       return;
     }
+    reachGoal(GOALS.reviewSubmit, { rating });
     setDone(true);
     router.refresh();
   }

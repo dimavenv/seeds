@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 // текущий путь — поэтому клиентский компонент).
 const LINKS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/admin", label: "Дашборд", exact: true },
+  { href: "/admin/analytics", label: "Аналитика" },
   { href: "/admin/products", label: "Товары" },
   { href: "/admin/orders", label: "Заказы" },
   { href: "/admin/support", label: "Заявки" },

@@ -5,9 +5,12 @@ import { fetchOrdersWithItems } from "@/lib/orders";
 import { getVacationUntil } from "@/lib/data";
 import { formatPrice } from "@/lib/format";
 import type { Order } from "@/lib/types";
+import { fetchTraffic } from "@/lib/metrika-stats";
+import { mergeSeries } from "@/lib/traffic-series";
 import VacationSetting from "@/components/admin/vacation-setting";
 import OrderStatusBadge from "@/components/admin/order-status-badge";
 import SalesChart, { type SalesOrderPoint } from "@/components/admin/sales-chart";
+import VisitorsCard from "@/components/admin/visitors-card";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +23,7 @@ export default async function AdminDashboard() {
   chartSince.setDate(chartSince.getDate() - 55);
 
   // getList(1,1) заодно возвращает totalItems — так считаем количество.
-  const [productsPage, recentPage, newPage, vacationUntil, chartWindow] =
+  const [productsPage, recentPage, newPage, vacationUntil, chartWindow, traffic] =
     await Promise.all([
       pb.collection("products").getList(1, 1).catch(() => ({ totalItems: 0 })),
       pb
@@ -37,6 +40,9 @@ export default async function AdminDashboard() {
           since: chartSince,
         }),
       }).catch(() => [] as Order[]),
+      // Посещаемость за неделю — плитка «Посетители». Метрика может быть не
+      // подключена: fetchTraffic не бросает, а возвращает причину.
+      fetchTraffic(7),
     ]);
 
   const productsCount = productsPage.totalItems;
@@ -61,6 +67,11 @@ export default async function AdminDashboard() {
       };
     });
 
+  // Посетители за неделю рядом с заказами: заказы уже посчитаны выше, дни —
+  // из Метрики.
+  const visitorDays = traffic.ok ? mergeSeries(traffic.days, chartOrders) : [];
+  const prevVisits = traffic.ok ? traffic.prevDays.map((d) => d.visits) : [];
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
@@ -71,6 +82,24 @@ export default async function AdminDashboard() {
 
         {/* Заказы и товары */}
         <div className="min-w-0 space-y-4">
+          {traffic.ok ? (
+            <VisitorsCard days={visitorDays} prevVisits={prevVisits} />
+          ) : (
+            <div className="card p-5">
+              <div className="text-sm text-brand-500">Посетители сайта</div>
+              <p className="mt-1 text-sm text-brand-600">
+                {traffic.reason === "not-configured"
+                  ? "Яндекс.Метрика ещё не подключена — данных о посещаемости нет."
+                  : traffic.message}
+              </p>
+              <Link
+                href="/admin/analytics"
+                className="mt-3 inline-block text-sm font-semibold text-brand-600 hover:underline"
+              >
+                Как подключить →
+              </Link>
+            </div>
+          )}
           <div className="card p-5">
             <div className="flex items-start justify-between gap-2">
               <div>

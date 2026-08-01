@@ -22,6 +22,7 @@ import {
   writeRemovedPending,
 } from "@/lib/cart-sync";
 import { cartReducer, toggleWishlist, type CartAction } from "@/lib/cart-store";
+import { GOALS, pushEcommerce, reachGoal } from "@/lib/metrika";
 import {
   promoDiscount,
   readStoredPromo,
@@ -84,6 +85,38 @@ function onlyStringIds(items: CartItem[]): CartItem[] {
 // Сколько раз повторяем неудавшуюся запись на сервер, прежде чем сдаться
 // (localStorage всё равно хранит актуальную корзину).
 const PERSIST_RETRIES = 3;
+
+// Аналитика корзины. Живёт здесь, а не в кнопках: добавить товар можно из
+// карточки каталога, со страницы товара и кнопкой «Заказать ещё раз» — единая
+// точка отправки гарантирует, что ни один путь не выпадет из статистики.
+// Ошибки счётчика внутри reachGoal/pushEcommerce уже проглочены, так что на
+// корзину аналитика повлиять не может.
+function trackCartAction(action: CartAction, prev: CartItem[]): void {
+  if (action.type === "add") {
+    const { product } = action;
+    const qty = action.qty ?? 1;
+    pushEcommerce("add", [
+      {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: qty,
+        category: product.category?.name,
+      },
+    ]);
+    reachGoal(GOALS.addToCart, { product: product.name, qty });
+    return;
+  }
+  if (action.type === "remove") {
+    // Состав берём из корзины ДО действия — в новой товара уже нет.
+    const item = prev.find((i) => i.id === action.id);
+    if (!item) return;
+    pushEcommerce("remove", [
+      { id: item.id, name: item.name, price: item.price, quantity: item.qty },
+    ]);
+    reachGoal(GOALS.removeFromCart, { product: item.name });
+  }
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -343,6 +376,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       writeRemovedPending(nextRemovedPending(readRemovedPending(), prev, next));
       setCartSync(next);
       persist(next, wishRef.current);
+      trackCartAction(action, prev);
     };
 
     return {
@@ -356,9 +390,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       wishlist,
       isWished: (id) => wishlist.includes(id),
       toggleWish: (id) => {
+        // Считаем только добавление: «убрал из избранного» — не то действие,
+        // ради которого смотрят отчёт по цели. Признак берём ДО setWishSync:
+        // он обновляет wishRef синхронно, и после вызова сравнивать уже не с чем.
+        const added = !wishRef.current.includes(id);
         const next = toggleWishlist(wishRef.current, id);
         setWishSync(next);
         persist(cartRef.current, next);
+        if (added) reachGoal(GOALS.addToFavorites, { product_id: id });
       },
       ready,
       promo,

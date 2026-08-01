@@ -3,6 +3,7 @@
 import { useState } from "react";
 import ConsentCheckbox from "@/components/consent-checkbox";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import { GOALS, reachGoal } from "@/lib/metrika";
 
 export default function SupportForm() {
   const [form, setForm] = useState({
@@ -55,6 +56,7 @@ export default function SupportForm() {
         resetCaptcha();
         return;
       }
+      reachGoal(GOALS.supportRequest, { subject: form.subject });
       setDone(true);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");

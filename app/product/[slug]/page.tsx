@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import AddToCart from "@/components/add-to-cart";
+import MetrikaProductView from "@/components/metrika-product-view";
 import ProductGrid from "@/components/product-grid";
 import ProductGallery from "@/components/product-gallery";
 import JsonLd from "@/components/json-ld";
@@ -235,6 +236,8 @@ export default async function ProductPage({
   return (
     <div className="container-page py-6">
       <JsonLd data={productJsonLd(product)} />
+      {/* Просмотр карточки в электронной коммерции Метрики. */}
+      <MetrikaProductView product={product} />
       <nav className="mb-4 text-sm text-brand-500" aria-label="Хлебные крошки">
         <Link href="/" className="hover:text-brand-700">Главная</Link>
         <span className="mx-1.5">/</span>

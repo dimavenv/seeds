@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { SearchIcon } from "@/components/icons";
 import { formatPrice } from "@/lib/format";
+import { GOALS, reachGoal } from "@/lib/metrika";
 import type { Product } from "@/lib/types";
 
 // Поле поиска с кнопкой-лупой и живыми подсказками под полем.
@@ -77,6 +78,9 @@ export default function SearchBox({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const query = q.trim();
+    // Цель — только на явный поиск (Enter или лупа): подсказки набираются на
+    // каждый второй символ, и считать их значило бы завалить отчёт мусором.
+    if (query) reachGoal(GOALS.search, { query });
     onNavigate?.();
     setOpen(false);
     router.push(query ? `/catalog?q=${encodeURIComponent(query)}` : "/catalog");

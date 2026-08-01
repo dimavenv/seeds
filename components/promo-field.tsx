@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/components/store-provider";
 import { formatPrice } from "@/lib/format";
 import { PROMO_CODE_MAX_LENGTH, parsePromoRule } from "@/lib/promo";
+import { GOALS, reachGoal } from "@/lib/metrika";
 import { CheckIcon, CloseIcon } from "@/components/icons";
 import Spinner from "@/components/spinner";
 
@@ -67,6 +68,7 @@ export default function PromoField() {
         return;
       }
       applyPromo(rule);
+      reachGoal(GOALS.promoApplied, { code: rule.code });
       setCode("");
       setOpen(false);
     } catch {
