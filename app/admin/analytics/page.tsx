@@ -6,6 +6,7 @@ import { GOALS, GOAL_DESCRIPTIONS, type Goal } from "@/lib/metrika";
 import {
   BREAKDOWNS,
   fetchBreakdown,
+  fetchGoalStats,
   fetchTraffic,
   type BreakdownRow,
   type MetrikaFailure,
@@ -20,6 +21,7 @@ import {
 import TrafficChart from "@/components/admin/traffic-chart";
 import StatTile from "@/components/admin/stat-tile";
 import BreakdownBars from "@/components/admin/breakdown-bars";
+import GoalFunnel from "@/components/admin/goal-funnel";
 
 export const dynamic = "force-dynamic";
 
@@ -71,9 +73,10 @@ export default async function AdminAnalytics({
   since.setDate(since.getDate() - (period * 2 - 1));
 
   const pb = createServerPb();
-  const [traffic, sources, devices, cities, entryPages, orderRecords] =
+  const [traffic, goalStats, sources, devices, cities, entryPages, orderRecords] =
     await Promise.all([
       fetchTraffic(period),
+      fetchGoalStats(period, Object.values(GOALS)),
       fetchBreakdown("sources", period),
       fetchBreakdown("devices", period, 4),
       fetchBreakdown("cities", period),
@@ -214,7 +217,21 @@ export default async function AdminAnalytics({
         />
       </div>
 
-      <GoalsHelp />
+      {/* Воронка по целям Метрики. Пока целей нет — на её месте инструкция,
+          как их завести: пустая карточка «нет данных» ничему не учит. */}
+      {goalStats.ok && goalStats.goals.length > 0 ? (
+        <>
+          <GoalFunnel
+            goals={goalStats.goals}
+            visits={goalStats.visits || cur.visits}
+            periodLabel={`${period} дней · ${rangeLabel(days)}`}
+          />
+          {/* Осталось завести — только недостающие цели, без уже созданных */}
+          <GoalsHelp missing={goalStats.missing} />
+        </>
+      ) : (
+        <GoalsHelp missing={goalStats.ok ? goalStats.missing : undefined} />
+      )}
     </div>
   );
 }
@@ -328,17 +345,22 @@ function NotConnected({
 }
 
 // Готовый список целей: их нужно один раз завести в интерфейсе Метрики, иначе
-// события с сайта приходят, но отчёта по ним нет.
-function GoalsHelp() {
-  const goals = Object.values(GOALS) as Goal[];
+// события с сайта приходят, но отчёта по ним нет. Показывается, только пока ни
+// одна цель не заведена — дальше на этом месте живёт воронка с цифрами.
+function GoalsHelp({ missing }: { missing?: string[] }) {
+  // Метрика ответила и сказала, каких целей не хватает, — показываем только их.
+  const goals = (missing ?? (Object.values(GOALS) as string[])) as Goal[];
+  if (goals.length === 0) return null;
 
   return (
     <div className="card p-5">
-      <h2 className="font-bold text-brand-800">Цели для Яндекс.Метрики</h2>
+      <h2 className="font-bold text-brand-800">
+        {missing ? "Цели, которых ещё нет в Метрике" : "Цели для Яндекс.Метрики"}
+      </h2>
       <p className="mt-1 text-sm text-brand-600">
-        Сайт уже отправляет эти события. Чтобы они попали в отчёты, в Метрике
-        нужно создать цели типа <b>JavaScript-событие</b> с такими же
-        идентификаторами (Метрика → Настройка → Цели → Добавить цель).
+        Сайт уже отправляет эти события, но целей с такими идентификаторами в
+        счётчике нет — статистика по ним не собирается. Завести: <b>Метрика →
+        Настройка → Цели → Добавить цель → JavaScript-событие</b>.
       </p>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[28rem] text-sm">

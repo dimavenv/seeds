@@ -17,6 +17,20 @@ export function seedsLabel(n: number): string {
   return `${n} ${word}`;
 }
 
+// Склонение существительного после числа: «1 визит», «2 визита», «5 визитов».
+// Формы передаются в порядке [1, 2, 5] — как принято в русских словарях.
+export function plural(
+  n: number,
+  forms: [one: string, few: string, many: string]
+): string {
+  const abs = Math.abs(Math.round(n));
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return forms[1];
+  return forms[2];
+}
+
 // «5 июля 2026» из строки 'YYYY-MM-DD' (без сдвига по часовому поясу).
 export function formatDateRu(isoDate: string): string {
   const [y, m, d] = isoDate.split("-").map(Number);

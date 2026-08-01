@@ -12,6 +12,9 @@ import "server-only";
 // страница показывает понятную плашку вместо графика.
 
 const STAT_API = "https://api-metrika.yandex.net/stat/v1/data";
+// Список целей счётчика живёт в другом API (управление, а не статистика).
+// Тот же токен metrika:read даёт доступ к обоим.
+const MANAGEMENT_API = "https://api-metrika.yandex.net/management/v1/counter";
 
 // Ответ Метрики кэшируем на 10 минут: данные всё равно обновляются с
 // задержкой, а лимит API — 5000 запросов в сутки на счётчик. Без кэша каждое
@@ -51,6 +54,21 @@ export type TrafficStats = {
 };
 
 export type BreakdownRow = { name: string; visits: number };
+
+// Цель счётчика, сопоставленная с нашим идентификатором из lib/metrika.ts.
+export type GoalStat = {
+  goal: string; // наш идентификатор: purchase, add_to_cart, …
+  id: number; // номер цели в Метрике
+  name: string; // как цель названа в интерфейсе Метрики
+  visits: number; // визиты, в которых цель достигнута
+};
+
+export type GoalsStats = {
+  goals: GoalStat[];
+  visits: number; // все визиты за период — знаменатель конверсии
+  // Наши идентификаторы, для которых цели в Метрике ещё не заведены.
+  missing: string[];
+};
 
 // Срезы, которые показываем в админке. Ключ — то, что пишет админ, значение —
 // измерение Метрики.
@@ -162,6 +180,46 @@ async function request(
   }
 }
 
+// Список целей счётчика (Management API). Отдельная функция, а не параметр
+// request(): другой адрес и другая форма ответа.
+async function requestGoals(): Promise<MetrikaResult<{ json: unknown }>> {
+  const id = counterId();
+  const oauth = token();
+  if (!id || !oauth) return NOT_CONFIGURED;
+
+  try {
+    const res = await fetch(`${MANAGEMENT_API}/${id}/goals`, {
+      headers: { Authorization: `OAuth ${oauth}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      // Список целей меняется раз в жизни — держим дольше статистики.
+      next: { revalidate: 3600 },
+    });
+    if (res.status === 401 || res.status === 403) {
+      return {
+        ok: false,
+        reason: "unauthorized",
+        message:
+          "Метрика не приняла токен: он истёк или у аккаунта нет доступа к счётчику.",
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        reason: "unavailable",
+        message: `Метрика ответила ошибкой ${res.status} на запрос списка целей.`,
+      };
+    }
+    return { ok: true, json: await res.json() };
+  } catch (e) {
+    console.error("[metrika] список целей не получен:", e);
+    return {
+      ok: false,
+      reason: "unavailable",
+      message: "Метрика не отвечает — попробуйте обновить страницу позже.",
+    };
+  }
+}
+
 // --- Разбор ответов ---------------------------------------------------------
 
 // Ответы Метрики разбираем отдельными чистыми функциями: формат вложенный
@@ -228,6 +286,64 @@ export function parseBreakdown(json: unknown): BreakdownRow[] {
     .filter((r) => r.visits > 0);
 }
 
+// Сопоставление целей Метрики с нашими идентификаторами.
+//
+// У цели типа «JavaScript-событие» идентификатор лежит в условии
+// (conditions[].url), но интерфейс Метрики со временем менял и тип условия, и
+// имя поля. Поэтому не гадаем: собираем ВСЕ строковые поля условий и ищем
+// среди них знакомый идентификатор. Так разбор переживёт очередной редизайн.
+export function parseGoals(
+  json: unknown,
+  wanted: readonly string[]
+): { id: number; name: string; goal: string }[] {
+  const list = (json as { goals?: unknown } | null)?.goals;
+  if (!Array.isArray(list)) return [];
+
+  const known = new Set(wanted);
+  const found: { id: number; name: string; goal: string }[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of list) {
+    const g = raw as {
+      id?: unknown;
+      name?: unknown;
+      conditions?: unknown[];
+    };
+    const id = typeof g.id === "number" ? g.id : Number(g.id);
+    if (!Number.isFinite(id)) continue;
+
+    const candidates: string[] = [];
+    for (const c of Array.isArray(g.conditions) ? g.conditions : []) {
+      for (const v of Object.values(c as Record<string, unknown>)) {
+        if (typeof v === "string") candidates.push(v.trim());
+      }
+    }
+
+    const goal = candidates.find((c) => known.has(c));
+    // Одна цель на идентификатор: если продавец завёл дубль, берём первую —
+    // складывать их значило бы считать один и тот же визит дважды.
+    if (!goal || seen.has(goal)) continue;
+    seen.add(goal);
+    found.push({ id, name: String(g.name ?? goal), goal });
+  }
+
+  return found;
+}
+
+// Метрики целей приходят в том же порядке, в каком мы их запросили; последним
+// идёт общий ym:s:visits.
+export function parseGoalTotals(
+  json: unknown,
+  goals: { id: number; name: string; goal: string }[]
+): { goals: GoalStat[]; visits: number } {
+  const totals = (json as { totals?: unknown } | null)?.totals;
+  const row = Array.isArray(totals) ? totals : [];
+  return {
+    goals: goals.map((g, i) => ({ ...g, visits: num(row[i]) })),
+    visits: num(row[goals.length]),
+  };
+}
+
 // --- Публичные запросы ------------------------------------------------------
 
 // Посещаемость по дням за period дней + столько же дней перед ним (одним
@@ -273,6 +389,48 @@ export async function fetchTraffic(
     prevDays,
     quality: quality.ok ? parseQuality(quality.json) : null,
   };
+}
+
+// Достижения целей за period дней. Возвращает визиты с каждой целью — именно
+// визиты, а не «достижения»: один человек может класть в корзину пять раз, и
+// по достижениям воронка получилась бы шире входа.
+//
+// Stat API берёт не больше 20 метрик за запрос — с запасом ограничиваем число
+// целей: 13 наших плюс общий ym:s:visits укладываются свободно.
+const MAX_GOALS_PER_REQUEST = 18;
+
+export async function fetchGoalStats(
+  period: number,
+  wanted: readonly string[]
+): Promise<MetrikaResult<GoalsStats>> {
+  if (!metrikaStatsConfigured()) return NOT_CONFIGURED;
+
+  const goalsRes = await requestGoals();
+  if (!goalsRes.ok) return goalsRes;
+
+  const matched = parseGoals(goalsRes.json, wanted).slice(0, MAX_GOALS_PER_REQUEST);
+  const missing = wanted.filter((w) => !matched.some((m) => m.goal === w));
+
+  // Ни одна цель не заведена — статистику запрашивать не из чего.
+  if (matched.length === 0) {
+    return { ok: true, goals: [], visits: 0, missing: [...missing] };
+  }
+
+  const metrics = [
+    ...matched.map((g) => `ym:s:goal${g.id}visits`),
+    "ym:s:visits",
+  ].join(",");
+
+  const res = await request("", {
+    metrics,
+    date1: isoDate(daysAgo(period - 1)),
+    date2: isoDate(daysAgo(0)),
+    limit: 1,
+  });
+  if (!res.ok) return res;
+
+  const parsed = parseGoalTotals(res.json, matched);
+  return { ok: true, ...parsed, missing: [...missing] };
 }
 
 // Один срез (источники / устройства / города / страницы входа) за period дней.

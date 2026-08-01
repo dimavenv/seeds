@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ecommercePayload } from "@/lib/metrika";
+import { plural } from "@/lib/format";
 import {
   parseBreakdown,
   parseByTime,
@@ -214,5 +215,30 @@ describe("totals — итоги периода", () => {
 
   it("на пустом периоде отдаёт нули", () => {
     expect(totals([])).toEqual({ visits: 0, users: 0, orders: 0, revenue: 0 });
+  });
+});
+
+describe("plural — склонение после числа", () => {
+  const visits: [string, string, string] = ["визит", "визита", "визитов"];
+
+  it("ставит нужную форму по последним цифрам", () => {
+    expect(plural(1, visits)).toBe("визит");
+    expect(plural(2, visits)).toBe("визита");
+    expect(plural(5, visits)).toBe("визитов");
+    expect(plural(21, visits)).toBe("визит");
+    expect(plural(92, visits)).toBe("визита");
+    expect(plural(148, visits)).toBe("визитов");
+  });
+
+  it("знает про исключения второго десятка", () => {
+    expect(plural(11, visits)).toBe("визитов");
+    expect(plural(12, visits)).toBe("визитов");
+    expect(plural(14, visits)).toBe("визитов");
+    expect(plural(111, visits)).toBe("визитов");
+  });
+
+  it("не спотыкается на нуле и дробях", () => {
+    expect(plural(0, visits)).toBe("визитов");
+    expect(plural(1.4, visits)).toBe("визит");
   });
 });

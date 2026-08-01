@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { plural } from "@/lib/format";
 import { conversion, deltaPercent, totals, type SeriesDay } from "@/lib/traffic-series";
 
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
@@ -57,7 +58,8 @@ export default function VisitorsCard({
             )}
           </div>
           <div className="text-xs text-brand-400">
-            {nf.format(cur.visits)} визитов
+            {nf.format(cur.visits)}{" "}
+            {plural(cur.visits, ["визит", "визита", "визитов"])}
             {delta !== null && " · к прошлой неделе"}
           </div>
         </div>

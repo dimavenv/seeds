@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatPrice } from "@/lib/format";
+import { formatPrice, plural } from "@/lib/format";
 import { conversion, type SeriesDay } from "@/lib/traffic-series";
 
 // «Посетители и заказы» — две панели с ОБЩЕЙ осью дней и общей крестовиной.
@@ -355,7 +355,11 @@ export default function TrafficChart({
               {fmtDayMonth.format(parseDay(day.date))},{" "}
               {fmtWeekday.format(parseDay(day.date))}
             </div>
-            <TipRow color="var(--chart-3)" value={nf.format(day.visits)} label="визитов" />
+            <TipRow
+              color="var(--chart-3)"
+              value={nf.format(day.visits)}
+              label={plural(day.visits, ["визит", "визита", "визитов"])}
+            />
             <TipRow
               color="var(--chart-2)"
               value={nf.format(prevVisits[active!] ?? 0)}
@@ -366,7 +370,7 @@ export default function TrafficChart({
             <TipRow
               color="var(--chart-1)"
               value={nf.format(day.orders)}
-              label="заказов"
+              label={plural(day.orders, ["заказ", "заказа", "заказов"])}
               square
             />
             <div className="mt-1.5 border-t border-brand-100 pt-1.5 text-xs text-brand-500">
