@@ -13,12 +13,13 @@ import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
 import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
-import { normalizePromoCode, promoDiscount } from "@/lib/promo";
+import { normalizePromoCode } from "@/lib/promo";
 import {
   attachPromoUseToOrder,
-  findPromoRule,
+  checkPromo,
   releasePromoUse,
   reservePromoUse,
+  type PromoCheck,
 } from "@/lib/promo-server";
 
 type IncomingItem = { id: string; qty: number };
@@ -192,17 +193,8 @@ export async function POST(request: Request) {
     // покупатель вошёл в аккаунт, и только потом (после резерва товара)
     // закрепляем код за аккаунтом. Так неудачная проверка не оставляет за
     // собой ни списанных остатков, ни «сгоревшего» промокода.
-    const promoRule = promoCode ? findPromoRule(promoCode) : null;
-    if (promoCode && !promoRule) {
-      return NextResponse.json(
-        {
-          error: "Такого промокода нет или он больше не действует",
-          promoError: true,
-        },
-        { status: 400 }
-      );
-    }
-    if (promoRule) {
+    let promo: PromoCheck | null = null;
+    if (promoCode) {
       // Привязка к аккаунту здесь обязана быть достоверной: bestEffortUserId
       // отдаёт null и при медленной проверке сессии, а «не смогли проверить»
       // не должно превращаться ни в «гость» (обидно), ни тем более в скидку
@@ -220,38 +212,22 @@ export async function POST(request: Request) {
           );
         }
       }
-      if (!userId) {
+      // Условия кода (срок, порог, лимиты, «только первый заказ») проверяет та
+      // же функция, что и корзина, — расходиться им нельзя. Сумма здесь уже
+      // авторитетная: посчитана по ценам из базы.
+      promo = await checkPromo(pb, { code: promoCode, userId, subtotal });
+      if (!promo.ok) {
         return NextResponse.json(
           {
-            error:
-              "Промокод действует только для покупателей с аккаунтом. Войдите в свой аккаунт и оформите заказ ещё раз.",
+            error: promo.error,
             promoError: true,
-            needAuth: true,
+            ...(promo.needAuth ? { needAuth: true } : {}),
           },
-          { status: 401 }
-        );
-      }
-      if (subtotal < promoRule.minSubtotal) {
-        return NextResponse.json(
-          {
-            error: `Промокод действует при сумме товаров от ${promoRule.minSubtotal} ₽`,
-            promoError: true,
-          },
-          { status: 400 }
-        );
-      }
-      // Нулевая скидка (например, копеечный заказ при скидке в процентах) —
-      // отказываем сразу: иначе одноразовый код сгорел бы впустую.
-      if (promoDiscount(promoRule, subtotal) <= 0) {
-        return NextResponse.json(
-          {
-            error: "Промокод не даёт скидку на эту сумму заказа",
-            promoError: true,
-          },
-          { status: 400 }
+          { status: promo.status }
         );
       }
     }
+    const promoRule = promo?.ok ? promo.rule : null;
 
     // Предпроверка наличия по свежим данным БД — чтобы в типовом случае
     // (устаревшая корзина) вернуть понятное пер-товарное сообщение.
@@ -301,24 +277,29 @@ export async function POST(request: Request) {
     // ниже (заказ не создался, состав не сохранился, платёж не завёлся).
     let promoUseId: string | null = null;
     let discount = 0;
-    if (promoRule && userId) {
-      const reserved = await reservePromoUse(pb, userId, promoRule.code);
-      if (reserved.status !== "reserved") {
-        await releaseStock(pb, reserveLines);
-        return NextResponse.json(
-          {
-            error:
-              reserved.status === "used"
-                ? "Этот промокод уже использован на вашем аккаунте"
-                : "Не удалось проверить промокод — попробуйте ещё раз",
-            promoError: true,
-          },
-          { status: reserved.status === "used" ? 409 : 503 }
-        );
+    if (promo?.ok) {
+      // Запись об использовании нужна только кодам «один раз на аккаунт» —
+      // именно она (через уникальный индекс) и делает их одноразовыми.
+      // Многоразовый код и код для гостей обходятся без неё.
+      if (promo.record.oncePerUser && userId) {
+        const reserved = await reservePromoUse(pb, userId, promo.rule.code);
+        if (reserved.status !== "reserved") {
+          await releaseStock(pb, reserveLines);
+          return NextResponse.json(
+            {
+              error:
+                reserved.status === "used"
+                  ? "Этот промокод уже использован на вашем аккаунте"
+                  : "Не удалось проверить промокод — попробуйте ещё раз",
+              promoError: true,
+            },
+            { status: reserved.status === "used" ? 409 : 503 }
+          );
+        }
+        promoUseId = reserved.id;
       }
-      promoUseId = reserved.id;
-      // Скидка считается ЗДЕСЬ, от авторитетных цен из базы.
-      discount = promoDiscount(promoRule, subtotal);
+      // Скидка посчитана в checkPromo от авторитетных цен из базы.
+      discount = promo.discount;
     }
 
     // Сумма и доставка: стоимость доставки считаем НА СЕРВЕРЕ по тем же

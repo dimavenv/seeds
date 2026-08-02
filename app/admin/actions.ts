@@ -532,3 +532,124 @@ export async function updateReviewStatus(
   revalidatePath("/admin/reviews");
   revalidatePath("/reviews");
 }
+
+// ===== Промокоды =====
+//
+// Коды живут в коллекции `promos` и целиком управляются отсюда: срок, размер
+// скидки и условия. Всё, что вводит администратор, проверяется на сервере —
+// форма подсказывает, но не решает.
+
+export type PromoFormState = { error?: string; ok?: boolean };
+
+// Дата из поля <input type="date"> («ГГГГ-ММ-ДД») в вид, который принимает
+// PocketBase. Пустая строка означает «без ограничения».
+function promoDate(raw: string): string {
+  const value = raw.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value} 00:00:00.000Z` : "";
+}
+
+export async function savePromo(
+  _prev: PromoFormState,
+  formData: FormData
+): Promise<PromoFormState> {
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin) return { error: "Нет доступа" };
+
+  const rawId = String(formData.get("id") ?? "");
+  const id = isValidRecordId(rawId) ? rawId : null;
+
+  const { normalizePromoCode, promoKey } = await import("@/lib/promo");
+  const code = normalizePromoCode(formData.get("code"));
+  if (!code) return { error: "Укажите промокод" };
+  if (code.length < 3) return { error: "Слишком короткий код (от 3 символов)" };
+
+  const number = (name: string): number => {
+    const raw = String(formData.get(name) ?? "").trim().replace(",", ".");
+    if (!raw) return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+  };
+
+  const percent = number("percent");
+  const amount = number("amount");
+  if (percent <= 0 && amount <= 0) {
+    return { error: "Укажите скидку: процент или сумму в рублях" };
+  }
+  if (percent > 90) return { error: "Скидка в процентах — не больше 90%" };
+  // Процент и сумма одновременно бессмысленны: скидку считает promoDiscount,
+  // и при обоих заполненных полях сумма молча игнорируется. Лучше сказать.
+  if (percent > 0 && amount > 0) {
+    return { error: "Заполните что-то одно: либо процент, либо сумму скидки" };
+  }
+
+  const startsAt = promoDate(String(formData.get("starts_at") ?? ""));
+  const expiresAt = promoDate(String(formData.get("expires_at") ?? ""));
+  if (startsAt && expiresAt && expiresAt < startsAt) {
+    return { error: "Дата окончания раньше даты начала" };
+  }
+
+  const oncePerUser = formData.get("once_per_user") === "on";
+  const firstOrderOnly = formData.get("first_order_only") === "on";
+  // «Один раз на аккаунт» и «только первый заказ» опираются на аккаунт
+  // покупателя. Без входа их не проверить, поэтому вход становится
+  // обязательным — иначе код молча стал бы многоразовым.
+  const authOnly =
+    formData.get("auth_only") === "on" || oncePerUser || firstOrderOnly;
+
+  const payload = {
+    code,
+    percent,
+    amount,
+    min_subtotal: number("min_subtotal"),
+    starts_at: startsAt,
+    expires_at: expiresAt,
+    enabled: formData.get("enabled") === "on",
+    auth_only: authOnly,
+    once_per_user: oncePerUser,
+    first_order_only: firstOrderOnly,
+    max_uses: number("max_uses"),
+    note: String(formData.get("note") ?? "").trim().slice(0, 200),
+  };
+
+  // Два кода, различающиеся только похожими буквами («УРОЖАЙ» кириллицей и
+  // латиницей), покупателю неотличимы, а найдётся из них всегда первый —
+  // ловим это до сохранения, а не в поддержке.
+  try {
+    const { listPromos } = await import("@/lib/promo-server");
+    const existing = await listPromos(pb);
+    const clash = existing.find(
+      (p) => p.id !== id && promoKey(p.code) === promoKey(code)
+    );
+    if (clash) {
+      return { error: `Такой код уже есть: ${clash.code}` };
+    }
+  } catch {
+    // Коллекции нет — сохранение ниже вернёт понятную ошибку от PocketBase.
+  }
+
+  try {
+    if (id) await pb.collection("promos").update(id, payload);
+    else await pb.collection("promos").create(payload);
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
+
+  revalidatePath("/admin/promos");
+  return { ok: true };
+}
+
+export async function setPromoEnabled(id: string, enabled: boolean): Promise<void> {
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return;
+  await pb.collection("promos").update(id, { enabled }).catch(() => {});
+  revalidatePath("/admin/promos");
+}
+
+export async function deletePromo(id: string): Promise<void> {
+  const { session, pb } = await getSessionPb();
+  if (!session.isAdmin || !isValidRecordId(id)) return;
+  // Записи об использованиях (promo_uses) НЕ трогаем: они привязаны к заказам
+  // и нужны для истории, а код в них хранится строкой.
+  await pb.collection("promos").delete(id).catch(() => {});
+  revalidatePath("/admin/promos");
+}

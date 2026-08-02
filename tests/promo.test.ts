@@ -7,7 +7,7 @@ import {
   promoDiscount,
   promoKey,
 } from "@/lib/promo";
-import { findPromoRule, promoRules } from "@/lib/promo-server";
+import { envPromo } from "@/lib/promo-server";
 
 const HARVEST = "УРОЖАЙ";
 
@@ -97,43 +97,36 @@ describe("parsePromoRule (данные из localStorage)", () => {
   });
 });
 
-describe("правила промокодов (сервер)", () => {
-  it("по умолчанию действует УРОЖАЙ со скидкой 10% на товары", () => {
-    const rules = promoRules();
-    expect(rules).toHaveLength(1);
-    expect(rules[0].code).toBe(HARVEST);
-    expect(rules[0].percent).toBe(10);
-    expect(promoDiscount(rules[0], 1000)).toBe(100);
+describe("запасной код из окружения (пока в базе нет ни одного)", () => {
+  it("по умолчанию это УРОЖАЙ со скидкой 10% на товары", () => {
+    const promo = envPromo();
+    expect(promo?.code).toBe(HARVEST);
+    expect(promo?.percent).toBe(10);
+    expect(promoDiscount(promo!, 1000)).toBe(100);
+    // Условия по умолчанию — те же, что были до появления админки.
+    expect(promo?.authOnly).toBe(true);
+    expect(promo?.oncePerUser).toBe(true);
   });
 
   it("размер скидки берётся из окружения", () => {
     process.env.PROMO_HARVEST_PERCENT = "15";
-    expect(promoRules()[0].percent).toBe(15);
+    expect(envPromo()?.percent).toBe(15);
   });
 
   it("мусор в окружении не ломает правило", () => {
     process.env.PROMO_HARVEST_PERCENT = "не число";
-    expect(promoRules()[0].percent).toBe(10);
+    expect(envPromo()?.percent).toBe(10);
     process.env.PROMO_HARVEST_PERCENT = "-5";
-    expect(promoRules()[0].percent).toBe(10);
+    expect(envPromo()?.percent).toBe(10);
     process.env.PROMO_HARVEST_PERCENT = "500"; // потолок 90%
-    expect(promoRules()[0].percent).toBe(90);
+    expect(envPromo()?.percent).toBe(90);
   });
 
   it("код можно выключить", () => {
     process.env.PROMO_HARVEST_ENABLED = "false";
-    expect(promoRules()).toEqual([]);
-    expect(findPromoRule(HARVEST)).toBeNull();
+    expect(envPromo()).toBeNull();
     delete process.env.PROMO_HARVEST_ENABLED;
     process.env.PROMO_HARVEST_PERCENT = "0"; // и скидка 0 = кода нет
-    expect(promoRules()).toEqual([]);
-  });
-
-  it("находит код с точностью до написания, но не выдумывает новые", () => {
-    expect(findPromoRule("  урожай ")?.code).toBe(HARVEST);
-    expect(findPromoRule("УPOЖAЙ")?.code).toBe(HARVEST);
-    expect(findPromoRule("УРОЖАЙ2")).toBeNull();
-    expect(findPromoRule("")).toBeNull();
-    expect(findPromoRule(null)).toBeNull();
+    expect(envPromo()).toBeNull();
   });
 });

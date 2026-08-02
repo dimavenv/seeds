@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { normalizePromoCode } from "@/lib/promo";
-import { findPromoRule, isPromoUsed } from "@/lib/promo-server";
+import { checkPromo } from "@/lib/promo-server";
 import { allowAttempt } from "@/lib/email-code";
 
 export const dynamic = "force-dynamic";
@@ -75,31 +75,14 @@ export async function POST(request: Request) {
     );
   }
 
-  // 2) Есть ли такой код.
-  const rule = findPromoRule(code);
-  if (!rule) {
-    return NextResponse.json(
-      { error: "Такого промокода нет или он больше не действует" },
-      { status: 404 }
-    );
-  }
-
-  // 3) Не потрачен ли уже этим аккаунтом.
+  // 2) Все условия кода разом: существует ли, действует ли по срокам, не
+  //    потрачен ли аккаунтом, не закончились ли применения. Сумму заказа сюда
+  //    не передаём — в корзине она ещё не окончательная, порог проверит
+  //    оформление по ценам из базы.
+  let check;
   try {
     const pb = await pbAdmin();
-    const used = await isPromoUsed(pb, session.userId, rule.code);
-    if (used === null) {
-      return NextResponse.json(
-        { error: "База не отвечает — попробуйте ещё раз" },
-        { status: 503 }
-      );
-    }
-    if (used) {
-      return NextResponse.json(
-        { error: "Этот промокод уже использован на вашем аккаунте" },
-        { status: 409 }
-      );
-    }
+    check = await checkPromo(pb, { code, userId: session.userId });
   } catch {
     return NextResponse.json(
       { error: "База не отвечает — попробуйте ещё раз" },
@@ -107,6 +90,14 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!check.ok) {
+    return NextResponse.json(
+      { error: check.error, ...(check.needAuth ? { needAuth: true } : {}) },
+      { status: check.status }
+    );
+  }
+
+  const { rule } = check;
   return NextResponse.json({
     ok: true,
     promo: {

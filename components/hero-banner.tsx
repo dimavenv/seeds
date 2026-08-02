@@ -13,18 +13,16 @@ import type { Banner } from "@/lib/banners";
 //
 // ===== Размер и пропорции =====
 //
-// Картинка НИКОГДА не обрезается: блок принимает пропорции текущего файла
-// (aspect-ratio из его настоящих ширины и высоты), а сама картинка вписывается
-// в него целиком (object-contain). Раньше блок был жёстко 16:7/16:6 с
-// object-cover, и у баннеров с пропорцией 1.7:1 срезало больше трети кадра.
+// Рамка баннера ПОСТОЯННАЯ: её размеры зависят только от ширины экрана
+// (класс .hero-banner в app/globals.css), а не от пропорций текущего файла.
+// Картинки заполняют её целиком (object-cover), лишнее обрезается по краям.
 //
-// Насколько баннер крупный — задаёт ВЫСОТА, а не ширина: переменная
-// --banner-h в app/globals.css растёт по семи ступеням, от телефона (280px) до
-// широкого монитора (680px). Ширина считается от неё и пропорций кадра
-// (max-width: --banner-h × соотношение сторон), а на узких экранах упирается
-// в 100% и баннер просто занимает всю доступную ширину. Отсюда и «большой на
-// большом экране, дальше уменьшается»: на каждом размере экрана картинка
-// показывается целиком и настолько крупно, насколько помещается.
+// Так сделано намеренно. Раньше блок принимал пропорции каждого кадра, чтобы
+// ничего не обрезать, — но у загруженных баннеров соотношение сторон разное
+// (1,7:1 … 2,2:1), и на каждой смене слайда высота с шириной прыгали, дёргая
+// вместе с собой всю страницу. Спокойная рамка важнее пары сантиметров кадра;
+// чтобы не терять важное, держите сюжет баннера ближе к центру, а пропорции
+// файлов — около 2:1.
 
 // Листаем чаще прежних 5 секунд: баннеров дюжина, и при медленной смене
 // посетитель успевает увидеть от силы пару штук.
@@ -65,19 +63,13 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
   if (count === 0) return <FallbackHero />;
 
   const current = index % count;
-  const shown = banners[current];
-  // Пропорции текущего кадра: по ним считается и высота блока, и предельная
-  // ширина. toFixed(4) — чтобы в разметку не попадала строка на 17 знаков.
-  const ratio = Number((shown.width / Math.max(1, shown.height)).toFixed(4));
 
   return (
     <section
-      // Ширину ограничивает высота: --banner-h × пропорции кадра (ступени
-      // высоты — в app/globals.css). На узких экранах ограничение не
-      // срабатывает, и баннер занимает всю доступную ширину.
-      // Баннер по центру и уже сетки товаров — читается как отдельный блок.
+      // Размеры рамки — целиком из CSS (.hero-banner): одинаковые для всех
+      // слайдов. Баннер по центру и уже сетки товаров — читается как
+      // отдельный блок.
       className="hero-banner group relative mx-auto w-full overflow-hidden rounded-2xl bg-brand-50 sm:rounded-3xl"
-      style={{ maxWidth: `calc(var(--banner-h) * ${ratio})` }}
       aria-roledescription="карусель"
       aria-label="Акции и предложения"
       onMouseEnter={() => setPaused(true)}
@@ -86,10 +78,7 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
       onBlur={() => setPaused(false)}
       onKeyDown={onKeyDown}
     >
-      <div
-        className="hero-banner-frame relative w-full"
-        style={{ aspectRatio: `${shown.width} / ${shown.height}` }}
-      >
+      <div className="hero-banner-frame relative w-full">
         {banners.map(({ src, width, height }, i) => (
           <Link
             key={src}
@@ -123,10 +112,9 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 92vw, (max-width: 1536px) 80vw, 1500px"
               priority={i === 0}
               loading={i === 0 ? undefined : "lazy"}
-              // object-contain: картинка вписывается целиком. Для текущего
-              // слайда рамка ровно его пропорций, так что полей не остаётся;
-              // поля мелькнут только у соседнего кадра во время перелистывания.
-              className="absolute inset-0 h-full w-full object-contain"
+              // object-cover: кадр заполняет постоянную рамку без полей,
+              // лишнее обрезается симметрично от центра.
+              className="absolute inset-0 h-full w-full object-cover object-center"
             />
           </Link>
         ))}
@@ -162,7 +150,7 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
 
 function FallbackHero() {
   return (
-    <section className="hero-banner mx-auto w-full overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white sm:rounded-3xl sm:p-10" style={{ maxWidth: "calc(var(--banner-h) * 2.4)" }}>
+    <section className="hero-banner mx-auto w-full overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white sm:rounded-3xl sm:p-10">
       <div className="max-w-2xl">
         <span className="badge bg-white/15 text-white">
           <LeafIcon className="mr-1 h-4 w-4" /> Сезон посадки открыт

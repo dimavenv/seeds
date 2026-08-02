@@ -79,6 +79,55 @@ export function promoDiscount(
   return Math.max(0, Math.floor(Math.min(raw, subtotal)));
 }
 
+// Подпись скидки для интерфейса и писем. Проценты имеют приоритет над
+// фиксированной суммой — так же, как в promoDiscount.
+export function promoLabel(rule: Pick<PromoRule, "percent" | "amount">): string {
+  if (rule.percent > 0) return `−${rule.percent}% на товары`;
+  if (rule.amount > 0) return `−${rule.amount} ₽ на заказ`;
+  return "";
+}
+
+// ===== Срок действия =====
+//
+// Даты сравниваем СТРОКАМИ «ГГГГ-ММ-ДД», а не мгновениями времени. Продавец
+// думает днями («до 31 августа включительно»), сервер живёт по UTC, покупатель
+// — по своему поясу; сравнение дат-строк убирает из этого весь часовой
+// арифметический фольклор. Цена решения — код перестаёт работать в полночь по
+// времени сервера, и это ровно то, чего ждёт продавец.
+
+// «2026-08-31 00:00:00.000Z» / «2026-08-31T00:00:00Z» → «2026-08-31».
+export function promoDateKey(value: unknown): string {
+  return typeof value === "string" ? value.slice(0, 10) : "";
+}
+
+export function todayKey(now: Date = new Date()): string {
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${m}-${d}`;
+}
+
+export type PromoSchedule = {
+  enabled: boolean;
+  startsAt: string; // «» — без ограничения
+  expiresAt: string;
+};
+
+export type PromoStatus = "active" | "disabled" | "scheduled" | "expired";
+
+export function promoStatus(
+  p: PromoSchedule,
+  today: string = todayKey()
+): PromoStatus {
+  if (!p.enabled) return "disabled";
+  const from = promoDateKey(p.startsAt);
+  const to = promoDateKey(p.expiresAt);
+  if (from && today < from) return "scheduled";
+  // Последний день — рабочий: «действует по 31 августа» значит, что 31-го код
+  // ещё принимается.
+  if (to && today > to) return "expired";
+  return "active";
+}
+
 // Где браузер держит применённый промокод. Только для показа: между корзиной
 // и оформлением, и чтобы код не терялся при перезагрузке. На сервер отсюда
 // уходит лишь сам код — скидку сервер считает сам.

@@ -10,6 +10,7 @@ const LINKS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/admin/analytics", label: "Аналитика" },
   { href: "/admin/products", label: "Товары" },
   { href: "/admin/orders", label: "Заказы" },
+  { href: "/admin/promos", label: "Промокоды" },
   { href: "/admin/support", label: "Заявки" },
   { href: "/admin/reviews", label: "Отзывы" },
   { href: "/account", label: "Личный кабинет", exact: true },

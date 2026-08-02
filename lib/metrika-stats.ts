@@ -20,7 +20,16 @@ const MANAGEMENT_API = "https://api-metrika.yandex.net/management/v1/counter";
 // задержкой, а лимит API — 5000 запросов в сутки на счётчик. Без кэша каждое
 // обновление админки било бы по нему четырьмя запросами.
 const REVALIDATE_SECONDS = 600;
-const TIMEOUT_MS = 10000;
+// Первый запрос к Метрике идёт «на холодную» (кэша ещё нет) и вместе с
+// остальными пятью — API отвечает не мгновенно, особенно когда у Яндекса
+// техработы. Десяти секунд не хватало: запрос отваливался по таймауту, и
+// админка показывала запасной вид, а после обновления страницы (данные уже в
+// кэше) всё работало. Отсюда 20 секунд и один повтор.
+const TIMEOUT_MS = 20000;
+const RETRIES = 1;
+const RETRY_DELAY_MS = 400;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type MetrikaFailure = {
   ok: false;
@@ -129,13 +138,60 @@ function daysAgo(n: number): Date {
 
 // --- Запрос -----------------------------------------------------------------
 
+// Один запрос к API Метрики с повтором. Повторяем только сетевые сбои,
+// таймауты и 5xx: на 401 и 4xx повтор ничего не изменит, а лишний запрос
+// съедает суточный лимит.
+async function fetchJson(
+  url: URL | string,
+  revalidate: number,
+  what: string
+): Promise<MetrikaResult<{ json: unknown }>> {
+  const oauth = token();
+  let last: MetrikaFailure = {
+    ok: false,
+    reason: "unavailable",
+    message: "Метрика не отвечает — попробуйте обновить страницу позже.",
+  };
+
+  for (let attempt = 0; attempt <= RETRIES; attempt++) {
+    if (attempt > 0) await sleep(RETRY_DELAY_MS);
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `OAuth ${oauth}` },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        next: { revalidate },
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        return {
+          ok: false,
+          reason: "unauthorized",
+          message:
+            "Метрика не приняла токен: он истёк или у аккаунта нет доступа к счётчику.",
+        };
+      }
+      if (res.ok) return { ok: true, json: await res.json() };
+
+      last = {
+        ok: false,
+        reason: "unavailable",
+        message: `Метрика ответила ошибкой ${res.status} (${what}).`,
+      };
+      // 4xx (кроме 429) — наша ошибка в запросе, повтор бессмыслен.
+      if (res.status < 500 && res.status !== 429) return last;
+    } catch (e) {
+      console.error(`[metrika] ${what}: запрос не прошёл (попытка ${attempt + 1}):`, e);
+    }
+  }
+  return last;
+}
+
 async function request(
   path: "" | "/bytime",
   params: Record<string, string | number>
 ): Promise<MetrikaResult<{ json: unknown }>> {
   const id = counterId();
-  const oauth = token();
-  if (!id || !oauth) return NOT_CONFIGURED;
+  if (!id || !token()) return NOT_CONFIGURED;
 
   const url = new URL(STAT_API + path);
   url.searchParams.set("ids", id);
@@ -147,77 +203,16 @@ async function request(
     url.searchParams.set(k, String(v));
   }
 
-  try {
-    const res = await fetch(url, {
-      headers: { Authorization: `OAuth ${oauth}` },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      next: { revalidate: REVALIDATE_SECONDS },
-    });
-
-    if (res.status === 401 || res.status === 403) {
-      return {
-        ok: false,
-        reason: "unauthorized",
-        message:
-          "Метрика не приняла токен: он истёк или у аккаунта нет доступа к счётчику.",
-      };
-    }
-    if (!res.ok) {
-      return {
-        ok: false,
-        reason: "unavailable",
-        message: `Метрика ответила ошибкой ${res.status}.`,
-      };
-    }
-    return { ok: true, json: await res.json() };
-  } catch (e) {
-    console.error("[metrika] запрос к Stat API не прошёл:", e);
-    return {
-      ok: false,
-      reason: "unavailable",
-      message: "Метрика не отвечает — попробуйте обновить страницу позже.",
-    };
-  }
+  return fetchJson(url, REVALIDATE_SECONDS, "статистика");
 }
 
 // Список целей счётчика (Management API). Отдельная функция, а не параметр
 // request(): другой адрес и другая форма ответа.
 async function requestGoals(): Promise<MetrikaResult<{ json: unknown }>> {
   const id = counterId();
-  const oauth = token();
-  if (!id || !oauth) return NOT_CONFIGURED;
-
-  try {
-    const res = await fetch(`${MANAGEMENT_API}/${id}/goals`, {
-      headers: { Authorization: `OAuth ${oauth}` },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      // Список целей меняется раз в жизни — держим дольше статистики.
-      next: { revalidate: 3600 },
-    });
-    if (res.status === 401 || res.status === 403) {
-      return {
-        ok: false,
-        reason: "unauthorized",
-        message:
-          "Метрика не приняла токен: он истёк или у аккаунта нет доступа к счётчику.",
-      };
-    }
-    if (!res.ok) {
-      return {
-        ok: false,
-        reason: "unavailable",
-        message: `Метрика ответила ошибкой ${res.status} на запрос списка целей.`,
-      };
-    }
-    return { ok: true, json: await res.json() };
-  } catch (e) {
-    console.error("[metrika] список целей не получен:", e);
-    return {
-      ok: false,
-      reason: "unavailable",
-      message: "Метрика не отвечает — попробуйте обновить страницу позже.",
-    };
-  }
+  if (!id || !token()) return NOT_CONFIGURED;
+  // Список целей меняется раз в жизни — держим в кэше дольше статистики.
+  return fetchJson(`${MANAGEMENT_API}/${id}/goals`, 3600, "список целей");
 }
 
 // --- Разбор ответов ---------------------------------------------------------

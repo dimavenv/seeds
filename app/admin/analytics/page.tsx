@@ -202,24 +202,23 @@ export default async function AdminAnalytics({
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <BreakdownBars
-          title={BREAKDOWNS.sources.title}
-          rows={rowsOf(sources)}
-        />
-        <BreakdownBars
-          title={BREAKDOWNS.devices.title}
-          rows={rowsOf(devices)}
-        />
-        <BreakdownBars title={BREAKDOWNS.cities.title} rows={rowsOf(cities)} />
+        <BreakdownBars title={BREAKDOWNS.sources.title} {...breakdown(sources)} />
+        <BreakdownBars title={BREAKDOWNS.devices.title} {...breakdown(devices)} />
+        <BreakdownBars title={BREAKDOWNS.cities.title} {...breakdown(cities)} />
         <BreakdownBars
           title={BREAKDOWNS.entryPages.title}
-          rows={rowsOf(entryPages)}
+          {...breakdown(entryPages)}
         />
       </div>
 
-      {/* Воронка по целям Метрики. Пока целей нет — на её месте инструкция,
-          как их завести: пустая карточка «нет данных» ничему не учит. */}
-      {goalStats.ok && goalStats.goals.length > 0 ? (
+      {/* Воронка по целям Метрики. Три разных случая, и путать их нельзя:
+          цели есть — воронка; целей нет — инструкция, как завести; запрос не
+          удался — так и говорим. Раньше сбой запроса показывал инструкцию, и
+          выглядело это как «аналитика превратилась в таблицу», хотя цели
+          давно заведены. */}
+      {!goalStats.ok ? (
+        <FetchFailed failure={goalStats} what="Путь покупателя" />
+      ) : goalStats.goals.length > 0 ? (
         <>
           <GoalFunnel
             goals={goalStats.goals}
@@ -230,14 +229,45 @@ export default async function AdminAnalytics({
           <GoalsHelp missing={goalStats.missing} />
         </>
       ) : (
-        <GoalsHelp missing={goalStats.ok ? goalStats.missing : undefined} />
+        <GoalsHelp missing={goalStats.missing} />
       )}
     </div>
   );
 }
 
-function rowsOf(res: { ok: true; rows: BreakdownRow[] } | MetrikaFailure): BreakdownRow[] {
-  return res.ok ? res.rows : [];
+// Срез посещаемости: «данных нет» и «не смогли получить» — разные вещи, и
+// подпись в карточке должна их различать.
+function breakdown(
+  res: { ok: true; rows: BreakdownRow[] } | MetrikaFailure
+): { rows: BreakdownRow[]; empty?: string } {
+  if (res.ok) return { rows: res.rows };
+  return {
+    rows: [],
+    empty:
+      res.reason === "unauthorized"
+        ? "Метрика не приняла токен"
+        : "Не удалось получить данные — обновите страницу",
+  };
+}
+
+// Карточка на месте блока, данные для которого получить не удалось.
+function FetchFailed({
+  failure,
+  what,
+}: {
+  failure: MetrikaFailure;
+  what: string;
+}) {
+  return (
+    <div className="card p-5">
+      <h2 className="font-bold text-brand-800">{what}</h2>
+      <p className="mt-2 text-sm text-brand-600">{failure.message}</p>
+      <p className="mt-1 text-sm text-brand-400">
+        Это сбой запроса к Метрике, а не потеря настроек: цели и счётчик на
+        месте. Обычно помогает обновить страницу.
+      </p>
+    </div>
+  );
 }
 
 function PeriodTabs({ period }: { period: Period }) {
@@ -339,7 +369,10 @@ function NotConnected({
         </div>
       </div>
 
-      <GoalsHelp />
+      {/* Список целей уместен, только пока Метрика вообще не подключена. При
+          сбое запроса цели давно заведены — показывать инструкцию значит
+          пугать зря. */}
+      {failure.reason === "not-configured" && <GoalsHelp />}
     </div>
   );
 }
