@@ -87,7 +87,6 @@ export type Order = {
   discount?: number;
   tracking_number?: string | null;
   payment_status?: PaymentStatus;
-  alfa_order_id?: string | null;
   // Сколько рублей уже возвращено покупателю (частичные возвраты суммируются).
   refunded_amount?: number;
   user_id: string | null;

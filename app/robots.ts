@@ -21,6 +21,10 @@ export default function robots(): MetadataRoute.Robots {
         "/checkout",
         "/favorites",
         "/order/",
+        // Адреса возврата с оплаты Robokassa: страниц как таковых нет, это
+        // редиректы на карточку заказа — индексировать нечего.
+        "/payment/success",
+        "/payment/fail",
         "/login",
         "/register",
         "/*?sort=",

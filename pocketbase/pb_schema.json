@@ -818,10 +818,6 @@
         "maxSelect": 1
       },
       {
-        "name": "alfa_order_id",
-        "type": "text"
-      },
-      {
         "name": "refunded_amount",
         "type": "number"
       },

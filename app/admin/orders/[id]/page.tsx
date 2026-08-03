@@ -82,6 +82,7 @@ export default async function AdminOrderDetail({
         <div className="flex flex-wrap items-center gap-3">
           <OrderPayment
             id={order.id}
+            orderNumber={order.number}
             status={order.payment_status ?? "unpaid"}
             total={order.total}
             refundedAmount={order.refunded_amount ?? 0}

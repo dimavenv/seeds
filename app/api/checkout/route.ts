@@ -7,7 +7,11 @@ import { normalizeCheckoutItems, findStockIssues, stockShortageMessage } from "@
 import { reserveStock, releaseStock } from "@/lib/stock";
 import { deliveryCostFor, normalizeDeliveryMethod, ozonRestriction } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
-import { isAlfaConfigured, alfaRegister } from "@/lib/alfa";
+import {
+  isRobokassaConfigured,
+  buildRobokassaPayment,
+  invoiceTtlMinutes,
+} from "@/lib/robokassa";
 import { mailOrderPlaced } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
@@ -376,65 +380,70 @@ export async function POST(request: Request) {
       );
     }
 
-    // Онлайн-оплата (если подключён Альфа-Банк). Если платёж создать не
-    // удалось — заказ УДАЛЯЕТСЯ, а покупателю возвращается ошибка: корзина у
-    // него остаётся, «неоплачиваемых» заказов в базе не копим.
-    if (isAlfaConfigured()) {
-      let reg: Awaited<ReturnType<typeof alfaRegister>> | null = null;
+    // Онлайн-оплата (если подключена Robokassa). Счёт нигде не «регистрируется»
+    // заранее: сайт подписывает параметры Паролем#1 и отдаёт браузеру данные
+    // POST-формы на платёжную страницу. Номер счёта у Robokassa (InvId) — это
+    // номер заказа: по нему приходит уведомление об оплате и по нему же
+    // операция ищется в личном кабинете.
+    if (isRobokassaConfigured()) {
       try {
-        const base = (process.env.SITE_URL || "https://tomatsemena.ru").replace(/\/+$/, "");
-        reg = await alfaRegister({
-          orderNumber: order.id, // уникальный стабильный id записи заказа
-          amount: String(Math.round(total * 100)), // рубли → копейки
-          currency: "643", // RUB по ISO 4217
-          returnUrl: `${base}/order/${order.number}?paid=1`,
-          failUrl: `${base}/order/${order.number}?failed=1`,
+        const ttl = invoiceTtlMinutes();
+        const payment = buildRobokassaPayment({
+          invId: order.number,
+          amount: total,
           description: `Заказ №${order.number}`,
-          language: "ru",
-          ...(email?.trim() ? { email: email.trim() } : {}),
+          email: email?.trim() || null,
+          // Состав — для фискального чека (если чек включён): скидка по
+          // промокоду размазывается по товарам, доставка идёт отдельной
+          // позицией-услугой, сумма чека сходится с суммой платежа.
+          lines: lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
+          deliveryCost,
+          discount,
+          // Счёт протухает раньше, чем уборка удалит зависший заказ, — иначе
+          // покупатель мог бы оплатить уже удалённый заказ.
+          expiresAt: ttl > 0 ? new Date(Date.now() + ttl * 60_000) : null,
         });
-      } catch (e) {
-        console.error(`[checkout] заказ №${order.number}: онлайн-оплата не создана:`, e);
-        reg = null;
-      }
 
-      if (reg?.formUrl && reg.orderId) {
-        try {
-          await pb.collection("orders").update(order.id, {
-            alfa_order_id: reg.orderId,
-            payment_status: "pending",
+        await pb
+          .collection("orders")
+          .update(order.id, { payment_status: "pending" })
+          .catch((e) => {
+            // Не критично: уведомление об оплате всё равно найдёт заказ по
+            // номеру и переведёт его в «оплачен».
+            console.error(
+              `[checkout] заказ №${order.number}: не записался статус оплаты:`,
+              e
+            );
           });
-        } catch (e) {
-          // Оплата в банке уже создана — ведём покупателя на форму, а сбой
-          // записи логируем (без alfa_order_id не сработает возврат из админки).
-          console.error(`[checkout] заказ №${order.number}: не записался alfa_order_id:`, e);
-        }
-        // Письмо «заказ принят» здесь не шлём: придёт «оплата получена»
-        // после успешной оплаты (callback), а неоплаченный заказ удалится.
-        return NextResponse.json({ id: order.number, total, formUrl: reg.formUrl });
-      }
 
-      // Платёж не создался — откатываем заказ целиком, корзина у покупателя
-      // цела, зарезервированный товар возвращаем на склад.
-      if (reg?.errorMessage) {
-        console.error(`[checkout] заказ №${order.number}: банк отказал — ${reg.errorMessage}`);
+        // Письмо «заказ принят» здесь не шлём: придёт «оплата получена»
+        // после успешной оплаты (Result URL), а неоплаченный заказ удалится.
+        return NextResponse.json({ id: order.number, total, payment });
+      } catch (e) {
+        // Сюда попадём только при кривых настройках (например, неизвестный
+        // алгоритм хеша) — заказ откатываем целиком, корзина у покупателя
+        // цела, зарезервированный товар возвращаем на склад.
+        console.error(
+          `[checkout] заказ №${order.number}: не удалось собрать платёж Robokassa:`,
+          e
+        );
+        await releaseStock(pb, reserveLines);
+        if (promoUseId) await releasePromoUse(pb, promoUseId);
+        for (const l of await pb
+          .collection("order_items")
+          .getFullList({ filter: pb.filter("order = {:id}", { id: order.id }), fields: "id" })
+          .catch(() => [] as { id: string }[])) {
+          await pb.collection("order_items").delete(l.id).catch(() => {});
+        }
+        await pb.collection("orders").delete(order.id).catch(() => {});
+        return NextResponse.json(
+          {
+            error:
+              "Онлайн-оплата сейчас недоступна — заказ не оформлен, товары остались в корзине. Попробуйте ещё раз через пару минут.",
+          },
+          { status: 502 }
+        );
       }
-      await releaseStock(pb, reserveLines);
-      if (promoUseId) await releasePromoUse(pb, promoUseId);
-      for (const l of await pb
-        .collection("order_items")
-        .getFullList({ filter: pb.filter("order = {:id}", { id: order.id }), fields: "id" })
-        .catch(() => [] as { id: string }[])) {
-        await pb.collection("order_items").delete(l.id).catch(() => {});
-      }
-      await pb.collection("orders").delete(order.id).catch(() => {});
-      return NextResponse.json(
-        {
-          error:
-            "Онлайн-оплата сейчас недоступна — заказ не оформлен, товары остались в корзине. Попробуйте ещё раз через пару минут.",
-        },
-        { status: 502 }
-      );
     }
 
     // Без онлайн-оплаты заказ оформлен сразу и окончательно. Товар уже

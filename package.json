@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
+    "check:pay": "node scripts/check-robokassa.mjs",
     "pb:fetch": "node scripts/fetch-pocketbase.mjs",
     "db:schema": "node scripts/pb-import-schema.mjs",
     "db:slugs": "node scripts/pb-backfill-slugs.mjs",

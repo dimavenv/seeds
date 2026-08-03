@@ -24,12 +24,15 @@ export type RefundableItem = {
 
 export default function OrderPayment({
   id,
+  orderNumber,
   status,
   total,
   refundedAmount,
   items,
 }: {
   id: string;
+  // Номер заказа = номер счёта в Robokassa: по нему операция ищется в ЛК.
+  orderNumber?: number;
   status: PaymentStatus;
   total: number;
   refundedAmount: number;
@@ -39,6 +42,9 @@ export default function OrderPayment({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // Robokassa ещё не показывает возврат по операции — предупреждаем, что в ЛК
+  // возврат, похоже, не доведён до конца.
+  const [warning, setWarning] = useState<string | null>(null);
   // full — весь остаток (включая доставку); items — выбранные позиции.
   const [mode, setMode] = useState<"full" | "items">("full");
   // Сколько штук каждой позиции вернуть (0 — не возвращать).
@@ -58,6 +64,7 @@ export default function OrderPayment({
   function openModal() {
     setError(null);
     setDone(null);
+    setWarning(null);
     setMode("full");
     setPicked({});
     setOpen(true);
@@ -80,14 +87,19 @@ export default function OrderPayment({
                 .filter(([, q]) => q > 0)
                 .map(([itemId, q]) => ({ id: itemId, qty: q })),
             }
-      ).catch(() => ({ error: "Не удалось выполнить возврат — попробуйте ещё раз" } as const));
+      ).catch(() => ({ error: "Не удалось отметить возврат — попробуйте ещё раз" } as const));
       if ("error" in res && res.error) {
         setError(res.error);
       } else if ("ok" in res && res.ok) {
         setDone(
           res.full
-            ? `Возврат ${formatPrice(res.refunded ?? refundSum)} оформлен — заказ возвращён полностью`
-            : `Частичный возврат ${formatPrice(res.refunded ?? refundSum)} оформлен`
+            ? `Возврат ${formatPrice(res.refunded ?? refundSum)} отмечен — заказ возвращён полностью`
+            : `Частичный возврат ${formatPrice(res.refunded ?? refundSum)} отмечен`
+        );
+        setWarning(
+          "unconfirmed" in res && res.unconfirmed
+            ? "Robokassa пока не показывает возврат по этой операции. Проверьте, что возврат в личном кабинете доведён до конца."
+            : null
         );
         router.refresh();
       }
@@ -107,7 +119,7 @@ export default function OrderPayment({
           onClick={openModal}
           className="text-xs font-semibold text-accent-600 hover:underline"
         >
-          Вернуть оплату
+          Отметить возврат
         </button>
       )}
 
@@ -152,6 +164,11 @@ export default function OrderPayment({
                   </svg>
                 </div>
                 <p className="font-semibold text-brand-800">{done}</p>
+                {warning ? (
+                  <p className="mx-auto mt-3 max-w-sm rounded-xl border border-amber-300/60 bg-amber-100/60 px-3 py-2 text-sm font-semibold text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
+                    {warning}
+                  </p>
+                ) : null}
                 <p className="mt-1 text-sm text-brand-500">
                   Покупателю отправлено письмо. Деньги вернутся на карту в течение 1–10 дней.
                 </p>
@@ -161,6 +178,25 @@ export default function OrderPayment({
               </div>
             ) : (
               <>
+                {/* Деньги возвращает продавец в личном кабинете Robokassa:
+                    API возврата для магазина там нет. Здесь возврат только
+                    фиксируется — чтобы совпали статус заказа, остаток к
+                    возврату и письмо покупателю. */}
+                <div className="mx-5 mt-4 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 text-xs text-brand-600">
+                  Деньги возвращаются в{" "}
+                  <a
+                    href="https://partner.robokassa.ru/"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="font-semibold text-accent-600 hover:underline"
+                  >
+                    личном кабинете Robokassa
+                  </a>{" "}
+                  — раздел «Операции и возвраты», операция по счёту №{orderNumber ?? "—"}.
+                  Здесь возврат только фиксируется: заказ поменяет статус, покупателю
+                  уйдёт письмо.
+                </div>
+
                 {/* Выбор: весь заказ или отдельные товары */}
                 <div className="grid grid-cols-2 gap-2 px-5 pt-4">
                   <button
@@ -302,7 +338,7 @@ export default function OrderPayment({
                       disabled={pending || refundSum <= 0}
                       className="btn-accent"
                     >
-                      {pending ? "Возврат…" : `Вернуть ${formatPrice(refundSum)}`}
+                      {pending ? "Отмечаем…" : `Отметить ${formatPrice(refundSum)}`}
                     </button>
                   </div>
                 </div>

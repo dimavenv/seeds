@@ -31,6 +31,27 @@ import { GOALS, reachGoal, stashPurchase } from "@/lib/metrika";
 
 const PROFILE_KEY = "checkout_profile";
 
+// Переход на платёжную страницу Robokassa. Отправляем именно POST-форму, а не
+// ссылку: фискальный чек с номенклатурой не влезает в ограничение длины URL, а
+// параметры платежа не попадают в историю браузера и в Referer. Форму собирает
+// браузер по данным, подписанным на сервере (см. lib/robokassa.ts).
+function submitPaymentForm(url: string, fields: Record<string, string>) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = url;
+  form.acceptCharset = "utf-8";
+  form.style.display = "none";
+  for (const [name, value] of Object.entries(fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
+
 type SavedProfile = {
   form: {
     last_name: string;
@@ -262,7 +283,7 @@ export default function CheckoutPage() {
       }
       // Состав заказа для цели «покупка». Саму цель засчитывает страница
       // подтверждения: при онлайн-оплате между этим моментом и оплатой лежит
-      // форма Альфа-Банка, и заказ ещё может сорваться. Здесь только
+      // платёжная страница Robokassa, и заказ ещё может сорваться. Здесь только
       // складываем состав — на странице «спасибо» его уже неоткуда взять
       // (корзина к тому времени очищена).
       stashPurchase({
@@ -284,11 +305,11 @@ export default function CheckoutPage() {
         secureClear(PROFILE_KEY);
       }
 
-      // Онлайн-оплата подключена — переходим на платёжную форму Альфа-Банка.
+      // Онлайн-оплата подключена — уходим на платёжную страницу Robokassa.
       // Корзину НЕ чистим: если оплата не пройдёт, товары останутся у
       // покупателя (очистка — на странице заказа при возврате с ?paid=1).
-      if (data.formUrl) {
-        window.location.href = data.formUrl;
+      if (data.payment?.url && data.payment?.fields) {
+        submitPaymentForm(data.payment.url, data.payment.fields);
         return;
       }
 

@@ -28,7 +28,7 @@ const nextConfig = {
       "frame-ancestors 'none'",
       "object-src 'none'",
       "base-uri 'self'",
-      "form-action 'self' https://pay.alfabank.ru https://payment.alfabank.ru https://alfa.rbsuat.com",
+      "form-action 'self' https://auth.robokassa.ru",
     ].join("; ");
     return [
       {

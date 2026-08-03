@@ -246,23 +246,37 @@ export type RefundSelection =
   | { mode: "full" }
   | { mode: "items"; items: { id: string; qty: number }[] };
 
-// Возврат оплаты через Альфа-Банк — полный или частичный (по товарам).
-// Статус в базе меняется ТОЛЬКО после того, как банк принял возврат и
-// подтвердил его в статусе платежа — иначе (нет денег на счёте, сеть упала)
-// заказ остаётся «оплачен», а админ видит причину отказа.
+// Фиксация возврата оплаты — полного или частичного (по товарам).
+//
+// ВАЖНО про Robokassa: сами деньги возвращаются в личном кабинете Robokassa
+// («Операции и возвраты» → нужная операция → «Вернуть»), API возврата для
+// обычного магазина там не предусмотрен. Эта функция ничего не списывает и не
+// возвращает — она фиксирует уже сделанный в ЛК возврат: помечает
+// возвращённые позиции, пересчитывает статус оплаты и отправляет покупателю
+// письмо о возврате. Порядок действий описан в SETUP-PAYMENTS-RU.md.
+//
+// Чтобы не отметить возврат, которого не было, состояние операции по
+// возможности сверяется с Robokassa (XML OpStateExt): состояние 60 означает
+// «деньги возвращены покупателю». Сверка мягкая — при полном возврате она
+// подтверждает, а при частичном Robokassa оставляет операцию выполненной.
 export async function refundOrder(
   id: string,
   selection: RefundSelection = { mode: "full" }
-): Promise<{ ok?: boolean; error?: string; refunded?: number; full?: boolean }> {
+): Promise<{
+  ok?: boolean;
+  error?: string;
+  refunded?: number;
+  full?: boolean;
+  // Robokassa ещё не показывает возврат по этой операции — админке есть о чём
+  // предупредить (возврат мог быть не доведён до конца в ЛК).
+  unconfirmed?: boolean;
+}> {
   const { session } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
 
-  const { isAlfaConfigured, alfaRefund, alfaStatus } = await import("@/lib/alfa");
-  if (!isAlfaConfigured()) return { error: "Онлайн-оплата не подключена" };
-
   const pb = await pbAdmin();
   let order: {
-    alfa_order_id: string;
+    number: number;
     total: number;
     payment_status: string;
     refunded_amount: number;
@@ -274,7 +288,7 @@ export async function refundOrder(
   try {
     const rec = await pb.collection("orders").getOne(id);
     order = {
-      alfa_order_id: String(rec.alfa_order_id ?? ""),
+      number: Number(rec.number ?? 0),
       total: Number(rec.total ?? 0),
       payment_status: String(rec.payment_status ?? ""),
       refunded_amount: Number(rec.refunded_amount ?? 0),
@@ -295,7 +309,6 @@ export async function refundOrder(
     return { error: "Заказ не найден" };
   }
   if (order.payment_status !== "paid") return { error: "Заказ не оплачен онлайн" };
-  if (!order.alfa_order_id) return { error: "Нет идентификатора платежа" };
 
   // Остаток, который вообще можно вернуть по этому платежу.
   const remaining = Math.round((order.total - order.refunded_amount) * 100) / 100;
@@ -335,41 +348,30 @@ export async function refundOrder(
       .filter((it) => it.qty - it.refunded_qty > 0)
       .map((it) => ({ id: it.id, take: it.qty - it.refunded_qty, name: it.name, price: it.price, qty: it.qty }));
   }
-  const amountKopecks = Math.round(amount * 100);
+  const newRefundedTotal = Math.round((order.refunded_amount + amount) * 100) / 100;
+  const willBeFull = newRefundedTotal >= order.total - 0.005;
 
-  let res: { errorCode?: string; errorMessage?: string };
+  // Мягкая сверка с Robokassa: полный возврат там виден как состояние 60.
+  // Если сервис недоступен или возврат частичный — просто не подтверждаем,
+  // отметку это не блокирует (деньги возвращает админ в ЛК, а не сайт).
+  let unconfirmed = false;
   try {
-    res = await alfaRefund(order.alfa_order_id, String(amountKopecks));
-  } catch {
-    return { error: "Банк недоступен — возврат не выполнен, попробуйте позже" };
-  }
-  if (res.errorCode && String(res.errorCode) !== "0") {
-    return { error: res.errorMessage || "Банк отклонил возврат" };
-  }
-
-  // Банк ответил «ок» — сверяем со статусом платежа, что деньги действительно
-  // ушли в возврат (при нехватке средств на счёте операция не проводится).
-  try {
-    const st = await alfaStatus(order.alfa_order_id);
-    const refundedKopecks = st.paymentAmountInfo?.refundedAmount;
-    if (
-      typeof refundedKopecks === "number" &&
-      refundedKopecks < Math.round(order.refunded_amount * 100) + amountKopecks
-    ) {
-      return {
-        error:
-          "Банк не подтвердил возврат — возможно, на счёте не хватает средств. Статус заказа не изменён.",
-      };
+    const { isRobokassaConfigured, robokassaOpState, ROBOKASSA_STATE } =
+      await import("@/lib/robokassa");
+    if (isRobokassaConfigured() && order.number > 0 && willBeFull) {
+      const state = await robokassaOpState(order.number);
+      unconfirmed =
+        state.resultCode === 0 && state.stateCode !== ROBOKASSA_STATE.refunded;
     }
   } catch {
-    // Статус недоступен, но refund.do прошёл — считаем возврат выполненным.
+    // Состояние не спросили — отметку всё равно ставим (это ручное действие).
   }
 
-  // Возврат подтверждён — фиксируем в базе. Остаток на склад автоматически НЕ
+  // Фиксируем возврат в базе. Остаток на склад автоматически НЕ
   // возвращаем (товар мог быть уже отгружён) — это ручное решение админа,
   // как и договаривались по возвратам/отменам.
-  const newRefunded = Math.round((order.refunded_amount + amount) * 100) / 100;
-  const full = newRefunded >= order.total - 0.005;
+  const newRefunded = newRefundedTotal;
+  const full = willBeFull;
   for (const r of refundedItems) {
     const it = items.find((x) => x.id === r.id);
     await pb
@@ -397,7 +399,7 @@ export async function refundOrder(
   }
   revalidatePath("/admin/orders");
   revalidatePath("/account");
-  return { ok: true, refunded: amount, full };
+  return { ok: true, refunded: amount, full, unconfirmed };
 }
 
 // Удаление тестового/мусорного заказа вместе с составом. Необратимо —
