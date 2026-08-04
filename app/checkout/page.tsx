@@ -286,8 +286,12 @@ export default function CheckoutPage() {
       // платёжная страница Robokassa, и заказ ещё может сорваться. Здесь только
       // складываем состав — на странице «спасибо» его уже неоткуда взять
       // (корзина к тому времени очищена).
+      //
+      // При онлайн-оплате заказа ещё не существует (он создаётся после оплаты),
+      // поэтому складываем состав под номером счёта — страница подтверждения
+      // получит его параметром inv и сверит по нему.
       stashPurchase({
-        orderId: String(data.id),
+        orderId: String(data.invoiceId ?? data.id),
         revenue: Number(data.total) || grandTotal,
         coupon: promo?.code,
         products: cart.map((i) => ({

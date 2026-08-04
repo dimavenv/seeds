@@ -1,81 +1,94 @@
 import "server-only";
 import type PocketBase from "pocketbase";
-import { restockOrderItems } from "@/lib/stock";
-import { restoreUserCart } from "@/lib/user-cart";
-import { releasePromoUseByOrder } from "@/lib/promo-server";
+import {
+  DRAFTS_COLLECTION,
+  materializePaidOrder,
+  releasePaymentDraft,
+  type PaymentDraft,
+} from "@/lib/order-draft";
 
-// Уборка зависших неоплаченных заказов ("пустышек"): покупатель ушёл с платёжной
-// формы и callback от банка так и не пришёл. Такие заказы (новые, ждут оплаты
-// дольше TTL) удаляем, а зарезервированный при оформлении товар возвращаем на
-// склад (иначе он завис бы навсегда — аудит 2.4, hoarding-DoS).
+// Уборка протухших черновиков оплаты: покупатель ушёл с платёжной страницы и
+// не заплатил. Заказа в базе при этом нет (он создаётся только после оплаты,
+// см. lib/order-draft.ts) — но зарезервированные при оформлении товар и
+// промокод вернуть надо, иначе они зависли бы навсегда (аудит 2.4,
+// hoarding-DoS).
 //
 // Запускается двумя путями: оппортунистически при оформлении следующего заказа
 // (см. /api/checkout) и по расписанию через /api/cron/cleanup — чтобы уборка не
 // зависела от наличия трафика.
 //
-// ВАЖНО про безопасность оплаты: короткий TTL опасен тем, что можно удалить
-// заказ, по которому покупатель ПРЯМО СЕЙЧАС платит на платёжной странице
-// (тогда уведомление об оплате не найдёт заказ — деньги списаны, заказа нет).
-// Защит две. Первая: счёт в Robokassa выставляется с ограниченным сроком
-// действия (ExpirationDate = этот же TTL, см. lib/robokassa.ts) — после него
-// оплатить его уже нельзя. Вторая: перед удалением спрашиваем у Robokassa
-// состояние операции и НЕ трогаем заказ, если деньги в работе; при
-// недоступности сервиса тоже не удаляем.
+// ВАЖНО про безопасность оплаты: короткий TTL опасен тем, что можно снять
+// резерв по счёту, который покупатель ПРЯМО СЕЙЧАС оплачивает. Защит две.
+// Первая: счёт в Robokassa выставляется с ограниченным сроком действия
+// (ExpirationDate = этот же TTL, см. lib/robokassa.ts) — после него оплатить
+// его уже нельзя. Вторая: перед удалением спрашиваем у Robokassa состояние
+// операции. Если деньги всё-таки получены, а уведомление об оплате не дошло —
+// уборка не удаляет черновик, а достраивает по нему заказ.
 export const DEFAULT_PENDING_TTL_MS = 20 * 60 * 1000; // 20 минут
 
-export async function cleanupStalePendingOrders(
+export async function cleanupStalePaymentDrafts(
   pb: PocketBase,
   opts: { ttlMs?: number } = {}
-): Promise<number> {
+): Promise<{ removed: number; rescued: number }> {
   const ttlMs = opts.ttlMs ?? DEFAULT_PENDING_TTL_MS;
   const cutoff = new Date(Date.now() - ttlMs)
     .toISOString()
     .replace("T", " "); // формат дат PocketBase
 
-  const stale = await pb.collection("orders").getFullList({
-    filter: pb.filter(
-      'status = "new" && payment_status = "pending" && placed_at < {:cutoff}',
-      { cutoff }
-    ),
-    fields: "id,number,user",
+  const stale = await pb.collection(DRAFTS_COLLECTION).getFullList({
+    filter: pb.filter("placed_at < {:cutoff}", { cutoff }),
   });
 
   let removed = 0;
-  for (const o of stale) {
-    // Номер заказа — он же номер счёта (InvId) в Robokassa: спрашиваем, что
-    // с деньгами по этому счёту.
-    const invId = Number((o as { number?: unknown }).number ?? 0);
+  let rescued = 0;
+  for (const rec of stale) {
+    const invId = Number(rec.inv_id ?? 0);
+    let paid = false;
     if (Number.isInteger(invId) && invId > 0) {
       try {
-        const { isRobokassaConfigured, robokassaOpState, isMoneyInvolvedState } =
-          await import("@/lib/robokassa");
+        const {
+          isRobokassaConfigured,
+          robokassaOpState,
+          isPaidState,
+          isMoneyInvolvedState,
+        } = await import("@/lib/robokassa");
         if (isRobokassaConfigured()) {
           const state = await robokassaOpState(invId);
-          // Деньги получены/возвращены/зависли — такой заказ не удаляем.
-          if (isMoneyInvolvedState(state)) continue;
+          paid = isPaidState(state);
+          // Деньги в работе (операция приостановлена, идёт возврат) — не
+          // трогаем: разберёмся при следующем запуске или вручную.
+          if (!paid && isMoneyInvolvedState(state)) continue;
         }
       } catch {
-        // Не смогли узнать состояние — не рискуем удалять возможно оплаченный
-        // заказ. Уборка повторится при следующем запуске.
+        // Не смогли узнать состояние — не рискуем снимать резерв по счёту,
+        // который могли оплатить. Уборка повторится при следующем запуске.
         continue;
       }
     }
-    // Возвращаем резерв на склад и удаляем состав + сам заказ. Промокод,
-    // потраченный на этот заказ, тоже возвращаем покупателю: заказ не
-    // состоялся, а код одноразовый.
-    const items = await restockOrderItems(pb, o.id);
-    // Вошедшему покупателю возвращаем состав в серверную корзину — заказ не
-    // состоялся, товары не должны пропасть (у гостя корзина в localStorage и
-    // с сервера недостижима).
-    if (typeof o.user === "string" && o.user) {
-      await restoreUserCart(pb, o.user, items);
+
+    if (paid) {
+      // Уведомление об оплате не дошло — достраиваем заказ сами.
+      console.error(
+        `[robokassa] счёт ${invId}: оплата подтверждена, но уведомление не дошло — заказ создан уборкой`
+      );
+      const done = await materializePaidOrder(pb, invId).catch((e) => {
+        console.error(`[robokassa] счёт ${invId}: заказ создать не удалось:`, e);
+        return null;
+      });
+      if (done) rescued++;
+      continue;
     }
-    await releasePromoUseByOrder(pb, o.id);
-    for (const l of items) {
-      await pb.collection("order_items").delete(l.id).catch(() => {});
-    }
-    await pb.collection("orders").delete(o.id).catch(() => {});
+
+    const draft: PaymentDraft = {
+      id: String(rec.id),
+      invId,
+      payload:
+        typeof rec.payload === "string" ? JSON.parse(rec.payload) : rec.payload,
+      promoUseId: (rec.promo_use as string | null) || null,
+      placedAt: String(rec.placed_at ?? ""),
+    };
+    await releasePaymentDraft(pb, draft);
     removed++;
   }
-  return removed;
+  return { removed, rescued };
 }

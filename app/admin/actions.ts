@@ -246,19 +246,18 @@ export type RefundSelection =
   | { mode: "full" }
   | { mode: "items"; items: { id: string; qty: number }[] };
 
-// Фиксация возврата оплаты — полного или частичного (по товарам).
+// Возврат оплаты — полный или частичный (по товарам).
 //
-// ВАЖНО про Robokassa: сами деньги возвращаются в личном кабинете Robokassa
-// («Операции и возвраты» → нужная операция → «Вернуть»), API возврата для
-// обычного магазина там не предусмотрен. Эта функция ничего не списывает и не
-// возвращает — она фиксирует уже сделанный в ЛК возврат: помечает
-// возвращённые позиции, пересчитывает статус оплаты и отправляет покупателю
-// письмо о возврате. Порядок действий описан в SETUP-PAYMENTS-RU.md.
+// Как это работает у Robokassa. Если задан Пароль#3 (ключ Refund API), сайт
+// возвращает деньги сам: узнаёт ключ операции по номеру счёта (XML OpStateExt)
+// и отправляет запрос возврата (JWT на Пароле#3). Возврат асинхронный, поэтому
+// «отклонён» мы видим сразу, а «исполнен» может прийти чуть позже — статус
+// заказа в базе меняем, как только Robokassa приняла запрос.
 //
-// Чтобы не отметить возврат, которого не было, состояние операции по
-// возможности сверяется с Robokassa (XML OpStateExt): состояние 60 означает
-// «деньги возвращены покупателю». Сверка мягкая — при полном возврате она
-// подтверждает, а при частичном Robokassa оставляет операцию выполненной.
+// Если Пароль#3 не задан, функция работает как отметка: деньги возвращает
+// продавец в личном кабинете («Операции и возвраты»), а сайт фиксирует это —
+// помечает возвращённые позиции, пересчитывает статус оплаты и отправляет
+// покупателю письмо. Порядок описан в SETUP-PAYMENTS-RU.md.
 export async function refundOrder(
   id: string,
   selection: RefundSelection = { mode: "full" }
@@ -267,16 +266,19 @@ export async function refundOrder(
   error?: string;
   refunded?: number;
   full?: boolean;
-  // Robokassa ещё не показывает возврат по этой операции — админке есть о чём
-  // предупредить (возврат мог быть не доведён до конца в ЛК).
+  // Возврат ушёл в Robokassa и ещё исполняется (или его нельзя подтвердить) —
+  // админке есть о чём предупредить.
   unconfirmed?: boolean;
+  // true — деньги вернул сам сайт через API; false — админ отметил вручную.
+  viaApi?: boolean;
 }> {
   const { session } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
 
   const pb = await pbAdmin();
   let order: {
-    number: number;
+    // Номер счёта в Robokassa: по нему находится операция для возврата.
+    invoice_id: number;
     total: number;
     payment_status: string;
     refunded_amount: number;
@@ -288,7 +290,7 @@ export async function refundOrder(
   try {
     const rec = await pb.collection("orders").getOne(id);
     order = {
-      number: Number(rec.number ?? 0),
+      invoice_id: Number(rec.invoice_id ?? 0),
       total: Number(rec.total ?? 0),
       payment_status: String(rec.payment_status ?? ""),
       refunded_amount: Number(rec.refunded_amount ?? 0),
@@ -351,20 +353,84 @@ export async function refundOrder(
   const newRefundedTotal = Math.round((order.refunded_amount + amount) * 100) / 100;
   const willBeFull = newRefundedTotal >= order.total - 0.005;
 
-  // Мягкая сверка с Robokassa: полный возврат там виден как состояние 60.
-  // Если сервис недоступен или возврат частичный — просто не подтверждаем,
-  // отметку это не блокирует (деньги возвращает админ в ЛК, а не сайт).
+  const {
+    isRefundApiConfigured,
+    isRobokassaConfigured,
+    robokassaOpState,
+    robokassaRefund,
+    robokassaRefundState,
+    ROBOKASSA_STATE,
+  } = await import("@/lib/robokassa");
+
   let unconfirmed = false;
-  try {
-    const { isRobokassaConfigured, robokassaOpState, ROBOKASSA_STATE } =
-      await import("@/lib/robokassa");
-    if (isRobokassaConfigured() && order.number > 0 && willBeFull) {
-      const state = await robokassaOpState(order.number);
-      unconfirmed =
-        state.resultCode === 0 && state.stateCode !== ROBOKASSA_STATE.refunded;
+  const viaApi = isRefundApiConfigured() && order.invoice_id > 0;
+
+  if (viaApi) {
+    // ===== Возврат через Refund API =====
+    // Ключ операции знает только Robokassa — берём его по номеру счёта.
+    let opKey: string | null = null;
+    try {
+      const state = await robokassaOpState(order.invoice_id);
+      opKey = state.opKey;
+      if (state.resultCode !== 0 || !opKey) {
+        return {
+          error:
+            "Robokassa не нашла операцию по этому заказу — верните деньги в личном кабинете",
+        };
+      }
+    } catch {
+      return { error: "Robokassa недоступна — возврат не выполнен, попробуйте позже" };
     }
-  } catch {
-    // Состояние не спросили — отметку всё равно ставим (это ручное действие).
+
+    let res: Awaited<ReturnType<typeof robokassaRefund>>;
+    try {
+      // Частичный возврат — суммой; полный (первый и на весь остаток) можно
+      // отправить без суммы, но явная сумма надёжнее и читается в отчётах.
+      res = await robokassaRefund({ opKey, sum: amount });
+    } catch {
+      return { error: "Robokassa недоступна — возврат не выполнен, попробуйте позже" };
+    }
+    if (!res.ok) {
+      return {
+        error: res.message
+          ? `Robokassa отклонила возврат: ${res.message}`
+          : "Robokassa отклонила возврат",
+      };
+    }
+
+    // Возврат асинхронный: сразу после запроса он обычно ещё «в работе».
+    // Отклонение видно сразу — тогда статус заказа не трогаем.
+    if (res.requestId) {
+      try {
+        const state = await robokassaRefundState(res.requestId);
+        if (state.label === "canceled") {
+          return {
+            error: state.message
+              ? `Robokassa отменила возврат: ${state.message}`
+              : "Robokassa отменила возврат — статус заказа не изменён",
+          };
+        }
+        unconfirmed = state.label !== "finished";
+      } catch {
+        unconfirmed = true; // запрос принят, состояние узнать не смогли
+      }
+    } else {
+      unconfirmed = true;
+    }
+  } else {
+    // ===== Отметка возврата, сделанного в личном кабинете =====
+    // Мягкая сверка: полный возврат виден у Robokassa как состояние 60. Если
+    // сервис недоступен или возврат частичный — просто не подтверждаем,
+    // отметку это не блокирует (деньги вернул админ, а не сайт).
+    try {
+      if (isRobokassaConfigured() && order.invoice_id > 0 && willBeFull) {
+        const state = await robokassaOpState(order.invoice_id);
+        unconfirmed =
+          state.resultCode === 0 && state.stateCode !== ROBOKASSA_STATE.refunded;
+      }
+    } catch {
+      // Состояние не спросили — отметку всё равно ставим (это ручное действие).
+    }
   }
 
   // Фиксируем возврат в базе. Остаток на склад автоматически НЕ
@@ -399,7 +465,7 @@ export async function refundOrder(
   }
   revalidatePath("/admin/orders");
   revalidatePath("/account");
-  return { ok: true, refunded: amount, full, unconfirmed };
+  return { ok: true, refunded: amount, full, unconfirmed, viaApi };
 }
 
 // Удаление тестового/мусорного заказа вместе с составом. Необратимо —

@@ -16,7 +16,12 @@ import { mailOrderPlaced } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
-import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
+import { cleanupStalePaymentDrafts } from "@/lib/order-cleanup";
+import {
+  createOrderWithItems,
+  createPaymentDraft,
+  DRAFTS_COLLECTION,
+} from "@/lib/order-draft";
 import { normalizePromoCode } from "@/lib/promo";
 import {
   attachPromoUseToOrder,
@@ -40,17 +45,6 @@ async function bestEffortUserId(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-// Следующий человекочитаемый номер заказа (продолжает нумерацию, перенесённую
-// из Supabase). При гонке двух заказов уникальный индекс отобьёт дубль —
-// пробуем ещё раз со следующим номером.
-async function nextOrderNumber(pb: Awaited<ReturnType<typeof pbAdmin>>): Promise<number> {
-  const page = await pb
-    .collection("orders")
-    .getList(1, 1, { sort: "-number", fields: "number" });
-  const max = (page.items[0]?.number as number | undefined) ?? 0;
-  return max + 1;
 }
 
 export async function POST(request: Request) {
@@ -314,84 +308,49 @@ export async function POST(request: Request) {
     const deliveryCost = deliveryCostFor(delivery_method, subtotal);
     const total = Math.max(0, subtotal - discount) + deliveryCost;
 
-    // Создание заказа: до 3 попыток на случай гонки за номер.
-    let order: { id: string; number: number } | null = null;
-    let lastError: unknown = null;
-    for (let attempt = 0; attempt < 3 && !order; attempt++) {
-      try {
-        const number = (await nextOrderNumber(pb)) + attempt;
-        const rec = await pb.collection("orders").create({
-          number,
-          customer_name: customer_name.trim(),
-          phone: encryptField(phone.trim()),
-          email: encryptField(email?.trim() || null) ?? "",
-          address: encryptField(address.trim()),
-          comment: comment?.trim() || "",
-          delivery_method,
-          delivery_cost: deliveryCost,
-          promo_code: promoRule && discount > 0 ? promoRule.code : "",
-          discount,
-          total,
-          status: "new",
-          payment_status: "unpaid",
-          user: userId ?? "",
-          placed_at: new Date().toISOString(),
-        });
-        order = { id: rec.id, number: rec.number as number };
-      } catch (e) {
-        lastError = e;
-      }
-    }
-    if (!order) {
-      // Заказ не создался — возвращаем зарезервированный товар и промокод.
-      await releaseStock(pb, reserveLines);
-      if (promoUseId) await releasePromoUse(pb, promoUseId);
-      throw lastError ?? new Error("order create failed");
-    }
+    // Данные будущего заказа: одинаковые и для оплаты при получении, и для
+    // онлайн-оплаты. Персональные данные шифруются здесь один раз — дальше
+    // ходят и хранятся уже зашифрованными.
+    const payload = {
+      customer_name: customer_name.trim(),
+      phone: encryptField(phone.trim()) ?? "",
+      email: encryptField(email?.trim() || null) ?? "",
+      address: encryptField(address.trim()) ?? "",
+      comment: comment?.trim() || "",
+      delivery_method,
+      delivery_cost: deliveryCost,
+      promo_code: promoRule && discount > 0 ? promoRule.code : "",
+      discount,
+      total,
+      user: userId ?? "",
+      items: lines.map((l) => ({
+        product: l.product,
+        name: l.name,
+        price: l.price,
+        qty: l.qty,
+      })),
+    };
 
-    // Привязываем использование промокода к заказу: по этой связи код
-    // вернётся покупателю, если заказ потом удалят как неоплаченный
-    // (callback банка или уборка зависших заказов).
-    if (promoUseId) await attachPromoUseToOrder(pb, promoUseId, order.id);
+    // Фоновая уборка протухших черновиков оплаты — не задерживает текущее
+    // оформление и не роняет его при ошибке.
+    void cleanupStalePaymentDrafts(pb).catch(() => {});
 
-    // Фоновая уборка старых зависших неоплаченных заказов — не задерживает
-    // текущее оформление и не роняет его при ошибке.
-    void cleanupStalePendingOrders(pb).catch(() => {});
-
-    try {
-      for (const l of lines) {
-        await pb.collection("order_items").create({
-          order: order.id,
-          product: l.product,
-          name: l.name,
-          price: l.price,
-          qty: l.qty,
-        });
-      }
-    } catch {
-      // Состав не сохранился — откатываем заказ и возвращаем резерв,
-      // чтобы не осталось «пустышки» с зависшим списанием.
-      await releaseStock(pb, reserveLines);
-      if (promoUseId) await releasePromoUse(pb, promoUseId);
-      await pb.collection("orders").delete(order.id).catch(() => {});
-      return NextResponse.json(
-        { error: "Не удалось сохранить состав заказа" },
-        { status: 500 }
-      );
-    }
-
-    // Онлайн-оплата (если подключена Robokassa). Счёт нигде не «регистрируется»
-    // заранее: сайт подписывает параметры Паролем#1 и отдаёт браузеру данные
-    // POST-формы на платёжную страницу. Номер счёта у Robokassa (InvId) — это
-    // номер заказа: по нему приходит уведомление об оплате и по нему же
-    // операция ищется в личном кабинете.
+    // ===== Онлайн-оплата (если подключена Robokassa) =====
+    // Заказ здесь НЕ создаётся: пока деньги не подтверждены, всё лежит в
+    // черновике оплаты (payment_drafts), которого нет в админке. Заказ
+    // появится в базе только после успешной оплаты — по уведомлению Result URL
+    // (или на возврате покупателя, или уборкой, если уведомление не дошло).
+    // Счёт в Robokassa нигде не «регистрируется» заранее: сайт подписывает
+    // параметры Паролем#1 и отдаёт браузеру данные POST-формы.
     if (isRobokassaConfigured()) {
+      let draft: Awaited<ReturnType<typeof createPaymentDraft>> | null = null;
       try {
+        draft = await createPaymentDraft(pb, payload, promoUseId);
         const ttl = invoiceTtlMinutes();
         const payment = buildRobokassaPayment({
-          invId: order.number,
+          invId: draft.invId,
           amount: total,
-          description: `Заказ №${order.number}`,
+          description: `Заказ на ${lines.reduce((s, l) => s + l.qty, 0)} шт. (счёт №${draft.invId})`,
           email: email?.trim() || null,
           // Состав — для фискального чека (если чек включён): скидка по
           // промокоду размазывается по товарам, доставка идёт отдельной
@@ -399,43 +358,26 @@ export async function POST(request: Request) {
           lines: lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
           deliveryCost,
           discount,
-          // Счёт протухает раньше, чем уборка удалит зависший заказ, — иначе
-          // покупатель мог бы оплатить уже удалённый заказ.
+          // Счёт протухает раньше, чем уборка снимет резерв, — иначе
+          // покупатель мог бы оплатить уже отменённый черновик.
           expiresAt: ttl > 0 ? new Date(Date.now() + ttl * 60_000) : null,
         });
 
-        await pb
-          .collection("orders")
-          .update(order.id, { payment_status: "pending" })
-          .catch((e) => {
-            // Не критично: уведомление об оплате всё равно найдёт заказ по
-            // номеру и переведёт его в «оплачен».
-            console.error(
-              `[checkout] заказ №${order.number}: не записался статус оплаты:`,
-              e
-            );
-          });
-
-        // Письмо «заказ принят» здесь не шлём: придёт «оплата получена»
-        // после успешной оплаты (Result URL), а неоплаченный заказ удалится.
-        return NextResponse.json({ id: order.number, total, payment });
+        // Письмо «заказ принят» здесь не шлём: заказа ещё нет. После оплаты
+        // придёт «оплата получена» с составом и номером заказа.
+        return NextResponse.json({ invoiceId: draft.invId, total, payment });
       } catch (e) {
-        // Сюда попадём только при кривых настройках (например, неизвестный
-        // алгоритм хеша) — заказ откатываем целиком, корзина у покупателя
-        // цела, зарезервированный товар возвращаем на склад.
-        console.error(
-          `[checkout] заказ №${order.number}: не удалось собрать платёж Robokassa:`,
-          e
-        );
+        // Черновик не создался или настройки кривые (например, неизвестный
+        // алгоритм хеша) — возвращаем резерв, корзина у покупателя цела.
+        console.error("[checkout] не удалось подготовить оплату Robokassa:", e);
+        if (draft) {
+          await pb
+            .collection(DRAFTS_COLLECTION)
+            .delete(draft.id)
+            .catch(() => {});
+        }
         await releaseStock(pb, reserveLines);
         if (promoUseId) await releasePromoUse(pb, promoUseId);
-        for (const l of await pb
-          .collection("order_items")
-          .getFullList({ filter: pb.filter("order = {:id}", { id: order.id }), fields: "id" })
-          .catch(() => [] as { id: string }[])) {
-          await pb.collection("order_items").delete(l.id).catch(() => {});
-        }
-        await pb.collection("orders").delete(order.id).catch(() => {});
         return NextResponse.json(
           {
             error:
@@ -446,8 +388,25 @@ export async function POST(request: Request) {
       }
     }
 
-    // Без онлайн-оплаты заказ оформлен сразу и окончательно. Товар уже
-    // зарезервирован выше (reserveStock) — повторно списывать не нужно.
+    // ===== Без онлайн-оплаты: заказ оформлен сразу и окончательно =====
+    // Товар уже зарезервирован выше (reserveStock) — повторно списывать не
+    // нужно.
+    let order: { id: string; number: number };
+    try {
+      order = await createOrderWithItems(pb, payload, {
+        paymentStatus: "unpaid",
+      });
+    } catch (e) {
+      // Заказ не создался — возвращаем зарезервированный товар и промокод.
+      await releaseStock(pb, reserveLines);
+      if (promoUseId) await releasePromoUse(pb, promoUseId);
+      throw e;
+    }
+
+    // Привязываем использование промокода к заказу: по этой связи код
+    // вернётся покупателю, если заказ потом удалят.
+    if (promoUseId) await attachPromoUseToOrder(pb, promoUseId, order.id);
+
     // Шлём «заказ принят».
     if (email?.trim()) {
       void mailOrderPlaced(

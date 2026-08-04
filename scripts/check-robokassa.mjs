@@ -60,6 +60,9 @@ const pass1 =
 const pass2 =
   (isTest && (process.env.ROBOKASSA_TEST_PASSWORD2 || "").trim()) ||
   (process.env.ROBOKASSA_PASSWORD2 || "").trim();
+// Пароль#3 — ключ Refund API (возвраты прямо из админки). Не обязателен:
+// без него возврат делается в личном кабинете, а сайт его фиксирует.
+const pass3 = (process.env.ROBOKASSA_PASSWORD3 || "").trim();
 
 const ALGOS = ["md5", "sha1", "sha256", "sha384", "sha512", "ripemd160"];
 const algoRaw = (process.env.ROBOKASSA_HASH || "")
@@ -73,6 +76,10 @@ const hash = (data) =>
 console.log("Магазин (ROBOKASSA_LOGIN):", login || "— не задан");
 console.log("Пароль#1:                 ", pass1 ? "задан" : "— не задан");
 console.log("Пароль#2:                 ", pass2 ? "задан" : "— не задан");
+console.log(
+  "Пароль#3 (возвраты):      ",
+  pass3 ? "задан — возврат из админки работает" : "— не задан (возврат только в ЛК)"
+);
 console.log("Алгоритм хеша:            ", algo, algoRaw && !ALGOS.includes(algoRaw) ? "(ROBOKASSA_HASH не распознан — взят md5)" : "");
 console.log("Тестовый режим:           ", isTest ? "ДА (IsTest=1)" : "нет");
 console.log(
@@ -103,7 +110,7 @@ if (dirty.length > 0) {
       "    Скрипт их отрезал, но проверь файл: cat -A .env.production — и убери «^M» и пробелы в концах строк.\n"
   );
 }
-if (pass1.includes("$") || pass2.includes("$") || pass1.includes("\\") || pass2.includes("\\")) {
+if ([pass1, pass2, pass3].some((p) => p.includes("$") || p.includes("\\"))) {
   console.warn(
     "⚠️  В пароле есть символ $ или \\ — такие значения искажались standalone-сервером Next\n" +
       "    (интерполяция .env). Обнови deploy/update.sh (git pull) и пересоберись,\n" +

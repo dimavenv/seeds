@@ -55,7 +55,11 @@ export function isRobokassaTest(): boolean {
 // В тестовом режиме Robokassa считает подписи ТЕСТОВЫМИ паролями (они не
 // совпадают с боевыми). Если тестовые пароли не заданы отдельно — считаем,
 // что в ROBOKASSA_PASSWORD1/2 уже лежат тестовые.
-export function robokassaPassword(which: 1 | 2): string {
+//
+// Пароль#3 — отдельная история: это ключ Refund API (возвраты по операции),
+// тестового аналога у него нет, поэтому он всегда берётся как есть.
+export function robokassaPassword(which: 1 | 2 | 3): string {
+  if (which === 3) return env("ROBOKASSA_PASSWORD3");
   const test = env(`ROBOKASSA_TEST_PASSWORD${which}`);
   if (isRobokassaTest() && test) return test;
   return env(`ROBOKASSA_PASSWORD${which}`);
@@ -234,14 +238,24 @@ export function buildReceiptJson(o: {
   return JSON.stringify(receipt);
 }
 
-// Как чек попадает в подпись и в поле формы. По документации значение Receipt
-// перед добавлением в строку подписи нужно URL-кодировать, и в запросе идёт
-// то же самое (закодированное) значение — тогда подпись сходится. Некоторые
-// магазины настроены на «сырой» JSON: тогда ROBOKASSA_RECEIPT_ENCODE=raw.
-function encodeReceipt(json: string): string {
-  return env("ROBOKASSA_RECEIPT_ENCODE").toLowerCase() === "raw"
-    ? json
-    : encodeURIComponent(json);
+// Как чек попадает в подпись и в поле запроса — единственное место в
+// протоколе, где магазины расходятся:
+//   url  (по умолчанию) — в поле уходит URL-кодированный JSON, а в подписи
+//                         участвует исходный JSON. Так делает официальная
+//                         документация («Receipt нужно URL-кодировать») и
+//                         эталонные библиотеки;
+//   raw  — и в поле, и в подписи исходный JSON;
+//   both — и в поле, и в подписи URL-кодированный JSON.
+// Если Robokassa ругается на подпись ТОЛЬКО при включённом чеке — перебрать
+// эти три значения (ROBOKASSA_RECEIPT_ENCODE).
+type ReceiptEncoding = { field: string; signature: string };
+
+function encodeReceipt(json: string): ReceiptEncoding {
+  const mode = env("ROBOKASSA_RECEIPT_ENCODE").toLowerCase();
+  const encoded = encodeURIComponent(json);
+  if (mode === "raw") return { field: json, signature: json };
+  if (mode === "both") return { field: encoded, signature: encoded };
+  return { field: encoded, signature: json };
 }
 
 // Срок жизни счёта. Нужен, чтобы покупатель не оплатил заказ, который сайт уже
@@ -306,12 +320,16 @@ export function buildRobokassaPayment(o: {
             total: Math.round(o.amount * 100) / 100,
           })
         )
-      : "";
+      : null;
 
   const signature = robokassaHash(
-    [login, outSum, invId, ...(receipt ? [receipt] : []), robokassaPassword(1)].join(
-      ":"
-    )
+    [
+      login,
+      outSum,
+      invId,
+      ...(receipt ? [receipt.signature] : []),
+      robokassaPassword(1),
+    ].join(":")
   );
 
   const fields: Record<string, string> = {
@@ -324,7 +342,7 @@ export function buildRobokassaPayment(o: {
     Culture: "ru",
     Encoding: "utf-8",
   };
-  if (receipt) fields.Receipt = receipt;
+  if (receipt) fields.Receipt = receipt.field;
   if (o.email) fields.Email = o.email;
   if (o.expiresAt) fields.ExpirationDate = formatExpirationDate(o.expiresAt);
   if (isRobokassaTest()) fields.IsTest = "1";
@@ -504,6 +522,116 @@ export function isPaidState(state: RobokassaState): boolean {
     (state.stateCode === ROBOKASSA_STATE.received ||
       state.stateCode === ROBOKASSA_STATE.completed)
   );
+}
+
+// ===== Возвраты (Refund API, Пароль#3) =====
+//
+// Возврат делается по КЛЮЧУ ОПЕРАЦИИ (OpKey), который отдаёт OpStateExt, а не
+// по номеру счёта. Запрос — JWT: заголовок и полезная нагрузка в base64url,
+// подпись HMAC на Пароле#3 (у Robokassa нестандартные имена алгоритмов:
+// SHA256, а не HS256). Само тело POST — этот же токен строкой в JSON.
+//
+// Возврат асинхронный: Create возвращает requestId, а состояние узнаётся
+// отдельным запросом GetState (finished | processing | canceled).
+const REFUND_API = "https://services.robokassa.ru/RefundService/Refund";
+
+export function isRefundApiConfigured(): boolean {
+  return Boolean(robokassaLogin() && robokassaPassword(3));
+}
+
+function base64url(data: Buffer | string): string {
+  return Buffer.from(data)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+// JWT в понимании Robokassa: alg — SHA256/SHA512, а не HS256/HS512.
+export function robokassaJwt(
+  payload: Record<string, unknown>,
+  secret: string,
+  alg: "SHA256" | "SHA512" = "SHA256"
+): string {
+  const header = base64url(JSON.stringify({ typ: "JWT", alg }));
+  const body = base64url(Buffer.from(JSON.stringify(payload), "utf8"));
+  const signature = base64url(
+    crypto
+      .createHmac(alg === "SHA512" ? "sha512" : "sha256", secret)
+      .update(`${header}.${body}`, "utf8")
+      .digest()
+  );
+  return `${header}.${body}.${signature}`;
+}
+
+export type RefundCreateResult = {
+  ok: boolean;
+  requestId: string | null;
+  message: string | null;
+};
+
+// Запрос возврата: sum не задан — возвращается вся операция целиком.
+export async function robokassaRefund(o: {
+  opKey: string;
+  sum?: number | null;
+}): Promise<RefundCreateResult> {
+  const payload: Record<string, unknown> = { OpKey: o.opKey };
+  if (typeof o.sum === "number" && o.sum > 0) {
+    payload.RefundSum = Math.round(o.sum * 100) / 100;
+  }
+  const token = robokassaJwt(payload, robokassaPassword(3));
+
+  const res = await fetch(`${REFUND_API}/Create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // Тело — сам токен строкой JSON (именно так его ждёт Robokassa).
+    body: JSON.stringify(token),
+    signal: AbortSignal.timeout(20000),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    success?: boolean;
+    message?: string;
+    requestId?: string;
+  };
+  if (!res.ok || !data.success) {
+    console.error(
+      `[robokassa] возврат по операции ${o.opKey}: отказ (HTTP ${res.status}) — ${
+        data.message ?? "без описания"
+      }`
+    );
+  }
+  return {
+    ok: Boolean(data.success),
+    requestId: data.requestId ?? null,
+    message: data.message ?? null,
+  };
+}
+
+export type RefundState = {
+  // finished — деньги возвращены, processing — в работе, canceled — отклонён.
+  label: string | null;
+  amount: number | null;
+  message: string | null;
+};
+
+export async function robokassaRefundState(
+  requestId: string
+): Promise<RefundState> {
+  const res = await fetch(
+    `${REFUND_API}/GetState?${new URLSearchParams({ id: requestId })}`,
+    { signal: AbortSignal.timeout(20000) }
+  );
+  const data = (await res.json().catch(() => ({}))) as {
+    label?: string;
+    amount?: number | string;
+    message?: string;
+  };
+  const amount = Number(data.amount);
+  return {
+    label: data.label ?? null,
+    amount: Number.isFinite(amount) ? amount : null,
+    message: data.message ?? null,
+  };
 }
 
 // Идёт ли по счёту работа с деньгами — такой заказ удалять нельзя.

@@ -115,6 +115,7 @@ export function mapOrder(r: R, items?: OrderItem[]): Order {
     discount: n(r.discount),
     tracking_number: s(r.tracking_number) || null,
     payment_status: (s(r.payment_status) || "unpaid") as Order["payment_status"],
+    invoice_id: n(r.invoice_id) || null,
     refunded_amount: n(r.refunded_amount),
     user_id: s(r.user) || null,
     // Дата оформления: placed_at (у перенесённых заказов — исходная), иначе created.

@@ -10,13 +10,18 @@ export const dynamic = "force-dynamic";
 //
 // Подписи здесь нет (Robokassa её на Fail URL не передаёт), поэтому никаких
 // изменений в базе этот роут не делает — только показывает покупателю
-// страницу «оплата не прошла». Неоплаченный заказ уберёт уборка зависших
-// заказов (lib/order-cleanup.ts), она же вернёт товар на склад и промокод.
-// Корзина покупателя не тронута: её чистит только успешный возврат с оплаты.
+// страницу «оплата не прошла». Заказа в базе и не появилось: до оплаты всё
+// лежит в черновике, который уберёт уборка (lib/order-cleanup.ts), вернув
+// товар на склад и промокод покупателю. Корзина не тронута: её чистит только
+// успешный возврат с оплаты.
 function handle(params: Record<string, string>): NextResponse {
   const invId = Number((pick(params, "InvId") ?? "").trim());
+  // Номер заказа показывать нечего — заказ не создавался. Ведём на страницу
+  // «оплата не прошла» с номером счёта, чтобы было что назвать в поддержке.
   const path =
-    Number.isInteger(invId) && invId > 0 ? `/order/${invId}?failed=1` : "/cart";
+    Number.isInteger(invId) && invId > 0
+      ? `/order/failed?failed=1&inv=${invId}`
+      : "/order/failed?failed=1";
   return NextResponse.redirect(absoluteUrl(path), 303);
 }
 

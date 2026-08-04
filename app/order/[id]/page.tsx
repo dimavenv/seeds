@@ -8,7 +8,13 @@ import { servicePageMetadata } from "@/lib/seo";
 // адресу, и объявлять её копией главной (как было по умолчанию из layout)
 // нельзя. Индексировать при этом нечего — см. servicePageMetadata.
 export function generateMetadata({ params }: { params: { id: string } }) {
-  return servicePageMetadata(`/order/${params.id}`, `Заказ №${params.id}`);
+  // При неудачной оплате заказа не существует (он создаётся только после
+  // оплаты), поэтому сюда приходит /order/failed — номера в заголовке нет.
+  const numbered = /^\d+$/.test(params.id);
+  return servicePageMetadata(
+    `/order/${params.id}`,
+    numbered ? `Заказ №${params.id}` : "Оплата не прошла"
+  );
 }
 
 export default function OrderConfirmationPage({
@@ -16,24 +22,40 @@ export default function OrderConfirmationPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { total?: string; name?: string; paid?: string; failed?: string };
+  searchParams: {
+    total?: string;
+    name?: string;
+    paid?: string;
+    failed?: string;
+    // Номер счёта в Robokassa и признак «оплата прошла, номер заказа ещё
+    // формируется» (крайне редкий случай, см. app/payment/success).
+    inv?: string;
+    pending?: string;
+  };
 }) {
   const total = searchParams.total ? Number(searchParams.total) : null;
   const paid = searchParams.paid === "1";
   const failed = searchParams.failed === "1";
+  const pending = searchParams.pending === "1";
+  const numbered = /^\d+$/.test(params.id);
+  const invoice = searchParams.inv && /^\d+$/.test(searchParams.inv) ? searchParams.inv : null;
 
   // Оформление внешнего вида по результату оплаты.
   const icon = paid ? "✅" : failed ? "⚠️" : "✅";
   const title = paid
-    ? `Заказ №${params.id} оплачен!`
+    ? pending || !numbered
+      ? "Оплата получена!"
+      : `Заказ №${params.id} оплачен!`
     : failed
     ? `Оплата не прошла`
     : `Заказ №${params.id} оформлен!`;
 
   return (
     <div className="container-page py-16">
-      {/* Цель «покупка» (или «оплата не прошла») в Яндекс.Метрике. */}
-      <MetrikaPurchase orderId={params.id} failed={failed} />
+      {/* Цель «покупка» (или «оплата не прошла») в Яндекс.Метрике.
+          При онлайн-оплате состав заказа складывался под номером счёта —
+          сверять можно и по нему (matchId). */}
+      <MetrikaPurchase orderId={params.id} matchId={invoice} failed={failed} />
       <div className="card mx-auto max-w-lg p-8 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-3xl">
           {icon}
@@ -46,8 +68,11 @@ export default function OrderConfirmationPage({
             <ClearCartOnPaid />
             <p className="mt-3 text-brand-600">
               {searchParams.name ? `${searchParams.name}, спасибо! ` : ""}
-              Оплата получена, заказ принят в работу. Чек придёт на указанную
-              почту, о смене статуса заказа сообщим письмом.
+              {pending || !numbered
+                ? "Оплата получена. Номер заказа придёт письмом в ближайшие минуты."
+                : "Оплата получена, заказ принят в работу."}{" "}
+              Чек придёт на указанную почту, о смене статуса заказа сообщим
+              письмом.
             </p>
           </>
         )}
@@ -56,6 +81,9 @@ export default function OrderConfirmationPage({
             Деньги не списаны, заказ не оформлен. Товары остались в корзине —
             можно попробовать оплатить ещё раз или выбрать другую карту.
           </p>
+        )}
+        {invoice && (paid || failed) && (
+          <p className="mt-3 text-xs text-brand-400">Счёт №{invoice}</p>
         )}
         {!paid && !failed && (
           <p className="mt-3 text-brand-600">

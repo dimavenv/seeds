@@ -24,14 +24,20 @@ import {
 // возврат на неё кнопкой «назад» второй покупки в статистику не добавят.
 export default function MetrikaPurchase({
   orderId,
+  matchId,
   failed,
 }: {
   orderId: string;
+  // Запасной идентификатор для сверки: при онлайн-оплате состав заказа
+  // складывается ДО оплаты, когда номера заказа ещё нет, — под номером счёта
+  // Robokassa. На странице подтверждения он приходит параметром inv.
+  matchId?: string | null;
   failed?: boolean;
 }) {
   useEffect(() => {
     if (failed) {
-      reachGoal(GOALS.paymentFailed, { order_id: orderId });
+      // При неудачной оплате заказа не существует — в цель уходит номер счёта.
+      reachGoal(GOALS.paymentFailed, { order_id: matchId ?? orderId });
       // Товары остались в корзине, покупатель может оплатить ещё раз — состав
       // тогда сложит заново страница оформления.
       dropPurchase();
@@ -44,21 +50,21 @@ export default function MetrikaPurchase({
     // из адресной строки нельзя, это ломает защиту от двойного счёта.
     if (!purchase) return;
     // Чужой заказ (осталась запись от прошлой попытки) — не подменяем.
-    if (purchase.orderId !== orderId) return;
+    if (purchase.orderId !== orderId && purchase.orderId !== matchId) return;
 
     pushEcommerce("purchase", purchase.products, {
-      id: purchase.orderId,
+      id: orderId,
       revenue: purchase.revenue,
       coupon: purchase.coupon,
     });
     // order_price + currency — ценность цели: в отчётах Метрики появится
     // выручка по цели «purchase», а не только количество достижений.
     reachGoal(GOALS.purchase, {
-      order_id: purchase.orderId,
+      order_id: orderId,
       order_price: purchase.revenue,
       currency: "RUB",
     });
-  }, [orderId, failed]);
+  }, [orderId, matchId, failed]);
 
   return null;
 }

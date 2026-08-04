@@ -10,11 +10,13 @@ import {
   formatOutSum,
   isMoneyInvolvedState,
   isPaidState,
+  isRefundApiConfigured,
   isRobokassaConfigured,
   parseOpState,
   paramsToObject,
   pick,
   robokassaHash,
+  robokassaJwt,
 } from "@/lib/robokassa";
 
 const LOGIN = "tomatsemena";
@@ -25,6 +27,7 @@ const ROBOKASSA_KEYS = [
   "ROBOKASSA_LOGIN",
   "ROBOKASSA_PASSWORD1",
   "ROBOKASSA_PASSWORD2",
+  "ROBOKASSA_PASSWORD3",
   "ROBOKASSA_TEST",
   "ROBOKASSA_TEST_PASSWORD1",
   "ROBOKASSA_TEST_PASSWORD2",
@@ -116,7 +119,7 @@ describe("платёжная форма", () => {
     expect(p.fields.Email).toBe("buyer@example.com");
   });
 
-  it("чек попадает и в подпись, и в поле формы (URL-кодированным)", () => {
+  it("чек: в поле URL-кодированный JSON, в подписи — исходный", () => {
     process.env.ROBOKASSA_RECEIPT = "on";
     process.env.ROBOKASSA_SNO = "usn_income";
     const p = buildRobokassaPayment({
@@ -128,17 +131,17 @@ describe("платёжная форма", () => {
     });
     const receipt = p.fields.Receipt;
     expect(receipt).toBeTruthy();
-    // Кодированное значение идёт в подпись ровно в том виде, в каком уходит
-    // в запросе — иначе Robokassa не сойдётся по подписи.
+    const json = decodeURIComponent(receipt);
+    expect(receipt).not.toBe(json); // в поле именно кодированное значение
     expect(p.fields.SignatureValue).toBe(
-      md5(`${LOGIN}:400.00:42:${receipt}:${PASS1}`)
+      md5(`${LOGIN}:400.00:42:${json}:${PASS1}`)
     );
-    const parsed = JSON.parse(decodeURIComponent(receipt));
+    const parsed = JSON.parse(json);
     expect(parsed.sno).toBe("usn_income");
     expect(parsed.items).toHaveLength(2);
   });
 
-  it("ROBOKASSA_RECEIPT_ENCODE=raw кладёт в подпись сырой JSON", () => {
+  it("ROBOKASSA_RECEIPT_ENCODE=raw шлёт и подписывает сырой JSON", () => {
     process.env.ROBOKASSA_RECEIPT = "on";
     process.env.ROBOKASSA_RECEIPT_ENCODE = "raw";
     const p = buildRobokassaPayment({
@@ -150,6 +153,20 @@ describe("платёжная форма", () => {
     expect(p.fields.Receipt.startsWith("{")).toBe(true);
     expect(p.fields.SignatureValue).toBe(
       md5(`${LOGIN}:100.00:43:${p.fields.Receipt}:${PASS1}`)
+    );
+  });
+
+  it("ROBOKASSA_RECEIPT_ENCODE=both подписывает кодированный чек", () => {
+    process.env.ROBOKASSA_RECEIPT = "on";
+    process.env.ROBOKASSA_RECEIPT_ENCODE = "both";
+    const p = buildRobokassaPayment({
+      invId: 44,
+      amount: 100,
+      description: "Заказ №44",
+      lines: [{ name: "Огурец", price: 100, qty: 1 }],
+    });
+    expect(p.fields.SignatureValue).toBe(
+      md5(`${LOGIN}:100.00:44:${p.fields.Receipt}:${PASS1}`)
     );
   });
 
@@ -356,6 +373,35 @@ describe("состояние операции", () => {
     expect(notFound.resultCode).toBe(3);
     expect(notFound.stateCode).toBeNull();
     expect(isMoneyInvolvedState(notFound)).toBe(false);
+  });
+});
+
+describe("возвраты (Пароль#3)", () => {
+  it("без Пароля#3 API возвратов выключен", () => {
+    expect(isRefundApiConfigured()).toBe(false);
+    process.env.ROBOKASSA_PASSWORD3 = "pass-three";
+    expect(isRefundApiConfigured()).toBe(true);
+  });
+
+  it("JWT: заголовок, полезная нагрузка и HMAC на Пароле#3", () => {
+    const token = robokassaJwt({ OpKey: "op-1", RefundSum: 10.5 }, "pass-three");
+    const [header, body, signature] = token.split(".");
+    const un64 = (v: string) =>
+      Buffer.from(v.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+
+    // Robokassa ждёт свои имена алгоритмов: SHA256, а не HS256.
+    expect(JSON.parse(un64(header))).toEqual({ typ: "JWT", alg: "SHA256" });
+    expect(JSON.parse(un64(body))).toEqual({ OpKey: "op-1", RefundSum: 10.5 });
+    // Подпись — HMAC-SHA256 в base64url без «=».
+    const expected = crypto
+      .createHmac("sha256", "pass-three")
+      .update(`${header}.${body}`, "utf8")
+      .digest("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    expect(signature).toBe(expected);
+    expect(token).not.toContain("=");
   });
 });
 

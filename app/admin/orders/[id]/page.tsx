@@ -12,6 +12,7 @@ import OrderStatusBadge from "@/components/admin/order-status-badge";
 import OrderStatusSelect from "@/components/admin/order-status-select";
 import OrderTrackingInput from "@/components/admin/order-tracking-input";
 import OrderPayment from "@/components/admin/order-payment";
+import { isRefundApiConfigured } from "@/lib/robokassa";
 import DeleteButton from "@/components/admin/delete-button";
 import { deleteOrder } from "@/app/admin/actions";
 
@@ -82,7 +83,8 @@ export default async function AdminOrderDetail({
         <div className="flex flex-wrap items-center gap-3">
           <OrderPayment
             id={order.id}
-            orderNumber={order.number}
+            invoiceId={order.invoice_id ?? undefined}
+            apiRefund={isRefundApiConfigured()}
             status={order.payment_status ?? "unpaid"}
             total={order.total}
             refundedAmount={order.refunded_amount ?? 0}

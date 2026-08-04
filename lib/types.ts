@@ -87,6 +87,9 @@ export type Order = {
   discount?: number;
   tracking_number?: string | null;
   payment_status?: PaymentStatus;
+  // Номер счёта в Robokassa (InvId): по нему заказ находится в личном кабинете
+  // и по нему же делается возврат.
+  invoice_id?: number | null;
   // Сколько рублей уже возвращено покупателю (частичные возвраты суммируются).
   refunded_amount?: number;
   user_id: string | null;

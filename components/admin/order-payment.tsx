@@ -24,15 +24,19 @@ export type RefundableItem = {
 
 export default function OrderPayment({
   id,
-  orderNumber,
+  invoiceId,
+  apiRefund = false,
   status,
   total,
   refundedAmount,
   items,
 }: {
   id: string;
-  // Номер заказа = номер счёта в Robokassa: по нему операция ищется в ЛК.
-  orderNumber?: number;
+  // Номер счёта в Robokassa: по нему операция ищется в личном кабинете.
+  invoiceId?: number;
+  // Задан Пароль#3 — деньги возвращает сам сайт через Refund API. Иначе
+  // возврат делается в ЛК Robokassa, а здесь только фиксируется.
+  apiRefund?: boolean;
   status: PaymentStatus;
   total: number;
   refundedAmount: number;
@@ -87,18 +91,23 @@ export default function OrderPayment({
                 .filter(([, q]) => q > 0)
                 .map(([itemId, q]) => ({ id: itemId, qty: q })),
             }
-      ).catch(() => ({ error: "Не удалось отметить возврат — попробуйте ещё раз" } as const));
+      ).catch(() => ({ error: "Не удалось выполнить возврат — попробуйте ещё раз" } as const));
       if ("error" in res && res.error) {
         setError(res.error);
       } else if ("ok" in res && res.ok) {
+        const sum = formatPrice(res.refunded ?? refundSum);
+        const byApi = "viaApi" in res && res.viaApi;
+        const verb = byApi ? "отправлен" : "отмечен";
         setDone(
           res.full
-            ? `Возврат ${formatPrice(res.refunded ?? refundSum)} отмечен — заказ возвращён полностью`
-            : `Частичный возврат ${formatPrice(res.refunded ?? refundSum)} отмечен`
+            ? `Возврат ${sum} ${verb} — заказ возвращён полностью`
+            : `Частичный возврат ${sum} ${verb}`
         );
         setWarning(
           "unconfirmed" in res && res.unconfirmed
-            ? "Robokassa пока не показывает возврат по этой операции. Проверьте, что возврат в личном кабинете доведён до конца."
+            ? byApi
+              ? "Robokassa приняла запрос, но ещё не подтвердила исполнение. Проверьте операцию в личном кабинете через несколько минут."
+              : "Robokassa пока не показывает возврат по этой операции. Проверьте, что возврат в личном кабинете доведён до конца."
             : null
         );
         router.refresh();
@@ -119,7 +128,7 @@ export default function OrderPayment({
           onClick={openModal}
           className="text-xs font-semibold text-accent-600 hover:underline"
         >
-          Отметить возврат
+          {apiRefund ? "Вернуть оплату" : "Отметить возврат"}
         </button>
       )}
 
@@ -178,23 +187,32 @@ export default function OrderPayment({
               </div>
             ) : (
               <>
-                {/* Деньги возвращает продавец в личном кабинете Robokassa:
-                    API возврата для магазина там нет. Здесь возврат только
-                    фиксируется — чтобы совпали статус заказа, остаток к
-                    возврату и письмо покупателю. */}
+                {/* Либо деньги возвращает сайт через Refund API (задан
+                    Пароль#3), либо продавец в личном кабинете, а сайт только
+                    фиксирует возврат. */}
                 <div className="mx-5 mt-4 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2.5 text-xs text-brand-600">
-                  Деньги возвращаются в{" "}
-                  <a
-                    href="https://partner.robokassa.ru/"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="font-semibold text-accent-600 hover:underline"
-                  >
-                    личном кабинете Robokassa
-                  </a>{" "}
-                  — раздел «Операции и возвраты», операция по счёту №{orderNumber ?? "—"}.
-                  Здесь возврат только фиксируется: заказ поменяет статус, покупателю
-                  уйдёт письмо.
+                  {apiRefund ? (
+                    <>
+                      Деньги вернутся покупателю через Robokassa (счёт №
+                      {invoiceId ?? "—"}) — обычно в течение 1–10 дней. Заказ
+                      поменяет статус, покупателю уйдёт письмо.
+                    </>
+                  ) : (
+                    <>
+                      Деньги возвращаются в{" "}
+                      <a
+                        href="https://partner.robokassa.ru/"
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="font-semibold text-accent-600 hover:underline"
+                      >
+                        личном кабинете Robokassa
+                      </a>{" "}
+                      — раздел «Операции и возвраты», операция по счёту №
+                      {invoiceId ?? "—"}. Здесь возврат только фиксируется:
+                      заказ поменяет статус, покупателю уйдёт письмо.
+                    </>
+                  )}
                 </div>
 
                 {/* Выбор: весь заказ или отдельные товары */}
@@ -338,7 +356,11 @@ export default function OrderPayment({
                       disabled={pending || refundSum <= 0}
                       className="btn-accent"
                     >
-                      {pending ? "Отмечаем…" : `Отметить ${formatPrice(refundSum)}`}
+                      {pending
+                        ? apiRefund
+                          ? "Возврат…"
+                          : "Отмечаем…"
+                        : `${apiRefund ? "Вернуть" : "Отметить"} ${formatPrice(refundSum)}`}
                     </button>
                   </div>
                 </div>
