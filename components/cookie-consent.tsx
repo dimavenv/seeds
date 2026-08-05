@@ -2,31 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
-const STORAGE_KEY = "cookie_consent";
+import { hasCookieConsent, setCookieConsent } from "@/lib/cookie-consent";
 
 // Плашка о cookies: показывается, пока пользователь не нажал «Хорошо».
 // Отметка о согласии хранится в localStorage и между сессиями не сбрасывается.
+//
+// Нажатие «Хорошо» — это не только скрытие плашки: до него счётчики аналитики
+// не подключаются (см. lib/cookie-consent.ts и components/analytics.tsx), как
+// и обещано в разделе 7 политики конфиденциальности.
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    try {
-      if (!localStorage.getItem(STORAGE_KEY)) setVisible(true);
-    } catch {
-      // localStorage недоступен (приватный режим) — плашку не показываем,
-      // чтобы не мигать ею при каждой загрузке.
-    }
+    if (!hasCookieConsent()) setVisible(true);
   }, []);
 
   if (!visible) return null;
 
   function accept() {
-    try {
-      localStorage.setItem(STORAGE_KEY, new Date().toISOString());
-    } catch {
-      // некуда сохранить — просто скрываем до следующей загрузки
-    }
+    setCookieConsent();
     setVisible(false);
   }
 
@@ -41,8 +35,10 @@ export default function CookieConsent() {
     >
       <div className="card pointer-events-auto mx-auto flex max-w-3xl animate-fade-up flex-col items-start gap-3 p-4 shadow-xl sm:flex-row sm:items-center">
         <p className="text-sm leading-relaxed text-brand-700">
-          Мы используем cookies, чтобы работали вход в аккаунт и корзина.
-          Оставаясь на сайте, вы соглашаетесь с{" "}
+          Мы используем cookies, чтобы работали вход в аккаунт и корзина, а
+          после вашего согласия — сервис Яндекс Метрика, который помогает нам
+          понимать, как пользуются сайтом. Нажимая «Хорошо», вы соглашаетесь с
+          этим и с{" "}
           <Link
             href="/privacy"
             className="font-semibold underline hover:text-brand-800"

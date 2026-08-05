@@ -1,8 +1,18 @@
+"use client";
+
 import Script from "next/script";
+import { useEffect, useState } from "react";
+import { COOKIE_CONSENT_EVENT, hasCookieConsent } from "@/lib/cookie-consent";
 
 // Счётчики аналитики. Оба подключаются ТОЛЬКО если задан соответствующий id в
 // окружении — на стенде и в разработке переменные пустые, и тогда в HTML не
 // попадает ни строчки скрипта (иначе локальные визиты пачкали бы статистику).
+//
+// И только ПОСЛЕ согласия на cookies. Это требование не техническое, а
+// юридическое: данные, которые собирает Метрика (cookie-идентификатор, IP,
+// записи Вебвизора), Роскомнадзор считает персональными, а раздел 7 политики
+// конфиденциальности обещает посетителю, что до нажатия «Хорошо» аналитика не
+// запускается. Поэтому счётчик рендерится не сразу, а по состоянию согласия.
 //
 // Яндекс.Метрика для нас важнее GA4: поведенческие данные из неё — реальный
 // сигнал ранжирования в Яндексе, а Вебвизор нужен, чтобы видеть, где
@@ -14,6 +24,20 @@ import Script from "next/script";
 export default function Analytics() {
   const metrikaId = process.env.NEXT_PUBLIC_YANDEX_METRIKA_ID?.trim();
   const gaId = process.env.NEXT_PUBLIC_GA_ID?.trim();
+  // На сервере согласие неизвестно, поэтому стартуем с false: в первый HTML
+  // скрипты не попадают никогда, и гидратация проходит без расхождений.
+  const [allowed, setAllowed] = useState(false);
+
+  useEffect(() => {
+    setAllowed(hasCookieConsent());
+    // Согласие может появиться прямо сейчас — плашка сообщает о нажатии
+    // событием, и счётчик подключается без перезагрузки страницы.
+    const onConsent = () => setAllowed(true);
+    window.addEventListener(COOKIE_CONSENT_EVENT, onConsent);
+    return () => window.removeEventListener(COOKIE_CONSENT_EVENT, onConsent);
+  }, []);
+
+  if (!allowed) return null;
 
   return (
     <>
@@ -33,8 +57,10 @@ ym(${JSON.stringify(metrikaId)}, "init", {
   ecommerce:"dataLayer"
 });`}
           </Script>
-          {/* Запасной вариант для браузеров с отключённым JS: без него в
-              Метрике теряется часть визитов, а Вебмастер ругается на счётчик. */}
+          {/* Пиксель для браузеров с отключённым JS. С тех пор как счётчик
+              подключается по согласию, до него доходят только те, у кого JS
+              работает, — но Вебмастер ругается на счётчик без noscript, а
+              рисовать его в HTML до согласия нельзя: это тот же сбор данных. */}
           <noscript>
             <div>
               <img
