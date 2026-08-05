@@ -121,7 +121,7 @@ describe("платёжная форма", () => {
     expect(p.fields.Email).toBe("buyer@example.com");
   });
 
-  it("чек: в поле URL-кодированный JSON, в подписи — исходный", () => {
+  it("чек по умолчанию: URL-кодирован и в поле, и в подписи", () => {
     process.env.ROBOKASSA_RECEIPT = "on";
     process.env.ROBOKASSA_SNO = "usn_income";
     const p = buildRobokassaPayment({
@@ -135,41 +135,44 @@ describe("платёжная форма", () => {
     expect(receipt).toBeTruthy();
     const json = decodeURIComponent(receipt);
     expect(receipt).not.toBe(json); // в поле именно кодированное значение
+    // Документация: «перед добавлением в строку для подписи значение Receipt
+    // нужно URL-кодировать».
     expect(p.fields.SignatureValue).toBe(
-      md5(`${LOGIN}:400.00:42:${json}:${PASS1}`)
+      md5(`${LOGIN}:400.00:42:${receipt}:${PASS1}`)
     );
     const parsed = JSON.parse(json);
     expect(parsed.sno).toBe("usn_income");
     expect(parsed.items).toHaveLength(2);
   });
 
-  it("ROBOKASSA_RECEIPT_ENCODE=raw шлёт и подписывает сырой JSON", () => {
+  it("режимы кодирования чека переключаются переменной окружения", () => {
     process.env.ROBOKASSA_RECEIPT = "on";
-    process.env.ROBOKASSA_RECEIPT_ENCODE = "raw";
-    const p = buildRobokassaPayment({
-      invId: 43,
-      amount: 100,
-      description: "Заказ №43",
-      lines: [{ name: "Огурец", price: 100, qty: 1 }],
-    });
-    expect(p.fields.Receipt.startsWith("{")).toBe(true);
-    expect(p.fields.SignatureValue).toBe(
-      md5(`${LOGIN}:100.00:43:${p.fields.Receipt}:${PASS1}`)
-    );
-  });
+    const build = (mode: string) => {
+      process.env.ROBOKASSA_RECEIPT_ENCODE = mode;
+      return buildRobokassaPayment({
+        invId: 43,
+        amount: 100,
+        description: "Заказ №43",
+        lines: [{ name: "Огурец", price: 100, qty: 1 }],
+      }).fields;
+    };
+    const sig = (receiptInSignature: string) =>
+      md5(`${LOGIN}:100.00:43:${receiptInSignature}:${PASS1}`);
 
-  it("ROBOKASSA_RECEIPT_ENCODE=both подписывает кодированный чек", () => {
-    process.env.ROBOKASSA_RECEIPT = "on";
-    process.env.ROBOKASSA_RECEIPT_ENCODE = "both";
-    const p = buildRobokassaPayment({
-      invId: 44,
-      amount: 100,
-      description: "Заказ №44",
-      lines: [{ name: "Огурец", price: 100, qty: 1 }],
-    });
-    expect(p.fields.SignatureValue).toBe(
-      md5(`${LOGIN}:100.00:44:${p.fields.Receipt}:${PASS1}`)
-    );
+    const raw = build("raw");
+    expect(raw.Receipt.startsWith("{")).toBe(true);
+    expect(raw.SignatureValue).toBe(sig(raw.Receipt));
+
+    const sign = build("sign");
+    expect(sign.Receipt.startsWith("{")).toBe(true);
+    expect(sign.SignatureValue).toBe(sig(encodeURIComponent(sign.Receipt)));
+
+    const field = build("field");
+    expect(field.Receipt.startsWith("%")).toBe(true);
+    expect(field.SignatureValue).toBe(sig(decodeURIComponent(field.Receipt)));
+
+    // «url» — прежнее имя режима field, должно продолжать работать.
+    expect(build("url").SignatureValue).toBe(field.SignatureValue);
   });
 
   it("срок жизни счёта передаётся в ISO 8601 со смещением", () => {

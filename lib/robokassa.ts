@@ -247,24 +247,45 @@ export function buildReceiptJson(o: {
   return JSON.stringify(receipt);
 }
 
-// Как чек попадает в подпись и в поле запроса — единственное место в
-// протоколе, где магазины расходятся:
-//   url  (по умолчанию) — в поле уходит URL-кодированный JSON, а в подписи
-//                         участвует исходный JSON. Так делает официальная
-//                         документация («Receipt нужно URL-кодировать») и
-//                         эталонные библиотеки;
-//   raw  — и в поле, и в подписи исходный JSON;
-//   both — и в поле, и в подписи URL-кодированный JSON.
-// Если Robokassa ругается на подпись ТОЛЬКО при включённом чеке — перебрать
-// эти три значения (ROBOKASSA_RECEIPT_ENCODE).
-type ReceiptEncoding = { field: string; signature: string };
+// Как чек попадает в подпись и в поле запроса. Документация говорит только
+// одно: «перед добавлением в строку для подписи значение Receipt нужно
+// URL-кодировать», а про само поле умалчивает — поэтому у магазинов встречаются
+// все четыре сочетания. Значения ROBOKASSA_RECEIPT_ENCODE:
+//   both  (по умолчанию) — кодированы и подпись, и поле. Это же объясняет
+//                          известное «для GET чек кодируется дважды»: один раз
+//                          сам чек, второй — при сборке строки запроса;
+//   sign  — кодирована только подпись, в поле уходит исходный JSON;
+//   field — кодировано только поле, в подписи исходный JSON (так делает
+//           популярный неофициальный SDK);
+//   raw   — нигде не кодируется.
+// Подобрать нужное вручную не надо: `npm run check:pay` перебирает все четыре
+// и говорит, какое принимает Robokassa.
+export type ReceiptEncoding = { field: string; signature: string };
+
+export const RECEIPT_ENCODINGS = ["both", "sign", "field", "raw"] as const;
+export type ReceiptEncodeMode = (typeof RECEIPT_ENCODINGS)[number];
+
+export function encodeReceiptValue(
+  json: string,
+  mode: string
+): ReceiptEncoding {
+  const encoded = encodeURIComponent(json);
+  switch (mode.toLowerCase()) {
+    case "raw":
+      return { field: json, signature: json };
+    case "sign":
+      return { field: json, signature: encoded };
+    // «url» — прежнее имя этого режима, оставлено для совместимости.
+    case "field":
+    case "url":
+      return { field: encoded, signature: json };
+    default:
+      return { field: encoded, signature: encoded };
+  }
+}
 
 function encodeReceipt(json: string): ReceiptEncoding {
-  const mode = env("ROBOKASSA_RECEIPT_ENCODE").toLowerCase();
-  const encoded = encodeURIComponent(json);
-  if (mode === "raw") return { field: json, signature: json };
-  if (mode === "both") return { field: encoded, signature: encoded };
-  return { field: encoded, signature: json };
+  return encodeReceiptValue(json, env("ROBOKASSA_RECEIPT_ENCODE"));
 }
 
 // Срок жизни счёта. Нужен, чтобы покупатель не оплатил заказ, который сайт уже

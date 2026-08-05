@@ -210,9 +210,116 @@ console.log(`
 Открой её в браузере:
   • открылась страница оплаты — Пароль#1 и алгоритм хеша верные;
   • «Ошибка в параметрах» / «неверная подпись» — Пароль#1 или ROBOKASSA_HASH
-    не совпадают с технастройками магазина в ЛК Robokassa.
+    не совпадают с технастройками магазина в ЛК Robokassa.`);
 
-Если сайт при этом не предлагает онлайн-оплату:
-  1) bash deploy/update.sh (ключи вшиваются при сборке — перезапуска мало);
-  2) не помогло — pm2 delete seeds && pm2 start ecosystem.config.js;
-  3) точные ошибки — в pm2 logs seeds (строки [robokassa]).`);
+// --- 3. Фискальный чек: какой способ кодирования принимает Robokassa ---------
+// Документация требует URL-кодировать Receipt перед подписью, но про само поле
+// умалчивает, и магазины настроены по-разному. Вместо угадывания просто
+// спрашиваем Robokassa: отправляем четыре пробных платежа на 1 ₽ (каждый со
+// своим сочетанием) и смотрим, какой она приняла. Счета остаются неоплаченными
+// и протухают сами.
+const PAY_URL = "https://auth.robokassa.ru/Merchant/Index.aspx";
+
+const receiptJson = JSON.stringify({
+  ...(process.env.ROBOKASSA_SNO ? { sno: process.env.ROBOKASSA_SNO.trim() } : {}),
+  items: [
+    {
+      name: "Проверка подключения",
+      quantity: 1,
+      sum: 1,
+      payment_method:
+        (process.env.ROBOKASSA_PAYMENT_METHOD || "").trim() || "full_prepayment",
+      payment_object:
+        (process.env.ROBOKASSA_PAYMENT_OBJECT || "").trim() || "commodity",
+      tax: (process.env.ROBOKASSA_TAX || "").trim() || "none",
+    },
+  ],
+});
+
+const MODES = {
+  both: (json) => ({ field: encodeURIComponent(json), sign: encodeURIComponent(json) }),
+  sign: (json) => ({ field: json, sign: encodeURIComponent(json) }),
+  field: (json) => ({ field: encodeURIComponent(json), sign: json }),
+  raw: (json) => ({ field: json, sign: json }),
+};
+
+// Robokassa либо уводит на страницу счёта (/Merchant/Index/<GUID>), либо
+// отвечает страницей с ошибкой подписи/параметров.
+async function tryReceiptMode(name, invId) {
+  const { field, sign } = MODES[name](receiptJson);
+  const body = new URLSearchParams({
+    MerchantLogin: login,
+    OutSum: outSum,
+    InvId: String(invId),
+    Description: `Проверка чека (${name}), не оплачивать`,
+    Receipt: field,
+    SignatureValue: hash(`${login}:${outSum}:${invId}:${sign}:${pass1}`),
+    Culture: "ru",
+    Encoding: "utf-8",
+  });
+  if (isTest) body.set("IsTest", "1");
+
+  try {
+    const res = await fetch(PAY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      redirect: "manual",
+      signal: AbortSignal.timeout(20000),
+    });
+    const location = res.headers.get("location") || "";
+    if (res.status >= 300 && res.status < 400) {
+      return { ok: /\/Merchant\/Index\//i.test(location), detail: location };
+    }
+    const text = await res.text();
+    const bad = /подпис|signature|ошибк|error|неверн/i.test(text);
+    return { ok: !bad, detail: bad ? firstError(text) : `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, detail: e?.cause?.code || e?.message || String(e) };
+  }
+}
+
+// Достаём из HTML первую осмысленную строку с ошибкой — без разметки.
+function firstError(html) {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+  const m = text.match(/[^.!]*(подпис|ошибк|неверн|signature|error)[^.!]*/i);
+  return (m ? m[0] : text).trim().slice(0, 160);
+}
+
+console.log("\nПроверяю фискальный чек: какое кодирование принимает Robokassa…\n");
+const accepted = [];
+for (const [i, name] of Object.keys(MODES).entries()) {
+  const r = await tryReceiptMode(name, demoInvId + 1 + i);
+  console.log(`  ${r.ok ? "✅" : "❌"} ROBOKASSA_RECEIPT_ENCODE=${name.padEnd(5)} ${r.ok ? "принят" : r.detail}`);
+  if (r.ok) accepted.push(name);
+}
+
+console.log();
+if (accepted.length === 0) {
+  console.error(`❌ Ни одно кодирование чека не принято. Обычно это значит, что
+   дело не в чеке, а в Пароле#1 или алгоритме хеша (проверь ссылку выше),
+   либо в самом чеке: у магазина не включена фискализация, не задан
+   ROBOKASSA_SNO, либо ставка ROBOKASSA_TAX не та.`);
+} else if (accepted.includes("both")) {
+  console.log(`✅ Чек принят (${accepted.join(", ")}). Значение по умолчанию подходит —
+   ROBOKASSA_RECEIPT_ENCODE можно не задавать. Включи сам чек:
+     ROBOKASSA_RECEIPT=on
+     ROBOKASSA_SNO=${process.env.ROBOKASSA_SNO || "usn_income"}
+     ROBOKASSA_TAX=${process.env.ROBOKASSA_TAX || "none"}`);
+} else {
+  console.log(`✅ Чек принят в режиме: ${accepted.join(", ")}. Впиши в .env.production:
+     ROBOKASSA_RECEIPT=on
+     ROBOKASSA_RECEIPT_ENCODE=${accepted[0]}
+     ROBOKASSA_SNO=${process.env.ROBOKASSA_SNO || "usn_income"}
+     ROBOKASSA_TAX=${process.env.ROBOKASSA_TAX || "none"}`);
+}
+
+console.log(`
+После правки .env.production: bash deploy/update.sh
+Если сайт не предлагает онлайн-оплату:
+  1) не помогло — pm2 delete seeds && pm2 start ecosystem.config.js;
+  2) точные ошибки — в pm2 logs seeds (строки [robokassa]).`);
