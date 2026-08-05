@@ -279,15 +279,19 @@ async function tryReceiptMode(name, invId) {
   }
 }
 
-// Достаём из HTML первую осмысленную строку с ошибкой — без разметки.
+// Достаём из HTML окно вокруг слова об ошибке — без разметки и без «простыни»
+// из заголовков страницы.
 function firstError(html) {
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ");
-  const m = text.match(/[^.!]*(подпис|ошибк|неверн|signature|error)[^.!]*/i);
-  return (m ? m[0] : text).trim().slice(0, 160);
+    .replace(/\s+/g, " ")
+    .trim();
+  const m = text.match(/подпис|ошибк|неверн|signature|error/i);
+  if (!m) return text.slice(0, 120) || "отклонён";
+  const at = m.index ?? 0;
+  return `отклонён: …${text.slice(Math.max(0, at - 60), at + 80).trim()}…`;
 }
 
 console.log("\nПроверяю фискальный чек: какое кодирование принимает Robokassa…\n");
