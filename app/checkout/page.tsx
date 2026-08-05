@@ -413,9 +413,18 @@ export default function CheckoutPage() {
               </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-brand-700">
-                  Email
+                  Email *
                 </span>
-                <input type="email" value={form.email} onChange={update("email")} className="input" />
+                {/* Обязателен: на него Robokassa отправляет фискальный чек
+                    (54-ФЗ), а сайт — письма о заказе. */}
+                <input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={update("email")}
+                  className="input"
+                  placeholder="для чека и писем о заказе"
+                />
               </label>
             </div>
           </fieldset>

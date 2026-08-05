@@ -36,6 +36,8 @@ const ROBOKASSA_KEYS = [
   "ROBOKASSA_RECEIPT_ENCODE",
   "ROBOKASSA_SNO",
   "ROBOKASSA_TAX",
+  "ROBOKASSA_PAYMENT_METHOD",
+  "ROBOKASSA_PAYMENT_OBJECT",
   "ROBOKASSA_INVOICE_TTL_MIN",
 ];
 
@@ -261,6 +263,33 @@ describe("фискальный чек", () => {
       0
     );
     expect(sum).toBe(Math.round(Number(p.fields.OutSum) * 100));
+  });
+
+  it("признак расчёта — предоплата, доставка всегда услуга", () => {
+    const items = buildReceiptItems({
+      lines: [{ name: "Томат", price: 100, qty: 1 }],
+      deliveryCost: 300,
+    });
+    expect(items[0]).toMatchObject({
+      payment_method: "full_prepayment",
+      payment_object: "commodity",
+    });
+    expect(items[1]).toMatchObject({
+      payment_method: "full_prepayment",
+      payment_object: "service",
+    });
+  });
+
+  it("признаки расчёта переопределяются переменными окружения", () => {
+    process.env.ROBOKASSA_PAYMENT_METHOD = "full_payment";
+    process.env.ROBOKASSA_PAYMENT_OBJECT = "service";
+    const [item] = buildReceiptItems({
+      lines: [{ name: "Консультация", price: 100, qty: 1 }],
+    });
+    expect(item).toMatchObject({
+      payment_method: "full_payment",
+      payment_object: "service",
+    });
   });
 
   it("ставка НДС берётся из ROBOKASSA_TAX", () => {

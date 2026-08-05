@@ -30,6 +30,8 @@
 //   ROBOKASSA_RECEIPT       — on: слать фискальный чек (Receipt)
 //   ROBOKASSA_SNO           — система налогообложения для чека (usn_income и т.п.)
 //   ROBOKASSA_TAX           — ставка НДС в чеке (none по умолчанию)
+//   ROBOKASSA_PAYMENT_METHOD— признак способа расчёта (full_prepayment)
+//   ROBOKASSA_PAYMENT_OBJECT— признак предмета расчёта товаров (commodity)
 //   ROBOKASSA_RECEIPT_ENCODE— url (по умолчанию) | raw — как чек попадает в подпись
 //   ROBOKASSA_INVOICE_TTL_MIN — срок жизни счёта, мин (0 — не ограничивать)
 
@@ -152,6 +154,12 @@ export function buildReceiptItems(o: {
   total?: number;
 }): ReceiptItem[] {
   const tax = o.tax || env("ROBOKASSA_TAX") || "none";
+  // Признак способа расчёта. Для интернет-магазина с доставкой это ПОЛНАЯ
+  // ПРЕДОПЛАТА: деньги получены сейчас, товар уедет позже. То же значение
+  // выбирается в ЛК Robokassa («Метод платежа» в Робочеках) — они должны
+  // совпадать, иначе чек уйдёт с неверным признаком.
+  const paymentMethod = env("ROBOKASSA_PAYMENT_METHOD") || "full_prepayment";
+  const paymentObject = env("ROBOKASSA_PAYMENT_OBJECT") || "commodity";
   const lines = o.lines.filter((l) => l.qty > 0);
 
   // Считаем в копейках — на float'ах чек не сойдётся с суммой платежа.
@@ -182,8 +190,8 @@ export function buildReceiptItems(o: {
     quantity: l.qty,
     sum: Math.round(paidKop[i]) / 100,
     tax,
-    payment_method: "full_payment",
-    payment_object: "commodity",
+    payment_method: paymentMethod,
+    payment_object: paymentObject,
   }));
 
   const deliveryKop = Math.round((o.deliveryCost ?? 0) * 100);
@@ -193,7 +201,8 @@ export function buildReceiptItems(o: {
       quantity: 1,
       sum: deliveryKop / 100,
       tax,
-      payment_method: "full_payment",
+      payment_method: paymentMethod,
+      // Доставка — услуга, а не товар: этого требует номенклатура в чеке.
       payment_object: "service",
     });
   }

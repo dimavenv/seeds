@@ -81,6 +81,14 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
+  // E-mail обязателен: на него уходит фискальный чек (54-ФЗ) и письма о заказе.
+  // Без адреса Robokassa не может доставить чек покупателю.
+  if (!email?.trim() || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email.trim())) {
+    return NextResponse.json(
+      { error: "Укажите e-mail — на него придут чек и письма о заказе" },
+      { status: 400 }
+    );
+  }
   if (items.length === 0) {
     return NextResponse.json({ error: "Корзина пуста" }, { status: 400 });
   }
