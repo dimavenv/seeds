@@ -17,6 +17,7 @@ import {
   pick,
   robokassaHash,
   robokassaJwt,
+  refundJwtVariants,
 } from "@/lib/robokassa";
 
 const LOGIN = "tomatsemena";
@@ -413,6 +414,22 @@ describe("возвраты (Пароль#3)", () => {
     expect(isRefundApiConfigured()).toBe(false);
     process.env.ROBOKASSA_PASSWORD3 = "pass-three";
     expect(isRefundApiConfigured()).toBe(true);
+  });
+
+  it("варианты подписи возврата: первым — составной секрет логин:Пароль#3", () => {
+    process.env.ROBOKASSA_PASSWORD3 = "pass-three";
+    const variants = refundJwtVariants();
+    expect(variants[0]).toMatchObject({
+      secret: `${LOGIN}:pass-three`,
+      alg: "SHA256",
+    });
+    // Остальные сочетания — на случай, если у магазина принят другой вариант.
+    expect(variants.map((v) => `${v.secret}|${v.alg}`)).toEqual([
+      `${LOGIN}:pass-three|SHA256`,
+      "pass-three|SHA256",
+      `${LOGIN}:pass-three|MD5`,
+      "pass-three|MD5",
+    ]);
   });
 
   it("JWT: заголовок, полезная нагрузка и HMAC на Пароле#3", () => {

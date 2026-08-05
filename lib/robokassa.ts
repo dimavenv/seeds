@@ -577,21 +577,57 @@ function base64url(data: Buffer | string): string {
     .replace(/=+$/, "");
 }
 
-// JWT в понимании Robokassa: alg — SHA256/SHA512, а не HS256/HS512.
+// JWT в понимании Robokassa: alg — MD5/SHA256/SHA512, а не HS256/HS512.
+export type RobokassaJwtAlg = "MD5" | "SHA256" | "SHA512";
+
+const HMAC_BY_ALG: Record<RobokassaJwtAlg, string> = {
+  MD5: "md5",
+  SHA256: "sha256",
+  SHA512: "sha512",
+};
+
 export function robokassaJwt(
   payload: Record<string, unknown>,
   secret: string,
-  alg: "SHA256" | "SHA512" = "SHA256"
+  alg: RobokassaJwtAlg = "SHA256"
 ): string {
   const header = base64url(JSON.stringify({ typ: "JWT", alg }));
   const body = base64url(Buffer.from(JSON.stringify(payload), "utf8"));
   const signature = base64url(
     crypto
-      .createHmac(alg === "SHA512" ? "sha512" : "sha256", secret)
+      .createHmac(HMAC_BY_ALG[alg] ?? "sha256", secret)
       .update(`${header}.${body}`, "utf8")
       .digest()
   );
   return `${header}.${body}.${signature}`;
+}
+
+// Чем именно подписывать запрос возврата, документация внятно не говорит, а
+// сервис отвечает только «signature verification has been failed». У соседнего
+// JWT-интерфейса Robokassa (выставление счетов) секрет составной —
+// «логин:пароль», поэтому первым идёт он же с Паролем#3, а дальше остальные
+// разумные сочетания. Порядок важен: перебор прекращается на первом ответе,
+// который НЕ жалуется на подпись.
+export function refundJwtVariants(): {
+  label: string;
+  secret: string;
+  alg: RobokassaJwtAlg;
+}[] {
+  const login = robokassaLogin();
+  const pass = robokassaPassword(3);
+  return [
+    { label: "логин:Пароль#3, SHA256", secret: `${login}:${pass}`, alg: "SHA256" },
+    { label: "Пароль#3, SHA256", secret: pass, alg: "SHA256" },
+    { label: "логин:Пароль#3, MD5", secret: `${login}:${pass}`, alg: "MD5" },
+    { label: "Пароль#3, MD5", secret: pass, alg: "MD5" },
+  ];
+}
+
+// Ответ вида «не сошлась подпись» — единственный повод пробовать следующее
+// сочетание: остальные отказы (нет такой операции, сумма больше остатка)
+// повторять бессмысленно.
+function isSignatureFailure(message: string | null | undefined): boolean {
+  return /signature|подпис/i.test(message ?? "");
 }
 
 export type RefundCreateResult = {
@@ -601,6 +637,11 @@ export type RefundCreateResult = {
 };
 
 // Запрос возврата: sum не задан — возвращается вся операция целиком.
+//
+// Пока Robokassa не приняла подпись, пробуем следующее сочетание секрета и
+// алгоритма (см. refundJwtVariants). Двойного возврата это не создаёт: к
+// следующей попытке переходим ТОЛЬКО когда сервис ответил «не сошлась подпись»,
+// то есть запрос не был выполнен.
 export async function robokassaRefund(o: {
   opKey: string;
   sum?: number | null;
@@ -609,32 +650,52 @@ export async function robokassaRefund(o: {
   if (typeof o.sum === "number" && o.sum > 0) {
     payload.RefundSum = Math.round(o.sum * 100) / 100;
   }
-  const token = robokassaJwt(payload, robokassaPassword(3));
 
-  const res = await fetch(`${REFUND_API}/Create`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // Тело — сам токен строкой JSON (именно так его ждёт Robokassa).
-    body: JSON.stringify(token),
-    signal: AbortSignal.timeout(20000),
-  });
-  const data = (await res.json().catch(() => ({}))) as {
-    success?: boolean;
-    message?: string;
-    requestId?: string;
+  let last: RefundCreateResult = {
+    ok: false,
+    requestId: null,
+    message: "Robokassa не приняла запрос возврата",
   };
-  if (!res.ok || !data.success) {
+
+  for (const variant of refundJwtVariants()) {
+    const res = await fetch(`${REFUND_API}/Create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // Тело — сам токен строкой JSON (именно так его ждёт Robokassa).
+      body: JSON.stringify(robokassaJwt(payload, variant.secret, variant.alg)),
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      message?: string;
+      requestId?: string;
+    };
+
+    if (res.ok && data.success) {
+      console.log(
+        `[robokassa] возврат по операции ${o.opKey}: принят (подпись — ${variant.label})`
+      );
+      return {
+        ok: true,
+        requestId: data.requestId ?? null,
+        message: data.message ?? null,
+      };
+    }
+
     console.error(
-      `[robokassa] возврат по операции ${o.opKey}: отказ (HTTP ${res.status}) — ${
-        data.message ?? "без описания"
-      }`
+      `[robokassa] возврат по операции ${o.opKey}: отказ (HTTP ${res.status}, подпись — ${
+        variant.label
+      }) — ${data.message ?? "без описания"}`
     );
+    last = {
+      ok: false,
+      requestId: data.requestId ?? null,
+      message: data.message ?? null,
+    };
+    if (!isSignatureFailure(data.message)) break;
   }
-  return {
-    ok: Boolean(data.success),
-    requestId: data.requestId ?? null,
-    message: data.message ?? null,
-  };
+
+  return last;
 }
 
 export type RefundState = {
