@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { clientIp } from "@/lib/client-ip";
 import { verifyCaptcha } from "@/lib/captcha";
 import { isMailConfigured } from "@/lib/email";
-import { generateCode, issueTicket, allowAttempt } from "@/lib/email-code";
+import { generateCode, issueTicket, allowAttempt, ttlMs } from "@/lib/email-code";
 import {
   parseRegInput,
   dbReady,
@@ -71,11 +71,16 @@ export async function POST(request: Request) {
     return bad("Регистрация временно недоступна", 503);
   }
 
+  // expiresIn — сколько секунд у покупателя есть на ввод; по нему страница
+  // рисует обратный отсчёт, чтобы «код устарел» не было сюрпризом.
+  const expiresIn = Math.round(ttlMs() / 1000);
+
   if (taken) {
     void sendExistsEmail(input.email, input.name).catch(() => {});
     return NextResponse.json({
       needCode: true,
       ticket: issueTicket(input.email, generateCode()),
+      expiresIn,
     });
   }
 
@@ -84,5 +89,9 @@ export async function POST(request: Request) {
   if (!sent) {
     return bad("Не удалось отправить письмо с кодом, попробуйте позже", 503);
   }
-  return NextResponse.json({ needCode: true, ticket: issueTicket(input.email, code) });
+  return NextResponse.json({
+    needCode: true,
+    ticket: issueTicket(input.email, code),
+    expiresIn,
+  });
 }

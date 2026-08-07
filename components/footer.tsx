@@ -1,6 +1,5 @@
 import Link from "next/link";
 import Logo from "@/components/logo";
-import CategoryIcon from "@/components/category-icon";
 import type { Category } from "@/lib/types";
 
 export default function Footer({ categories }: { categories: Category[] }) {
@@ -25,11 +24,7 @@ export default function Footer({ categories }: { categories: Category[] }) {
                 ни поисковику, для которого это ещё и внутренняя перелинковка. */}
             {categories.map((c) => (
               <li key={c.id}>
-                <Link
-                  href={`/catalog/${c.slug}`}
-                  className="inline-flex items-center gap-2 hover:text-brand-800"
-                >
-                  <CategoryIcon slug={c.slug} className="h-5 w-5" />
+                <Link href={`/catalog/${c.slug}`} className="hover:text-brand-800">
                   {c.name}
                 </Link>
               </li>

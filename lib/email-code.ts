@@ -2,12 +2,30 @@ import "server-only";
 import crypto from "node:crypto";
 
 // Коды подтверждения почты при регистрации — без хранения в БД.
-// Сервер выдаёт клиенту «билет»: AES-256-GCM-контейнер с почтой, кодом и сроком
-// годности. Подделать или прочитать билет без серверного ключа нельзя (GCM
-// проверяет целостность), а расшифровать его может любой воркер pm2 — ключ
-// детерминированный. Клиент присылает билет + код, сервер сверяет.
+// Сервер выдаёт клиенту «билет»: AES-256-GCM-контейнер с почтой, кодами и их
+// сроками годности. Подделать или прочитать билет без серверного ключа нельзя
+// (GCM проверяет целостность), а расшифровать его может любой воркер pm2 —
+// ключ детерминированный. Клиент присылает билет + код, сервер сверяет.
+//
+// Кодов в билете НЕСКОЛЬКО (до MAX_CODES). Причина — задержки на стороне
+// получателя: mail.ru нередко придерживает первое письмо на несколько минут,
+// покупатель за это время жмёт «отправить ещё раз», а потом ему приходят оба
+// письма, и вводит он то, которое открыл первым. Раньше повторная отправка
+// обнуляла прежний код и такой ввод падал с «неверный код»; теперь подходит
+// любой из выданных, пока не вышел его собственный срок.
 
-const TTL_MS = 15 * 60 * 1000; // код живёт 15 минут
+// Сколько живёт код. По умолчанию 5 минут; на сервере с медленной доставкой
+// писем срок поднимается через EMAIL_CODE_TTL_MIN в .env.production без правки
+// кода (см. SETUP-MAIL-RU.md).
+export function ttlMs(): number {
+  const min = Number(process.env.EMAIL_CODE_TTL_MIN);
+  const safe = Number.isFinite(min) && min >= 1 && min <= 60 ? min : 5;
+  return safe * 60 * 1000;
+}
+
+// Больше трёх живых кодов не храним: билет уезжает клиенту, а повторные
+// отправки и так ограничены лимитером.
+const MAX_CODES = 3;
 
 function key(): Buffer {
   // Детерминированный ключ из серверных секретов (одинаков на всех воркерах).
@@ -22,15 +40,35 @@ export function generateCode(): string {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-export function issueTicket(email: string, code: string): string {
-  const payload = JSON.stringify({ e: email, c: code, x: Date.now() + TTL_MS });
+export type IssuedCode = { code: string; expiresAt: number };
+export type Ticket = {
+  email: string;
+  codes: IssuedCode[];
+  // true — ни одного живого кода не осталось (нужен новый).
+  expired: boolean;
+};
+
+// Новый билет. previous — билет, выданный этому же покупателю раньше: его ещё
+// живые коды переносятся в новый, чтобы опоздавшее письмо не стало мусором.
+export function issueTicket(
+  email: string,
+  code: string,
+  previous?: Ticket | null
+): string {
+  const now = Date.now();
+  const kept = (previous?.email === email ? previous.codes : [])
+    .filter((c) => c.expiresAt > now)
+    .slice(-(MAX_CODES - 1));
+  const codes = [...kept, { code, expiresAt: now + ttlMs() }];
+  const payload = JSON.stringify({
+    e: email,
+    l: codes.map((c) => [c.code, c.expiresAt]),
+  });
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key(), iv);
   const enc = Buffer.concat([cipher.update(payload, "utf8"), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), enc]).toString("base64url");
 }
-
-export type Ticket = { email: string; code: string; expired: boolean };
 
 // null — билет повреждён/подделан; expired проверяется отдельно, чтобы дать
 // понятную ошибку «код устарел» вместо «неверный код».
@@ -43,21 +81,65 @@ export function readTicket(ticket: string): Ticket | null {
       decipher.update(raw.subarray(28)),
       decipher.final(),
     ]).toString("utf8");
-    const p = JSON.parse(json) as { e?: string; c?: string; x?: number };
-    if (typeof p.e !== "string" || typeof p.c !== "string" || typeof p.x !== "number") {
-      return null;
+    const p = JSON.parse(json) as {
+      e?: string;
+      l?: unknown;
+      // старый формат (один код) — билеты, выданные до обновления сайта
+      c?: string;
+      x?: number;
+    };
+    if (typeof p.e !== "string") return null;
+
+    const codes: IssuedCode[] = [];
+    if (Array.isArray(p.l)) {
+      for (const entry of p.l) {
+        const [code, expiresAt] = Array.isArray(entry) ? entry : [];
+        if (typeof code === "string" && typeof expiresAt === "number") {
+          codes.push({ code, expiresAt });
+        }
+      }
+    } else if (typeof p.c === "string" && typeof p.x === "number") {
+      codes.push({ code: p.c, expiresAt: p.x });
     }
-    return { email: p.e, code: p.c, expired: Date.now() > p.x };
+    if (codes.length === 0) return null;
+
+    const now = Date.now();
+    return { email: p.e, codes, expired: codes.every((c) => c.expiresAt <= now) };
   } catch {
     return null;
   }
 }
 
-// Сверка кода без утечки по времени сравнения.
+// Когда истечёт последний живой код (мс эпохи). 0 — живых не осталось.
+export function ticketExpiresAt(ticket: Ticket): number {
+  const now = Date.now();
+  return ticket.codes.reduce(
+    (max, c) => (c.expiresAt > now && c.expiresAt > max ? c.expiresAt : max),
+    0
+  );
+}
+
+// Сколько секунд осталось на ввод — уходит клиенту для таймера на экране.
+export function secondsLeft(ticket: Ticket): number {
+  const at = ticketExpiresAt(ticket);
+  return at ? Math.max(0, Math.round((at - Date.now()) / 1000)) : 0;
+}
+
+// Сверка кода без утечки по времени сравнения. Подходит ЛЮБОЙ ещё живой код из
+// билета: покупатель мог получить письма не в том порядке, в каком мы их слали.
 export function codeMatches(ticket: Ticket, input: string): boolean {
-  const a = Buffer.from(ticket.code);
   const b = Buffer.from(String(input).trim());
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const now = Date.now();
+  let ok = false;
+  for (const c of ticket.codes) {
+    const a = Buffer.from(c.code);
+    // Без раннего выхода: перебираем все коды, чтобы по времени ответа нельзя
+    // было понять, какой из них совпал.
+    if (a.length === b.length && crypto.timingSafeEqual(a, b) && c.expiresAt > now) {
+      ok = true;
+    }
+  }
+  return ok;
 }
 
 // Простейший лимитер попыток в памяти процесса (на воркер) — от перебора кода

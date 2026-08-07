@@ -5,6 +5,7 @@ import {
   generateCode,
   issueTicket,
   allowAttempt,
+  ttlMs,
 } from "@/lib/email-code";
 import { sendCodeEmail } from "@/lib/registration";
 
@@ -13,7 +14,9 @@ function bad(error: string, status = 400) {
 }
 
 // Повторная отправка кода. Капча не нужна: билет доказывает, что шаг 1 с капчей
-// уже пройден. Код каждый раз новый, срок годности обновляется.
+// уже пройден. Код каждый раз новый, но прежние — пока не вышел их срок —
+// продолжают работать (см. lib/email-code.ts: письма приходят с задержкой и не
+// обязательно в том порядке, в каком мы их отправили).
 export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try {
@@ -35,5 +38,10 @@ export async function POST(request: Request) {
   const sent = await sendCodeEmail(ticket.email, name, code);
   if (!sent) return bad("Не удалось отправить письмо, попробуйте позже", 503);
 
-  return NextResponse.json({ ticket: issueTicket(ticket.email, code) });
+  // Прежний билет передаём дальше: его ещё живые коды остаются рабочими —
+  // задержавшееся первое письмо покупатель откроет позже, и код подойдёт.
+  return NextResponse.json({
+    ticket: issueTicket(ticket.email, code, ticket),
+    expiresIn: Math.round(ttlMs() / 1000),
+  });
 }

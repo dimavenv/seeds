@@ -8,6 +8,8 @@ import { formatPrice, formatDate } from "@/lib/format";
 import { ORDER_STATUS_LABELS, type Order, type OrderStatus } from "@/lib/types";
 import LogoutButton from "@/components/logout-button";
 import ThemeToggle from "@/components/theme-toggle";
+import AccountProfileForm from "@/components/account-profile-form";
+import { EMPTY_PROFILE, profileFromRecord, type Profile } from "@/lib/profile";
 import { servicePageMetadata } from "@/lib/seo";
 
 export const metadata = servicePageMetadata("/account", "Личный кабинет");
@@ -43,6 +45,16 @@ export default async function AccountPage() {
 
   if (!session.userId) {
     redirect("/login");
+  }
+
+  // ФИО и телефон покупателя. База может быть без этих полей (схему на сервере
+  // ещё не обновляли) — тогда просто показываем пустую форму.
+  let profile: Profile = EMPTY_PROFILE;
+  try {
+    const me = await pb.collection("users").getOne(session.userId);
+    profile = profileFromRecord(me as unknown as Record<string, unknown>);
+  } catch {
+    profile = EMPTY_PROFILE;
   }
 
   // Правила PocketBase позволяют видеть только свои заказы; фильтр — для явности.
@@ -93,6 +105,10 @@ export default async function AccountPage() {
           </Link>
           <LogoutButton />
         </div>
+      </div>
+
+      <div className="mb-8">
+        <AccountProfileForm email={session.email} profile={profile} />
       </div>
 
       <h2 className="mb-3 text-lg font-bold text-brand-800">История заказов</h2>

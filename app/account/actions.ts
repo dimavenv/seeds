@@ -5,8 +5,44 @@ import { pbAdmin } from "@/lib/pb/server";
 import { getSessionPb } from "@/lib/auth";
 import { isValidRecordId } from "@/lib/data";
 import { notifyNewReview } from "@/lib/admin-mail";
+import { joinFullName, parseProfile, type Profile } from "@/lib/profile";
 
 export type ReviewFormState = { error?: string; ok?: boolean };
+export type ProfileFormState = { error?: string; ok?: boolean };
+
+// Сохранение ФИО и телефона в личном кабинете. Пишем от имени самого
+// пользователя (правило updateRule в PocketBase разрешает менять свою запись,
+// пока в теле нет role) — суперпользователь тут не нужен.
+export async function updateProfile(input: Profile): Promise<ProfileFormState> {
+  const { session, pb } = await getSessionPb();
+  if (!session.userId) return { error: "Войдите, чтобы изменить данные" };
+
+  const parsed = parseProfile({ ...input });
+  if (parsed.error) return { error: parsed.error };
+  const profile = parsed.profile;
+
+  try {
+    await pb.collection("users").update(session.userId, {
+      ...profile,
+      // name — одна строка ФИО: ею подписаны отзывы и обращения в письмах.
+      name: joinFullName(profile),
+    });
+  } catch (e) {
+    const data = (e as { response?: { data?: Record<string, unknown> } })?.response?.data;
+    // Понятная подсказка вместо «не удалось», если на сервере ещё старая схема
+    // без полей профиля.
+    if (data && Object.keys(profile).some((f) => f in data)) {
+      return {
+        error:
+          "База ещё не знает полей профиля — выполните «npm run db:schema» на сервере.",
+      };
+    }
+    return { error: "Не удалось сохранить данные, попробуйте ещё раз" };
+  }
+
+  revalidatePath("/account");
+  return { ok: true };
+}
 
 // Оставить отзыв к своему заказу (после получения). Уходит на модерацию.
 export async function submitReview(input: {

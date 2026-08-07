@@ -18,12 +18,22 @@ export default function RegisterPage() {
   const [ticket, setTicket] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [resendIn, setResendIn] = useState(0);
+  // Сколько секунд код ещё действителен (срок приходит с сервера, см.
+  // EMAIL_CODE_TTL_MIN). Показываем обратный отсчёт, чтобы «код устарел» не
+  // всплывало неожиданно, а по нулю сразу предлагаем запросить новый.
+  const [codeLeft, setCodeLeft] = useState(0);
 
   useEffect(() => {
     if (resendIn <= 0) return;
     const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [resendIn]);
+
+  useEffect(() => {
+    if (codeLeft <= 0) return;
+    const t = setTimeout(() => setCodeLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [codeLeft]);
 
   async function finishLogin() {
     // Аккаунт создан — входим через сервер (ставит httpOnly-cookie) и идём в
@@ -68,6 +78,7 @@ export default function RegisterPage() {
         // Почта настроена — ждём код из письма.
         setTicket(data.ticket);
         setResendIn(45);
+        setCodeLeft(Number(data.expiresIn) || 0);
         setLoading(false);
         return;
       }
@@ -122,6 +133,7 @@ export default function RegisterPage() {
       }
       setTicket(data.ticket);
       setResendIn(45);
+      setCodeLeft(Number(data.expiresIn) || 0);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
     }
@@ -135,8 +147,22 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold text-brand-800">Подтвердите почту</h1>
           <p className="mt-1 text-sm text-brand-500">
             Мы отправили 6-значный код на <b>{email}</b>. Введите его, чтобы
-            завершить регистрацию. Письмо не пришло — проверьте «Спам».
+            завершить регистрацию. Письмо не пришло — проверьте «Спам»;
+            Mail.ru иногда придерживает первое письмо на пару минут.
           </p>
+          {codeLeft > 0 ? (
+            <p className="mt-2 text-sm text-brand-600">
+              Код действует ещё{" "}
+              <b>
+                {Math.floor(codeLeft / 60)}:
+                {String(codeLeft % 60).padStart(2, "0")}
+              </b>
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-accent-600">
+              Срок кода истёк — запросите новый.
+            </p>
+          )}
           <form onSubmit={confirm} className="mt-6 space-y-4">
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-brand-700">

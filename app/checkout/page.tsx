@@ -19,6 +19,7 @@ import {
   secureSet,
   secureClear,
 } from "@/lib/secure-store";
+import { formatPhone, type Profile } from "@/lib/profile";
 import ConsentCheckbox from "@/components/consent-checkbox";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 import DadataAddress, {
@@ -30,6 +31,17 @@ import Spinner from "@/components/spinner";
 import { GOALS, reachGoal, stashPurchase } from "@/lib/metrika";
 
 const PROFILE_KEY = "checkout_profile";
+
+// Пустая форма получателя — и начальное состояние, и база для слияния с
+// данными личного кабинета.
+const EMPTY_FORM = {
+  last_name: "",
+  first_name: "",
+  middle_name: "",
+  phone: "",
+  email: "",
+  comment: "",
+};
 
 // Переход на платёжную страницу Robokassa. Отправляем именно POST-форму, а не
 // ссылку: фискальный чек с номенклатурой не влезает в ограничение длины URL, а
@@ -83,14 +95,13 @@ export default function CheckoutPage() {
   const [promoNotice, setPromoNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    last_name: "",
-    first_name: "",
-    middle_name: "",
-    phone: "",
-    email: "",
-    comment: "",
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+  // Что-то подставилось из личного кабинета — говорим об этом покупателю,
+  // чтобы чужие на вид данные в форме не пугали.
+  const [fromProfile, setFromProfile] = useState(false);
+  // Покупатель уже начал заполнять форму сам — тогда подстановка из кабинета
+  // (она приезжает запросом и может опоздать) в его текст не лезет.
+  const formTouched = useRef(false);
   const [deliveryMethod, setDeliveryMethod] =
     useState<DeliveryMethodId>("ozon");
   const [address, setAddress] = useState<AddressValue>(emptyAddress);
@@ -123,19 +134,56 @@ export default function CheckoutPage() {
     });
   }, [ready, cart, cartTotal]);
 
-  // Подставить сохранённые («Запомнить меня») данные при загрузке.
+  // Подставить данные при загрузке: сначала сохранённые на этом устройстве
+  // («Запомнить меня») — они самые свежие, потом ФИО/телефон/почту из личного
+  // кабинета в те поля, что остались пустыми. Изменения здесь профиль не
+  // трогают: заказ можно оформить и на другого получателя.
   useEffect(() => {
     let cancelled = false;
-    secureGet<SavedProfile>(PROFILE_KEY).then((saved) => {
-      if (cancelled || !saved) return;
-      if (saved.form) setForm(saved.form);
-      if (saved.address) setAddress(saved.address);
-      // Раньше сюда сохранялся объект выбранного ПВЗ — теперь это строка;
-      // старые сохранённые профили с объектом просто игнорируем.
-      if (typeof saved.pvz === "string") setPvz(saved.pvz);
-      if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
-      setRemember(true);
-    });
+    (async () => {
+      const saved = await secureGet<SavedProfile>(PROFILE_KEY).catch(() => null);
+      if (cancelled) return;
+      if (saved) {
+        if (saved.form) setForm(saved.form);
+        if (saved.address) setAddress(saved.address);
+        // Раньше сюда сохранялся объект выбранного ПВЗ — теперь это строка;
+        // старые сохранённые профили с объектом просто игнорируем.
+        if (typeof saved.pvz === "string") setPvz(saved.pvz);
+        if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
+        setRemember(true);
+      }
+
+      try {
+        const res = await fetch("/api/profile");
+        if (!res.ok) return;
+        const p = (await res.json()) as Partial<Profile> & {
+          authorized?: boolean;
+          email?: string | null;
+        };
+        if (cancelled || !p.authorized || formTouched.current) return;
+        // База — то, что уже лежит в форме: сохранённый профиль устройства или
+        // пустые поля. Считаем её здесь, а не в updater'е setForm, чтобы
+        // сравнение «что подставилось» осталось чистым.
+        const base = { ...EMPTY_FORM, ...(saved?.form ?? {}) };
+        const merged = {
+          ...base,
+          last_name: base.last_name || (p.last_name ?? ""),
+          first_name: base.first_name || (p.first_name ?? ""),
+          middle_name: base.middle_name || (p.middle_name ?? ""),
+          phone: base.phone || formatPhone(p.phone ?? ""),
+          email: base.email || (p.email ?? ""),
+        };
+        setForm(merged);
+        setFromProfile(
+          merged.last_name !== base.last_name ||
+            merged.first_name !== base.first_name ||
+            merged.phone !== base.phone ||
+            merged.email !== base.email
+        );
+      } catch {
+        // кабинет недоступен — просто оставляем форму пустой
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -182,8 +230,10 @@ export default function CheckoutPage() {
   }, [promoCode, applyPromo, clearPromo]);
 
   function update(field: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      formTouched.current = true;
       setForm((f) => ({ ...f, [field]: e.target.value }));
+    };
   }
 
   async function submit(e: React.FormEvent) {
@@ -384,6 +434,15 @@ export default function CheckoutPage() {
             <p className="text-xs text-brand-500">
               Укажите ФИО полностью, без сокращений.
             </p>
+            {fromProfile && (
+              <p className="text-xs text-brand-600">
+                Заполнено из{" "}
+                <Link href="/account" className="font-semibold underline">
+                  личного кабинета
+                </Link>
+                . Здесь можно поменять — на профиль это не повлияет.
+              </p>
+            )}
             <div className="grid gap-4 sm:grid-cols-3">
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-brand-700">

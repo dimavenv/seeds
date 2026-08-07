@@ -32,11 +32,22 @@ function transport(auth: { user: string; pass: string }): Transporter {
       secure: port === 465, // 465 — SSL сразу; 587/25 — STARTTLS согласуется сам
       auth: { user: auth.user, pass: auth.pass },
       connectionTimeout: 8000,
+      greetingTimeout: 8000,
       socketTimeout: 15000,
+      // Соединение переиспользуется: каждое новое — это TCP + TLS + AUTH, а
+      // почтовые сервисы за частые логины ещё и притормаживают отправителя.
+      pool: true,
+      maxConnections: 2,
+      maxMessages: 50,
     });
     transports.set(auth.user, t);
   }
   return t;
+}
+
+// Адрес в угловых скобках из заголовка «От кого» («Имя <a@b.ru>» → «a@b.ru»).
+function addressOf(from: string): string {
+  return (from.match(/<([^>]+)>/)?.[1] ?? from).trim();
 }
 
 // Отправить письмо. Никогда не бросает: ошибки уходят в лог (pm2 logs seeds,
@@ -55,14 +66,23 @@ export async function sendMail(
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASSWORD || "",
   };
+  const from =
+    opts.from ||
+    (opts.auth
+      ? `"Томат Семена" <${auth.user}>`
+      : process.env.MAIL_FROM || `"Томат Семена" <${process.env.SMTP_USER}>`);
+  const startedAt = Date.now();
   try {
     await transport(auth).sendMail({
-      from:
-        opts.from ||
-        (opts.auth
-          ? `"Томат Семена" <${auth.user}>`
-          : process.env.MAIL_FROM || `"Томат Семена" <${process.env.SMTP_USER}>`),
+      from,
       to,
+      // Обратный адрес конверта (Return-Path) — ЯЩИК, ИЗ КОТОРОГО реально
+      // авторизовались. По нему принимающая сторона проверяет SPF: если в
+      // MAIL_FROM стоит адрес одного домена, а логин SMTP от другого,
+      // проверка не сходится, и Mail.ru кладёт письмо в спам или придерживает
+      // его на несколько минут (серые списки). Заголовок «От кого» при этом
+      // остаётся прежним — покупатель видит адрес магазина.
+      envelope: { from: addressOf(auth.user || from), to },
       ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
       subject,
       html,
@@ -75,6 +95,11 @@ export async function sendMail(
         .replace(/\s+/g, " ")
         .trim(),
     });
+    // Время сдачи письма на SMTP-сервер. Нужно, чтобы отличать «тормозим мы»
+    // от «тормозит получатель»: если здесь сотни миллисекунд, а письмо дошло
+    // до Mail.ru через десять минут — задержка на их стороне (серые списки,
+    // отсутствие SPF/DKIM), и лечится она DNS-записями, а не кодом.
+    console.log(`[mail] «${subject}» → ${to} за ${Date.now() - startedAt} мс`);
     return true;
   } catch (e) {
     console.error(`[mail] не отправилось «${subject}» → ${to}: ${(e as Error).message}`);

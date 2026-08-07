@@ -2,6 +2,7 @@ import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { isRussianEmail, RU_EMAIL_HINT } from "@/lib/ru-email";
 import { sendMail, mailLayout, escapeHtml } from "@/lib/email";
+import { ttlMs } from "@/lib/email-code";
 
 // Общая логика регистрации для роутов /api/register/*.
 
@@ -90,7 +91,8 @@ export async function sendCodeEmail(
       <div style="margin:0 0 18px;padding:16px;background:#f1f7f1;border-radius:12px;text-align:center;">
         <span style="font-size:34px;font-weight:bold;letter-spacing:10px;color:#1d4220;">${code}</span>
       </div>
-      <p style="margin:0;color:#5c6b5c;font-size:13px;">Код действует 15 минут.
+      <p style="margin:0;color:#5c6b5c;font-size:13px;">Код действует
+      ${Math.round(ttlMs() / 60000)} мин. с момента отправки письма.
       Если вы не регистрировались — просто проигнорируйте это письмо, аккаунт
       создан не будет.</p>
     `)

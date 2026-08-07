@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import dns from "node:dns/promises";
 import nodemailer from "nodemailer";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -73,6 +74,73 @@ function explain(msg) {
   return "";
 }
 
+// Диагностика доставляемости: SPF/DKIM/DMARC у домена отправителя.
+// Именно их отсутствие — обычная причина, по которой письма к Mail.ru приходят
+// с задержкой в минуты (серые списки) или падают в спам. Сам код отправки на
+// это повлиять не может, лечится записями в DNS.
+async function checkDeliverability() {
+  const fromHeader = process.env.MAIL_FROM || user;
+  const fromAddr = (fromHeader.match(/<([^>]+)>/)?.[1] ?? fromHeader).trim();
+  const fromDomain = fromAddr.split("@")[1]?.toLowerCase() || "";
+  const authDomain = user.split("@")[1]?.toLowerCase() || "";
+
+  console.log("— Доставляемость —");
+  if (fromDomain && authDomain && fromDomain !== authDomain) {
+    console.error(
+      `⚠️  MAIL_FROM (${fromAddr}) и SMTP_USER (${user}) в разных доменах.\n` +
+        "   Сайт подставляет в конверт письма адрес SMTP_USER, чтобы сходилась\n" +
+        "   проверка SPF, но в заголовке останется чужой домен — часть фильтров\n" +
+        "   (в том числе Mail.ru) относится к этому настороженно. Лучше указать\n" +
+        "   в MAIL_FROM тот же ящик, из которого идёт отправка."
+    );
+  }
+  if (!fromDomain) return;
+
+  const txt = async (name) => {
+    try {
+      return (await dns.resolveTxt(name)).map((r) => r.join(""));
+    } catch {
+      return [];
+    }
+  };
+
+  const spf = (await txt(fromDomain)).filter((r) => /^v=spf1/i.test(r));
+  if (spf.length > 0) console.log(`✅ SPF у ${fromDomain}: ${spf[0]}`);
+  else
+    console.error(
+      `❌ SPF у ${fromDomain} не найден — добавьте TXT-запись из панели почтового провайдера.`
+    );
+
+  const dmarc = (await txt(`_dmarc.${fromDomain}`)).filter((r) => /^v=DMARC1/i.test(r));
+  if (dmarc.length > 0) console.log(`✅ DMARC у ${fromDomain}: ${dmarc[0]}`);
+  else
+    console.error(
+      `❌ DMARC у ${fromDomain} не найден — добавьте TXT _dmarc.${fromDomain} со значением\n` +
+        `   "v=DMARC1; p=none; rua=mailto:postmaster@${fromDomain}" (позже можно ужесточить).`
+    );
+
+  // Селектор DKIM у каждого провайдера свой — перебираем частые.
+  const SELECTORS = ["mail", "default", "dkim", "mx", "selector1", "selector2", "s1", "s2", "key1"];
+  let dkim = null;
+  for (const sel of SELECTORS) {
+    const rec = await txt(`${sel}._domainkey.${fromDomain}`);
+    if (rec.some((r) => /(v=DKIM1|p=)/i.test(r))) {
+      dkim = sel;
+      break;
+    }
+  }
+  if (dkim) console.log(`✅ DKIM у ${fromDomain}: селектор «${dkim}»`);
+  else
+    console.error(
+      `❌ DKIM у ${fromDomain} не найден по частым селекторам (${SELECTORS.join(", ")}).\n` +
+        "   Возьмите запись в панели почтового провайдера и добавьте в DNS —\n" +
+        "   без DKIM Mail.ru придерживает письма от нового отправителя."
+    );
+  console.log();
+}
+
+await checkDeliverability();
+
 async function trySend(label, auth, from) {
   const transport = nodemailer.createTransport({
     host,
@@ -86,6 +154,9 @@ async function trySend(label, auth, from) {
     const info = await transport.sendMail({
       from,
       to,
+      // Как на сайте: обратный адрес конверта — реально авторизованный ящик
+      // (см. lib/email.ts), иначе не сходится SPF.
+      envelope: { from: auth.user, to },
       subject: `Проверка почты (${label}) — Томат Семена`,
       html: `<p>Тестовое письмо «${label}» с сервера tomatsemena.ru. Если вы его видите — этот ящик настроен правильно ✅</p>`,
     });
