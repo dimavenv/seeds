@@ -76,7 +76,7 @@ export default async function AboutPage() {
             <h1 className="text-lg font-extrabold leading-snug text-brand-800 sm:text-xl">
               Добро пожаловать в интернет-магазин{" "}
               <span className="whitespace-nowrap">
-                Tomat<span className="text-accent-500">Semena</span>
+                <span className="text-accent-500">TomatSemena</span>
               </span>
               , где семена — это не просто будущие грядки, а начало
               захватывающего экзотического приключения!
