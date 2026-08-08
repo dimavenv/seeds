@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatPrice } from "@/lib/format";
 import ClearCartOnPaid from "@/components/clear-cart-on-paid";
 import MetrikaPurchase from "@/components/metrika-purchase";
+import PayOrderButton from "@/components/pay-order-button";
 import { servicePageMetadata } from "@/lib/seo";
 
 // canonical свой у каждого заказа: страница подтверждения существует по своему
@@ -78,9 +79,18 @@ export default function OrderConfirmationPage({
         )}
         {failed && (
           <p className="mt-3 text-brand-600">
-            Деньги не списаны, заказ не оформлен. Товары остались в корзине —
-            можно попробовать оплатить ещё раз или выбрать другую карту.
+            Деньги не списаны. Заказ мы сохранили — можно оплатить его прямо
+            отсюда, выбрав другую карту. Товар придержан за вами 20 минут,
+            дальше он вернётся в продажу, но заказ останется: он виден в личном
+            кабинете, а после оплаты мы пришлём подтверждение письмом.
           </p>
+        )}
+        {/* Оплатить ту же попытку: номер счёта Robokassa передала на Fail URL.
+            Владельцу аккаунта та же кнопка доступна в истории заказов. */}
+        {failed && invoice && (
+          <div className="mt-5 flex justify-center">
+            <PayOrderButton invoice={Number(invoice)} label="Оплатить заказ" />
+          </div>
         )}
         {invoice && (paid || failed) && (
           <p className="mt-3 text-xs text-brand-400">Счёт №{invoice}</p>
@@ -100,11 +110,11 @@ export default function OrderConfirmationPage({
         <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
           {failed ? (
             <>
-              <Link href="/cart" className="btn-primary">
+              <Link href="/cart" className="btn-outline">
                 Вернуться в корзину
               </Link>
-              <Link href="/" className="btn-outline">
-                На главную
+              <Link href="/account" className="btn-outline">
+                Личный кабинет
               </Link>
             </>
           ) : (

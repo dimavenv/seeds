@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateProfile } from "@/app/account/actions";
-import { formatPhone, type Profile } from "@/lib/profile";
+import { type Profile } from "@/lib/profile";
+import PhoneInput from "@/components/phone-input";
+import SettingsCard from "@/components/settings-card";
 
 // Данные покупателя в личном кабинете. Заполняются один раз — дальше сайт сам
 // подставляет их в оформление заказа вместе с почтой аккаунта (изменить там
@@ -21,12 +23,16 @@ export default function AccountProfileForm({
   const [pending, start] = useTransition();
   const router = useRouter();
 
-  function update(field: keyof Profile) {
-    return (e: React.ChangeEvent<HTMLInputElement>) => {
-      setForm((f) => ({ ...f, [field]: e.target.value }));
-      setSaved(false);
-      setError(null);
-    };
+  const dirty =
+    form.last_name !== profile.last_name ||
+    form.first_name !== profile.first_name ||
+    form.middle_name !== profile.middle_name ||
+    form.phone !== profile.phone;
+
+  function set(field: keyof Profile, value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
+    setSaved(false);
+    setError(null);
   }
 
   function submit(e: React.FormEvent) {
@@ -44,99 +50,99 @@ export default function AccountProfileForm({
   }
 
   return (
-    <form onSubmit={submit} className="card p-5">
-      <h2 className="text-lg font-bold text-brand-800">Мои данные</h2>
-      <p className="mt-1 text-sm text-brand-500">
-        Подставим их в оформление заказа вместе с почтой — заполнять форму
-        каждый раз не придётся. В самом заказе данные можно поменять.
-      </p>
+    <SettingsCard
+      icon="👤"
+      title="Мои данные"
+      hint="Подставим их в оформление заказа вместе с почтой — заполнять форму каждый раз не придётся. В самом заказе данные можно поменять."
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Фамилия">
+            <input
+              value={form.last_name}
+              onChange={(e) => set("last_name", e.target.value)}
+              className="input"
+              autoComplete="family-name"
+              placeholder="Иванов"
+            />
+          </Field>
+          <Field label="Имя">
+            <input
+              value={form.first_name}
+              onChange={(e) => set("first_name", e.target.value)}
+              className="input"
+              autoComplete="given-name"
+              placeholder="Иван"
+            />
+          </Field>
+          <Field label="Отчество">
+            <input
+              value={form.middle_name}
+              onChange={(e) => set("middle_name", e.target.value)}
+              className="input"
+              autoComplete="additional-name"
+              placeholder="Иванович"
+            />
+          </Field>
+        </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-brand-700">
-            Фамилия
-          </span>
-          <input
-            value={form.last_name}
-            onChange={update("last_name")}
-            className="input"
-            autoComplete="family-name"
-            placeholder="Иванов"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-brand-700">
-            Имя
-          </span>
-          <input
-            value={form.first_name}
-            onChange={update("first_name")}
-            className="input"
-            autoComplete="given-name"
-            placeholder="Иван"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-brand-700">
-            Отчество
-          </span>
-          <input
-            value={form.middle_name}
-            onChange={update("middle_name")}
-            className="input"
-            autoComplete="additional-name"
-            placeholder="Иванович"
-          />
-        </label>
-      </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Телефон">
+            <PhoneInput
+              value={form.phone}
+              onChange={(v) => set("phone", v)}
+              autoComplete="tel"
+            />
+          </Field>
+          <Field label="Email" hint="логин от аккаунта">
+            <input value={email ?? ""} readOnly disabled className="input opacity-60" />
+          </Field>
+        </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-brand-700">
-            Телефон
-          </span>
-          <input
-            type="tel"
-            value={form.phone}
-            onChange={update("phone")}
-            // Приводим к единому виду, когда покупатель уходит из поля: в базе
-            // всё равно окажется +7XXXXXXXXXX.
-            onBlur={() => setForm((f) => ({ ...f, phone: formatPhone(f.phone) }))}
-            className="input"
-            autoComplete="tel"
-            placeholder="+7 999 123-45-67"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-brand-700">
-            Email
-          </span>
-          {/* Почта — логин от аккаунта, здесь только для сведения. */}
-          <input
-            value={email ?? ""}
-            readOnly
-            disabled
-            className="input opacity-70"
-          />
-        </label>
-      </div>
-
-      {error && (
-        <p role="alert" className="alert-error mt-4">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-4 flex items-center gap-3">
-        <button type="submit" disabled={pending} className="btn-primary">
-          {pending ? "Сохранение…" : "Сохранить"}
-        </button>
-        {saved && !pending && (
-          <span role="status" className="text-sm font-semibold text-brand-600">
-            Сохранено
-          </span>
+        {error && (
+          <p role="alert" className="alert-error">
+            {error}
+          </p>
         )}
-      </div>
-    </form>
+
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            type="submit"
+            disabled={pending || !dirty}
+            className="btn-primary"
+          >
+            {pending ? "Сохранение…" : "Сохранить"}
+          </button>
+          {saved && !pending && (
+            <span
+              role="status"
+              className="badge bg-brand-100 text-brand-700"
+            >
+              ✓ Сохранено
+            </span>
+          )}
+        </div>
+      </form>
+    </SettingsCard>
+  );
+}
+
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 flex items-baseline gap-2">
+        <span className="text-sm font-semibold text-brand-700">{label}</span>
+        {hint && <span className="text-xs text-brand-400">{hint}</span>}
+      </span>
+      {children}
+    </label>
   );
 }

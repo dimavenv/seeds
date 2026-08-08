@@ -71,8 +71,30 @@ export function normalizePhone(raw: string): string {
 export function formatPhone(raw: string): string {
   const normalized = normalizePhone(raw);
   if (!normalized) return String(raw ?? "").trim().slice(0, MAX_PHONE);
-  const d = normalized.slice(2); // без «+7»
-  return `+7 ${d.slice(0, 3)} ${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8, 10)}`;
+  return `+7 ${formatLocalPhone(normalized)}`;
+}
+
+// ===== Поле ввода с готовым «+7» (components/phone-input) =====
+// Код страны нарисован рядом с полем и не редактируется, поэтому внутри поля
+// живут только 10 цифр самого номера.
+
+// Цифры российского номера без кода страны.
+export function localPhoneDigits(value: string): string {
+  let d = String(value ?? "").replace(/\D/g, "");
+  // «+7…», «7…», «8…» — всё это код страны, в поле его не показываем. Пока
+  // цифр не больше десяти, первая восьмёрка — часть номера, а не код.
+  if (d.length > 10 && (d.startsWith("7") || d.startsWith("8"))) d = d.slice(1);
+  return d.slice(0, 10);
+}
+
+// 999 123-45-67 — по мере ввода, без висящих разделителей на пустом месте.
+export function formatLocalPhone(value: string): string {
+  const d = localPhoneDigits(value);
+  let out = d.slice(0, 3);
+  if (d.length > 3) out += ` ${d.slice(3, 6)}`;
+  if (d.length > 6) out += `-${d.slice(6, 8)}`;
+  if (d.length > 8) out += `-${d.slice(8, 10)}`;
+  return out;
 }
 
 export const PHONE_HINT =

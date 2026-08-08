@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
-import { cleanupStalePaymentDrafts } from "@/lib/order-cleanup";
+import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
 
 export const dynamic = "force-dynamic";
 
-// Плановая уборка протухших черновиков оплаты (возврат резерва на склад и
-// промокода покупателю; оплаченный, но не подтверждённый счёт достраивается
-// в заказ — см. lib/order-cleanup.ts).
+// Плановая уборка зависших попыток оплаты: товар возвращается в продажу, заказ
+// остаётся в базе с пометкой «не оплачен»; оплаченный, но не подтверждённый
+// счёт помечается оплаченным (см. lib/order-cleanup.ts).
 // Вызывается по расписанию (systemd timer / crontab) — см. deploy/cleanup.timer.
 // Защищён секретом CRON_SECRET: пока он не задан, роут выключен (404), чтобы
 // снаружи нельзя было запускать уборку. Секрет передавайте заголовком
@@ -42,8 +42,8 @@ async function run(req: Request): Promise<NextResponse> {
   }
   try {
     const pb = await pbAdmin();
-    const { removed, rescued } = await cleanupStalePaymentDrafts(pb);
-    return NextResponse.json({ ok: true, removed, rescued });
+    const { released, rescued } = await cleanupStalePendingOrders(pb);
+    return NextResponse.json({ ok: true, released, rescued });
   } catch {
     return NextResponse.json({ error: "cleanup failed" }, { status: 500 });
   }

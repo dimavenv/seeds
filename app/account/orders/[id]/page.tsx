@@ -10,6 +10,7 @@ import { decryptField } from "@/lib/crypto";
 import { ORDER_STATUS_LABELS, type Product, type Review } from "@/lib/types";
 import OrderStatusSteps from "@/components/order-status-steps";
 import ReorderButton from "@/components/reorder-button";
+import PayOrderButton from "@/components/pay-order-button";
 import LeaveReview from "@/components/leave-review";
 import { servicePageMetadata } from "@/lib/seo";
 
@@ -73,6 +74,9 @@ export default async function OrderDetailPage({
     .catch(() => null);
   const myReview: Review | null = reviewRecord ? mapReview(reviewRecord) : null;
   const canReview = order.status === "shipped" || order.status === "done";
+  // Онлайн-оплата не завершилась: заказ в базе есть, оплатить можно отсюда.
+  const needsPayment =
+    order.payment_status === "pending" || order.payment_status === "failed";
 
   const reorderItems = items
     .map((i) => (i.product_id ? productMap.get(i.product_id) : null))
@@ -111,10 +115,28 @@ export default async function OrderDetailPage({
             {order.payment_status === "refunded" && (
               <span className="ml-2 badge bg-brand-200 text-brand-700">Возврат оплаты</span>
             )}
+            {needsPayment && (
+              <span className="ml-2 badge bg-accent-500/15 text-accent-700">
+                ● Не оплачен
+              </span>
+            )}
           </p>
         </div>
         <ReorderButton items={reorderItems} />
       </div>
+
+      {needsPayment && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-accent-500/30 bg-accent-500/5 p-5">
+          <div>
+            <h2 className="font-bold text-brand-800">Заказ ждёт оплаты</h2>
+            <p className="mt-1 text-sm text-brand-600">
+              Оплата не завершилась — заказ мы сохранили. Оплатить{" "}
+              {formatPrice(order.total)} можно прямо сейчас.
+            </p>
+          </div>
+          <PayOrderButton orderId={order.id} />
+        </div>
+      )}
 
       {/* Прогресс */}
       <div className="card p-5">

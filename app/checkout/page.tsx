@@ -19,7 +19,9 @@ import {
   secureSet,
   secureClear,
 } from "@/lib/secure-store";
-import { formatPhone, type Profile } from "@/lib/profile";
+import { localPhoneDigits, normalizePhone, type Profile } from "@/lib/profile";
+import { submitPaymentForm } from "@/lib/payment-form";
+import PhoneInput from "@/components/phone-input";
 import ConsentCheckbox from "@/components/consent-checkbox";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 import DadataAddress, {
@@ -42,27 +44,6 @@ const EMPTY_FORM = {
   email: "",
   comment: "",
 };
-
-// Переход на платёжную страницу Robokassa. Отправляем именно POST-форму, а не
-// ссылку: фискальный чек с номенклатурой не влезает в ограничение длины URL, а
-// параметры платежа не попадают в историю браузера и в Referer. Форму собирает
-// браузер по данным, подписанным на сервере (см. lib/robokassa.ts).
-function submitPaymentForm(url: string, fields: Record<string, string>) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = url;
-  form.acceptCharset = "utf-8";
-  form.style.display = "none";
-  for (const [name, value] of Object.entries(fields)) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-  }
-  document.body.appendChild(form);
-  form.submit();
-}
 
 type SavedProfile = {
   form: {
@@ -170,7 +151,7 @@ export default function CheckoutPage() {
           last_name: base.last_name || (p.last_name ?? ""),
           first_name: base.first_name || (p.first_name ?? ""),
           middle_name: base.middle_name || (p.middle_name ?? ""),
-          phone: base.phone || formatPhone(p.phone ?? ""),
+          phone: base.phone || normalizePhone(p.phone ?? ""),
           email: base.email || (p.email ?? ""),
         };
         setForm(merged);
@@ -242,6 +223,13 @@ export default function CheckoutPage() {
 
     if (!consent) {
       setError("Подтвердите согласие на обработку персональных данных");
+      return;
+    }
+
+    // Номер должен быть полным: по нему звонит курьер, а недобранная цифра
+    // выясняется уже на доставке.
+    if (localPhoneDigits(form.phone).length !== 10) {
+      setError("Проверьте номер телефона — нужно 10 цифр после +7");
       return;
     }
 
@@ -468,7 +456,16 @@ export default function CheckoutPage() {
                 <span className="mb-1 block text-sm font-semibold text-brand-700">
                   Телефон *
                 </span>
-                <input required type="tel" value={form.phone} onChange={update("phone")} className="input" placeholder="+7 ___ ___-__-__" />
+                {/* Код страны нарисован в поле: вводить нужно только 10 цифр,
+                    формат сайт расставит сам (см. components/phone-input). */}
+                <PhoneInput
+                  required
+                  value={form.phone}
+                  onChange={(v) => {
+                    formTouched.current = true;
+                    setForm((f) => ({ ...f, phone: v }));
+                  }}
+                />
               </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-brand-700">

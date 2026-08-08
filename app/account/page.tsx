@@ -9,6 +9,8 @@ import { ORDER_STATUS_LABELS, type Order, type OrderStatus } from "@/lib/types";
 import LogoutButton from "@/components/logout-button";
 import ThemeToggle from "@/components/theme-toggle";
 import AccountProfileForm from "@/components/account-profile-form";
+import AccountPasswordForm from "@/components/account-password-form";
+import PayOrderButton from "@/components/pay-order-button";
 import { EMPTY_PROFILE, profileFromRecord, type Profile } from "@/lib/profile";
 import { servicePageMetadata } from "@/lib/seo";
 
@@ -23,6 +25,15 @@ const STATUS_BADGE: Record<OrderStatus, string> = {
   done: "bg-brand-600 text-white",
   cancelled: "bg-accent-500/15 text-accent-700",
 };
+
+// Инициалы для кружка-аватара: «Иванов Иван» → «ИИ».
+function initials(profile: Profile, email: string | null): string {
+  const letters = [profile.first_name, profile.last_name]
+    .map((s) => s.trim()[0])
+    .filter(Boolean)
+    .join("");
+  return (letters || email?.[0] || "?").toUpperCase();
+}
 
 export default async function AccountPage() {
   const { session, pb } = await getSessionPb();
@@ -50,9 +61,11 @@ export default async function AccountPage() {
   // ФИО и телефон покупателя. База может быть без этих полей (схему на сервере
   // ещё не обновляли) — тогда просто показываем пустую форму.
   let profile: Profile = EMPTY_PROFILE;
+  let autoPassword = false;
   try {
     const me = await pb.collection("users").getOne(session.userId);
     profile = profileFromRecord(me as unknown as Record<string, unknown>);
+    autoPassword = Boolean(me.auto_password);
   } catch {
     profile = EMPTY_PROFILE;
   }
@@ -78,19 +91,36 @@ export default async function AccountPage() {
     for (const p of prods) imgMap.set(p.id, p.image_url || p.images?.[0] || null);
   }
 
+  const awaitingPayment = orders.filter(
+    (o) => o.payment_status === "pending" || o.payment_status === "failed"
+  );
+  const displayName =
+    [profile.last_name, profile.first_name].filter(Boolean).join(" ") ||
+    session.email ||
+    "Покупатель";
+
   return (
     <div className="container-page py-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-brand-800">Личный кабинет</h1>
-          <p className="text-sm text-brand-500">
-            {session.email}
-            <span className="ml-2 badge bg-brand-100 text-brand-700">
+      {/* ===== Шапка кабинета ===== */}
+      <div className="card mb-6 flex flex-wrap items-center gap-4 p-5 sm:p-6">
+        <span
+          aria-hidden="true"
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xl font-bold text-white"
+        >
+          {initials(profile, session.email)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-2xl font-bold text-brand-800">
+            {displayName}
+          </h1>
+          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-brand-500">
+            <span className="truncate">{session.email}</span>
+            <span className="badge bg-brand-100 text-brand-700">
               {session.isAdmin ? "Администратор" : "Покупатель"}
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-1 rounded-full border border-brand-200 pl-3 text-sm text-brand-600">
             Тема
             <ThemeToggle />
@@ -107,8 +137,47 @@ export default async function AccountPage() {
         </div>
       </div>
 
-      <div className="mb-8">
+      {/* Заказы, которые ждут оплаты, — самое срочное, поэтому в самом верху. */}
+      {awaitingPayment.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-accent-500/30 bg-accent-500/5 p-5">
+          <h2 className="text-base font-bold text-brand-800">
+            {awaitingPayment.length === 1
+              ? "Заказ ждёт оплаты"
+              : `Заказы ждут оплаты: ${awaitingPayment.length}`}
+          </h2>
+          <p className="mt-1 text-sm text-brand-600">
+            Оплата не завершилась — заказ сохранён, оплатить его можно прямо
+            отсюда. Товар придерживается 20 минут с последней попытки, дальше
+            возвращается в продажу, но заказ остаётся.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {awaitingPayment.map((o) => (
+              <li
+                key={o.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-3"
+              >
+                <div>
+                  <Link
+                    href={`/account/orders/${o.id}`}
+                    className="font-bold text-brand-800 hover:text-brand-600"
+                  >
+                    Заказ #{o.number}
+                  </Link>
+                  <div className="text-sm text-brand-500">
+                    {formatDate(o.created_at)} · {formatPrice(o.total)}
+                  </div>
+                </div>
+                <PayOrderButton orderId={o.id} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ===== Настройки ===== */}
+      <div className="mb-8 grid gap-4 lg:grid-cols-2">
         <AccountProfileForm email={session.email} profile={profile} />
+        <AccountPasswordForm generated={autoPassword} />
       </div>
 
       <h2 className="mb-3 text-lg font-bold text-brand-800">История заказов</h2>
@@ -125,15 +194,18 @@ export default async function AccountPage() {
           {orders.map((o) => {
             const items = o.order_items ?? [];
             const count = items.reduce((s, i) => s + i.qty, 0);
+            const needsPayment =
+              o.payment_status === "pending" || o.payment_status === "failed";
             return (
-              <Link
-                key={o.id}
-                href={`/account/orders/${o.id}`}
-                className="card block p-5 transition hover:border-brand-300 hover:shadow-md"
-              >
+              <div key={o.id} className="card p-5 transition hover:border-brand-300 hover:shadow-md">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold text-brand-800">Заказ #{o.number}</div>
+                    <Link
+                      href={`/account/orders/${o.id}`}
+                      className="font-bold text-brand-800 hover:text-brand-600"
+                    >
+                      Заказ #{o.number}
+                    </Link>
                     <div className="text-sm text-brand-500">
                       {formatDate(o.created_at)} · {count} тов.
                     </div>
@@ -143,7 +215,12 @@ export default async function AccountPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {needsPayment && (
+                      <span className="badge bg-accent-500/15 text-accent-700">
+                        ● Не оплачен
+                      </span>
+                    )}
                     {o.payment_status === "refunded" && (
                       <span className="badge bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">↩ Возврат оплаты</span>
                     )}
@@ -193,11 +270,17 @@ export default async function AccountPage() {
                       +{items.length - 6}
                     </span>
                   )}
-                  <span className="ml-auto text-sm font-semibold text-brand-600">
-                    Подробнее →
-                  </span>
+                  <div className="ml-auto flex items-center gap-3">
+                    {needsPayment && <PayOrderButton orderId={o.id} />}
+                    <Link
+                      href={`/account/orders/${o.id}`}
+                      className="text-sm font-semibold text-brand-600 hover:text-brand-800"
+                    >
+                      Подробнее →
+                    </Link>
+                  </div>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>

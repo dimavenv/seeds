@@ -42,6 +42,10 @@ export async function mailOrderPlaced(
     // строкой, иначе «итого» не сходится с суммой позиций.
     discount?: number;
     promoCode?: string | null;
+    // Заказ оформлен, но онлайн-оплата ещё не завершена: письмо уходит сразу
+    // при оформлении, поэтому честно пишем, что ждём оплату, и говорим, где
+    // её продолжить.
+    awaitingPayment?: boolean;
   }
 ): Promise<void> {
   const rows = items
@@ -67,10 +71,17 @@ export async function mailOrderPlaced(
 
   await send(
     o,
-    "Принят",
-    `${orderTitle(o.number, "принят")}
-    <p style="margin:0 0 16px;">${hello(o.name)} Спасибо за заказ — мы получили
-    его и скоро свяжемся с вами для подтверждения.</p>
+    totals.awaitingPayment ? "Ожидает оплаты" : "Принят",
+    `${orderTitle(o.number, totals.awaitingPayment ? "ожидает оплаты" : "принят")}
+    <p style="margin:0 0 16px;">${hello(o.name)} ${
+      totals.awaitingPayment
+        ? `Заказ оформлен и ждёт оплаты. Если оплата не прошла или вы закрыли
+           страницу банка — продолжить можно кнопкой «Оплатить» в
+           <a href="https://tomatsemena.ru/account" style="color:#2e7d32;font-weight:bold;">личном кабинете</a>.
+           Товар придержан за вами на 20 минут, дальше он вернётся в продажу,
+           но заказ останется — оплатить его можно и позже, если товар в наличии.`
+        : "Спасибо за заказ — мы получили его и скоро свяжемся с вами для подтверждения."
+    }</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">
       ${rows}
       ${discountRow}
@@ -85,7 +96,11 @@ export async function mailOrderPlaced(
         <td style="padding:10px 0 0;text-align:right;font-weight:bold;white-space:nowrap;">${formatPrice(totals.total)}</td>
       </tr>
     </table>
-    ${note("Мы будем присылать письма при каждом изменении статуса заказа — вы ничего не пропустите.")}`
+    ${note(
+      totals.awaitingPayment
+        ? "После оплаты придёт письмо «оплата получена», а дальше — письма при каждом изменении статуса заказа."
+        : "Мы будем присылать письма при каждом изменении статуса заказа — вы ничего не пропустите."
+    )}`
   );
 }
 

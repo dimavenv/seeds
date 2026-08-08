@@ -161,6 +161,15 @@
         "type": "text"
       },
       {
+        "hidden": false,
+        "id": "bool_auto_password",
+        "name": "auto_password",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      },
+      {
         "help": "",
         "hidden": false,
         "id": "file376926767",
@@ -868,6 +877,17 @@
         "name": "placed_at",
         "presentable": false,
         "required": true,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "hidden": false,
+        "id": "date_pay_started_at",
+        "max": "",
+        "min": "",
+        "name": "pay_started_at",
+        "presentable": false,
+        "required": false,
         "system": false,
         "type": "date"
       },
@@ -1990,61 +2010,55 @@
     "system": false
   },
   {
-    "id": "pbc_paydraft001",
-    "name": "payment_drafts",
-    "type": "base",
+    "id": "pbc_payment_claims",
     "listRule": null,
     "viewRule": null,
     "createRule": null,
     "updateRule": null,
     "deleteRule": null,
+    "name": "payment_claims",
+    "type": "base",
     "fields": [
       {
-        "name": "inv_id",
-        "type": "number",
-        "onlyInt": true,
-        "required": true
-      },
-      {
-        "name": "payload",
-        "type": "json",
-        "maxSize": 200000,
-        "required": true
-      },
-      {
-        "name": "promo_use",
-        "type": "text",
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text3208210256",
         "max": 15,
-        "required": false
-      },
-      {
-        "name": "placed_at",
-        "type": "date",
-        "required": true
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
       },
       {
         "hidden": false,
-        "id": "autodate2990389176",
+        "id": "number_claim_inv",
+        "max": null,
+        "min": null,
+        "name": "inv_id",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "hidden": false,
+        "id": "autodate_claim_created",
         "name": "created",
         "onCreate": true,
         "onUpdate": false,
         "presentable": false,
         "system": false,
         "type": "autodate"
-      },
-      {
-        "hidden": false,
-        "id": "autodate3332085495",
-        "name": "updated",
-        "onCreate": true,
-        "onUpdate": true,
-        "presentable": false,
-        "system": false,
-        "type": "autodate"
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX idx_payment_drafts_inv_id ON payment_drafts (inv_id)"
-    ]
+      "CREATE UNIQUE INDEX `idx_payment_claims_inv` ON `payment_claims` (`inv_id`)"
+    ],
+    "system": false
   }
 ]

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { pbAdmin } from "@/lib/pb/server";
-import { findPaymentDraft, materializePaidOrder } from "@/lib/order-draft";
+import { findOrderByInvoice, markOrderPaid } from "@/lib/order-flow";
 import {
   checkResultNotification,
   isRobokassaConfigured,
@@ -20,9 +20,10 @@ export const dynamic = "force-dynamic";
 // Shp_-параметры, если они есть). Пароль#2 знают только Robokassa и сайт —
 // сошедшаяся подпись и есть доказательство подлинности уведомления.
 //
-// Именно здесь заказ И СОЗДАЁТСЯ: до оплаты в базе лежит только черновик
-// (payment_drafts), в админке его нет. Так неоплаченная попытка не оставляет
-// после себя ни «пустышки» в заказах, ни дырки в нумерации.
+// Заказ к этому моменту уже в базе — он создаётся при оформлении со статусом
+// «ожидает оплаты». Здесь статус меняется на «оплачен»: уходят письма
+// покупателю и продавцу и, если покупатель был гостем, заводится аккаунт
+// (см. lib/order-flow.ts).
 //
 // В ответ Robokassa ждёт ровно «OK<номер счёта>» (например, OK1024). Любой
 // другой ответ она считает недоставленным уведомлением и повторяет попытку —
@@ -56,31 +57,29 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
     return text("db unavailable", 503);
   }
 
-  // Заказ уже создан (повторное уведомление или покупатель успел вернуться на
-  // Success URL) — повторять нечего.
-  const existing = await pb
-    .collection("orders")
-    .getFirstListItem(pb.filter("invoice_id = {:inv}", { inv: invId }))
-    .catch(() => null);
-  if (existing) return text(`OK${invId}`);
-
-  const draft = await findPaymentDraft(pb, invId);
-  if (!draft) {
-    // Черновика нет: либо номер счёта чужой, либо черновик успели убрать как
-    // протухший, а оплата всё-таки прошла. Деньги при этом списаны, поэтому
+  const order = await findOrderByInvoice(pb, invId);
+  if (!order) {
+    // Заказа с таким счётом нет: либо номер чужой, либо заказ удалили из
+    // админки, а оплата всё-таки прошла. Деньги при этом списаны, поэтому
     // кричим в лог: повторы Robokassa и пометка «уведомление не доставлено» в
     // ЛК — сигнал разобраться вручную.
     console.error(
-      `[robokassa] счёт ${invId} на ${outSum} ₽ оплачен, но черновик заказа не найден!`
+      `[robokassa] счёт ${invId} на ${outSum} ₽ оплачен, но заказа с таким счётом нет!`
     );
-    return text("draft not found", 404);
+    return text("order not found", 404);
+  }
+
+  // Оплата уже подтверждена (повторное уведомление или покупатель успел
+  // вернуться на Success URL) — повторять нечего.
+  if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
+    return text(`OK${invId}`);
   }
 
   // Сумма обязана совпасть до копейки: подпись подтверждает подлинность
   // уведомления, а эта проверка — что оплачено именно то, что мы выставили.
-  if (Math.abs(outSum - draft.payload.total) > 0.005) {
+  if (Math.abs(outSum - order.total) > 0.005) {
     console.error(
-      `[robokassa] счёт ${invId}: сумма уведомления ${outSum} ₽ не совпадает с суммой заказа ${draft.payload.total} ₽ — заказ не создан`
+      `[robokassa] счёт ${invId}: сумма уведомления ${outSum} ₽ не совпадает с суммой заказа №${order.number} (${order.total} ₽) — оплата не подтверждена`
     );
     return text("amount mismatch", 400);
   }
@@ -93,7 +92,7 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
     const state = await robokassaOpState(invId);
     if (state.resultCode === 0 && !isPaidState(state)) {
       console.error(
-        `[robokassa] счёт ${invId}: Robokassa сообщает состояние ${state.stateCode} — заказ не создан`
+        `[robokassa] счёт ${invId}: Robokassa сообщает состояние ${state.stateCode} — оплата не подтверждена`
       );
       return text("not paid yet", 409);
     }
@@ -104,18 +103,18 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
   }
 
   try {
-    // Заказ создаётся здесь: с составом, статусом «оплачен» и письмами
-    // покупателю и продавцу. Остатки не трогаем — товар списан при оформлении.
-    const result = await materializePaidOrder(pb, invId);
+    // Статус «оплачен», письма покупателю и продавцу, аккаунт гостю. Остатки
+    // не трогаем — товар списан при оформлении.
+    const result = await markOrderPaid(pb, invId);
     if (!result) {
-      console.error(`[robokassa] счёт ${invId}: заказ не создан — черновик исчез`);
-      return text("draft not found", 404);
+      console.error(`[robokassa] счёт ${invId}: заказ исчез между проверками`);
+      return text("order not found", 404);
     }
     return text(`OK${invId}`);
   } catch (e) {
-    // Не смогли создать — отвечаем ошибкой, Robokassa повторит уведомление.
-    console.error(`[robokassa] счёт ${invId}: не удалось создать заказ:`, e);
-    return text("order create failed", 503);
+    // Не смогли записать — отвечаем ошибкой, Robokassa повторит уведомление.
+    console.error(`[robokassa] счёт ${invId}: не удалось подтвердить оплату:`, e);
+    return text("order update failed", 503);
   }
 }
 

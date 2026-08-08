@@ -30,7 +30,7 @@ const PAYMENT_BADGE: Partial<Record<PaymentStatus, { label: string; cls: string 
 export default async function AdminOrders({
   searchParams,
 }: {
-  searchParams?: { status?: string; q?: string };
+  searchParams?: { status?: string; q?: string; pay?: string };
 }) {
   // Клиент с токеном админа из cookie — правила PocketBase дают видеть всё.
   const pb = createServerPb();
@@ -48,11 +48,18 @@ export default async function AdminOrders({
     ? (statusParam as OrderStatus)
     : null;
   const q = (searchParams?.q ?? "").trim();
+  // Отдельный фильтр «не оплачены»: заказ с онлайн-оплатой попадает в базу
+  // сразу при оформлении, и покупатель может завершить оплату позже.
+  const unpaidOnly = searchParams?.pay === "unpaid";
+  const isUnpaid = (o: Order) =>
+    o.payment_status === "pending" || o.payment_status === "failed";
 
   const counts = new Map<OrderStatus, number>();
   for (const o of orders) counts.set(o.status, (counts.get(o.status) ?? 0) + 1);
+  const unpaidCount = orders.filter(isUnpaid).length;
 
   let filtered = status ? orders.filter((o) => o.status === status) : orders;
+  if (unpaidOnly) filtered = filtered.filter(isUnpaid);
   if (q) {
     const needle = q.replace(/^#/, "").toLowerCase();
     filtered = filtered.filter(
@@ -90,9 +97,10 @@ export default async function AdminOrders({
         ? "border-transparent bg-brand-600 text-white"
         : "border-brand-200 bg-surface text-brand-700 hover:bg-brand-100"
     }`;
-  const withParams = (s: OrderStatus | null) => {
+  const withParams = (s: OrderStatus | null, pay = unpaidOnly) => {
     const p = new URLSearchParams();
     if (s) p.set("status", s);
+    if (pay) p.set("pay", "unpaid");
     if (q) p.set("q", q);
     const qs = p.toString();
     return qs ? `/admin/orders?${qs}` : "/admin/orders";
@@ -127,6 +135,12 @@ export default async function AdminOrders({
             {FILTER_LABELS[s]} · {counts.get(s) ?? 0}
           </Link>
         ))}
+        <Link
+          href={withParams(status, !unpaidOnly)}
+          className={`${chip(unpaidOnly)} ml-auto`}
+        >
+          💳 Не оплачены · {unpaidCount}
+        </Link>
       </div>
 
       {filtered.length === 0 ? (

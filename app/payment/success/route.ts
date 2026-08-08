@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { absoluteUrl } from "@/lib/seo";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
-import { materializePaidOrder } from "@/lib/order-draft";
+import { findOrderByInvoice, markOrderPaid } from "@/lib/order-flow";
 import {
   checkSuccessNotification,
   isRobokassaConfigured,
@@ -22,10 +22,10 @@ export const dynamic = "force-dynamic";
 // доказывает: адрес может открыть кто угодно. Доверять можно только подписи —
 // её Robokassa считает Паролем#1 по строке «OutSum:InvId:Пароль#1».
 //
-// Обычно заказ к этому моменту уже создан уведомлением Result URL. Но порядок
-// не гарантирован, поэтому при верной подписи роут и сам умеет создать заказ
-// из черновика — предварительно спросив у Robokassa, что деньги получены.
-// Создание идемпотентно (уникальный invoice_id), гонка с Result URL безопасна.
+// Обычно оплату к этому моменту уже подтвердило уведомление Result URL. Но
+// порядок не гарантирован, поэтому при верной подписи роут и сам умеет
+// пометить заказ оплаченным — предварительно спросив у Robokassa, что деньги
+// получены. Подтверждение идемпотентно, гонка с Result URL безопасна.
 function redirectTo(path: string): NextResponse {
   // 303: после POST-возврата браузер должен перейти на страницу заказа
   // обычным GET, иначе обновление страницы повторит POST.
@@ -56,17 +56,13 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
   try {
     const pb = await pbAdmin();
 
-    // Заказ мог уже создать Result URL — тогда просто ведём на него.
-    const existing = await pb
-      .collection("orders")
-      .getFirstListItem(pb.filter("invoice_id = {:inv}", { inv: invoice }))
-      .catch(() => null);
+    const existing = await findOrderByInvoice(pb, invoice);
+    let number = existing ? existing.number : null;
 
-    let number = existing ? Number(existing.number) : null;
-
-    if (number === null) {
+    // Оплату мог уже подтвердить Result URL — тогда просто ведём на заказ.
+    if (existing && existing.paymentStatus !== "paid" && existing.paymentStatus !== "refunded") {
       // Уведомление ещё не дошло — проверяем оплату у Robokassa напрямую и
-      // создаём заказ сами, чтобы покупатель сразу увидел номер.
+      // подтверждаем сами, чтобы покупатель сразу увидел «оплачен».
       const state = await robokassaOpState(invoice);
       if (!isPaidState(state)) {
         console.error(
@@ -74,16 +70,15 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
         );
         return redirectTo("/cart");
       }
-      const result = await materializePaidOrder(pb, invoice);
-      number = result ? result.order.number : null;
+      await markOrderPaid(pb, invoice);
     }
 
     if (number === null) {
-      // Черновик исчез (например, уборка успела раньше) — деньги при этом
-      // получены, разбираться придётся вручную; покупателю честно говорим,
-      // что оплата принята.
+      // Заказ по счёту не нашёлся (например, его удалили из админки) — деньги
+      // при этом получены, разбираться придётся вручную; покупателю честно
+      // говорим, что оплата принята.
       console.error(
-        `[robokassa] Success URL счёт ${invoice}: оплата есть, а черновик заказа не найден`
+        `[robokassa] Success URL счёт ${invoice}: оплата есть, а заказа с таким счётом нет`
       );
       return redirectTo(`/order/${invoice}?paid=1&pending=1&inv=${invoice}`);
     }

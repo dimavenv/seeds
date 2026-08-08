@@ -16,12 +16,12 @@ import { mailOrderPlaced } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
-import { cleanupStalePaymentDrafts } from "@/lib/order-cleanup";
+import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
 import {
   createOrderWithItems,
-  createPaymentDraft,
-  DRAFTS_COLLECTION,
-} from "@/lib/order-draft";
+  mailOrderAccepted,
+  nextInvoiceId,
+} from "@/lib/order-flow";
 import { normalizePromoCode } from "@/lib/promo";
 import {
   attachPromoUseToOrder,
@@ -339,26 +339,33 @@ export async function POST(request: Request) {
       })),
     };
 
-    // Фоновая уборка протухших черновиков оплаты — не задерживает текущее
+    // Фоновая уборка зависших попыток оплаты — не задерживает текущее
     // оформление и не роняет его при ошибке.
-    void cleanupStalePaymentDrafts(pb).catch(() => {});
+    void cleanupStalePendingOrders(pb).catch(() => {});
 
     // ===== Онлайн-оплата (если подключена Robokassa) =====
-    // Заказ здесь НЕ создаётся: пока деньги не подтверждены, всё лежит в
-    // черновике оплаты (payment_drafts), которого нет в админке. Заказ
-    // появится в базе только после успешной оплаты — по уведомлению Result URL
-    // (или на возврате покупателя, или уборкой, если уведомление не дошло).
-    // Счёт в Robokassa нигде не «регистрируется» заранее: сайт подписывает
-    // параметры Паролем#1 и отдаёт браузеру данные POST-формы.
+    // Заказ создаётся ЗДЕСЬ, со статусом оплаты «ожидает оплаты»: продавец
+    // видит в админке и незавершённые попытки, а покупатель может доплатить
+    // заказ позже кнопкой «Оплатить» в личном кабинете. Деньги подтвердит
+    // уведомление Result URL (или возврат покупателя, или уборка) — тогда
+    // статус станет «оплачен». Счёт в Robokassa нигде не «регистрируется»
+    // заранее: сайт подписывает параметры Паролем#1 и отдаёт браузеру данные
+    // POST-формы.
     if (isRobokassaConfigured()) {
-      let draft: Awaited<ReturnType<typeof createPaymentDraft>> | null = null;
+      let order: { id: string; number: number } | null = null;
       try {
-        draft = await createPaymentDraft(pb, payload, promoUseId);
+        const invoiceId = await nextInvoiceId(pb);
+        order = await createOrderWithItems(pb, payload, {
+          invoiceId,
+          paymentStatus: "pending",
+        });
+        if (promoUseId) await attachPromoUseToOrder(pb, promoUseId, order.id);
+
         const ttl = invoiceTtlMinutes();
         const payment = buildRobokassaPayment({
-          invId: draft.invId,
+          invId: invoiceId,
           amount: total,
-          description: `Заказ на ${lines.reduce((s, l) => s + l.qty, 0)} шт. (счёт №${draft.invId})`,
+          description: `Заказ №${order.number} на ${lines.reduce((s, l) => s + l.qty, 0)} шт.`,
           email: email?.trim() || null,
           // Состав — для фискального чека (если чек включён): скидка по
           // промокоду размазывается по товарам, доставка идёт отдельной
@@ -367,22 +374,26 @@ export async function POST(request: Request) {
           deliveryCost,
           discount,
           // Счёт протухает раньше, чем уборка снимет резерв, — иначе
-          // покупатель мог бы оплатить уже отменённый черновик.
+          // покупатель мог бы оплатить заказ, товар из которого уже вернули
+          // в продажу.
           expiresAt: ttl > 0 ? new Date(Date.now() + ttl * 60_000) : null,
         });
 
-        // Письмо «заказ принят» здесь не шлём: заказа ещё нет. После оплаты
-        // придёт «оплата получена» с составом и номером заказа.
-        return NextResponse.json({ invoiceId: draft.invId, total, payment });
+        // «Заказ принят, ожидает оплаты» — сразу: номер у покупателя на руках
+        // ещё до банка, и в письме написано, где продолжить оплату.
+        void mailOrderAccepted(order, payload, { awaitingPayment: true }).catch(
+          () => {}
+        );
+
+        // id страница НЕ получает: при онлайн-оплате она уходит на Robokassa,
+        // а на страницу заказа её вернёт Success URL уже по номеру заказа.
+        return NextResponse.json({ number: order.number, invoiceId, total, payment });
       } catch (e) {
-        // Черновик не создался или настройки кривые (например, неизвестный
+        // Заказ не создался или настройки кривые (например, неизвестный
         // алгоритм хеша) — возвращаем резерв, корзина у покупателя цела.
         console.error("[checkout] не удалось подготовить оплату Robokassa:", e);
-        if (draft) {
-          await pb
-            .collection(DRAFTS_COLLECTION)
-            .delete(draft.id)
-            .catch(() => {});
+        if (order) {
+          await pb.collection("orders").delete(order.id).catch(() => {});
         }
         await releaseStock(pb, reserveLines);
         if (promoUseId) await releasePromoUse(pb, promoUseId);

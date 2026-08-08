@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatLocalPhone,
   formatPhone,
   joinFullName,
+  localPhoneDigits,
   normalizePhone,
   parseProfile,
   profileFromRecord,
@@ -72,6 +74,45 @@ describe("телефон", () => {
     expect(formatPhone("89991234567")).toBe("+7 999 123-45-67");
     // неразобранное оставляем как есть — пусть покупатель поправит сам
     expect(formatPhone("добавочный 12")).toBe("добавочный 12");
+  });
+});
+
+describe("поле ввода с готовым +7", () => {
+  it("срезает код страны в любом написании", () => {
+    for (const raw of [
+      "+7 999 123-45-67",
+      "8 (999) 123-45-67",
+      "89991234567",
+      "79991234567",
+      "9991234567",
+    ]) {
+      expect(localPhoneDigits(raw)).toBe("9991234567");
+    }
+  });
+
+  it("не трогает короткий ввод — человек ещё печатает", () => {
+    expect(localPhoneDigits("")).toBe("");
+    expect(localPhoneDigits("9")).toBe("9");
+    // 8 в начале короткого номера — цифра номера, а не код страны
+    expect(localPhoneDigits("8912345")).toBe("8912345");
+  });
+
+  it("лишние цифры отбрасывает", () => {
+    expect(localPhoneDigits("999123456789")).toBe("9991234567");
+    expect(localPhoneDigits("899912345671234")).toBe("9991234567");
+  });
+
+  it("форматирует по мере ввода, без висящих разделителей", () => {
+    expect(formatLocalPhone("")).toBe("");
+    expect(formatLocalPhone("9")).toBe("9");
+    expect(formatLocalPhone("999")).toBe("999");
+    expect(formatLocalPhone("9991")).toBe("999 1");
+    expect(formatLocalPhone("999123")).toBe("999 123");
+    expect(formatLocalPhone("9991234")).toBe("999 123-4");
+    expect(formatLocalPhone("999123456")).toBe("999 123-45-6");
+    expect(formatLocalPhone("9991234567")).toBe("999 123-45-67");
+    // уже сохранённый номер показывается так же
+    expect(formatLocalPhone("+79991234567")).toBe("999 123-45-67");
   });
 });
 
