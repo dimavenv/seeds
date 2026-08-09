@@ -150,6 +150,9 @@ async function sendNewAccountEmail(
       <p style="margin:0;color:#5c6b5c;font-size:13px;">Пароль можно поменять на
       свой в кабинете, раздел «Безопасность». Никому не пересылайте это письмо —
       по этим данным входят в ваш аккаунт.</p>
+      <p style="margin:14px 0 0;color:#5c6b5c;font-size:13px;">Письмо потерялось?
+      Пароль всегда можно
+      <a href="https://tomatsemena.ru/password-reset" style="color:#2e7d32;">сменить по коду с почты</a>.</p>
     `)
   );
 }

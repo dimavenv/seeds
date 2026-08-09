@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import AuthTabs from "@/components/auth-tabs";
 import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
@@ -80,9 +81,10 @@ export default function LoginPage() {
   return (
     <div className="container-page py-16">
       <div className="card mx-auto max-w-md p-8">
-        <h1 className="text-2xl font-bold text-brand-800">Вход</h1>
+        <AuthTabs active="login" />
+        <h1 className="text-2xl font-bold text-brand-800">С возвращением!</h1>
         <p className="mt-1 text-sm text-brand-500">
-          Войдите в личный кабинет или панель администратора.
+          Войдите, чтобы видеть свои заказы, избранное и данные для оформления.
         </p>
 
         {registered && (
@@ -108,7 +110,15 @@ export default function LoginPage() {
             <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-brand-700">Пароль</span>
+            <span className="mb-1 flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold text-brand-700">Пароль</span>
+              <Link
+                href="/password-reset"
+                className="text-xs font-semibold text-brand-500 hover:text-brand-700"
+              >
+                Забыли пароль?
+              </Link>
+            </span>
             <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
           </label>
           <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
@@ -126,12 +136,6 @@ export default function LoginPage() {
             {loading ? "Входим…" : "Войти"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-brand-500">
-          Нет аккаунта?{" "}
-          <Link href="/register" className="font-semibold text-brand-600 hover:text-brand-800">
-            Зарегистрироваться
-          </Link>
-        </p>
       </div>
     </div>
   );

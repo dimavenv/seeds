@@ -119,7 +119,9 @@ export async function sendExistsEmail(
       отправляли.</p>
       <p style="margin:0 0 14px;">Если это вы — просто
       <a href="https://tomatsemena.ru/login" style="color:#2e7d32;font-weight:bold;">войдите</a>.
-      Забыли пароль — воспользуйтесь восстановлением доступа на странице входа.</p>
+      Забыли пароль —
+      <a href="https://tomatsemena.ru/password-reset" style="color:#2e7d32;font-weight:bold;">смените его</a>:
+      пришлём код на этот же адрес.</p>
       <p style="margin:0;color:#5c6b5c;font-size:13px;">Если вы не пытались
       зарегистрироваться или войти — просто проигнорируйте это письмо, с
       аккаунтом ничего не произошло.</p>

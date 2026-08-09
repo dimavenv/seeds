@@ -63,7 +63,7 @@ describe("билеты кода подтверждения", () => {
       // покупатель ждал минуту и нажал «отправить ещё раз»
       vi.advanceTimersByTime(60 * 1000);
       const second = readTicket(
-        issueTicket("user@mail.ru", "222222", first)
+        issueTicket("user@mail.ru", "222222", { previous: first })
       )!;
       expect(codeMatches(second, "111111")).toBe(true);
       expect(codeMatches(second, "222222")).toBe(true);
@@ -72,7 +72,7 @@ describe("билеты кода подтверждения", () => {
       vi.advanceTimersByTime(4 * 60 * 1000 + 1000);
       expect(codeMatches(second, "111111")).toBe(false);
       expect(codeMatches(second, "222222")).toBe(true);
-      expect(readTicket(issueTicket("user@mail.ru", "222222", second))!.expired).toBe(
+      expect(readTicket(issueTicket("user@mail.ru", "222222", { previous: second }))!.expired).toBe(
         false
       );
     } finally {
@@ -83,15 +83,36 @@ describe("билеты кода подтверждения", () => {
   it("хранит не больше трёх кодов", () => {
     let t = readTicket(issueTicket("user@mail.ru", "111111"))!;
     for (const code of ["222222", "333333", "444444"]) {
-      t = readTicket(issueTicket("user@mail.ru", code, t))!;
+      t = readTicket(issueTicket("user@mail.ru", code, { previous: t }))!;
     }
     expect(t.codes.map((c) => c.code)).toEqual(["222222", "333333", "444444"]);
     expect(codeMatches(t, "111111")).toBe(false);
   });
 
+  it("билет регистрации не подходит для сброса пароля и наоборот", () => {
+    const reg = issueTicket("user@mail.ru", "123456");
+    const reset = issueTicket("user@mail.ru", "654321", { scope: "reset" });
+
+    expect(readTicket(reg, "register")).not.toBeNull();
+    expect(readTicket(reg, "reset")).toBeNull();
+    expect(readTicket(reset, "reset")).not.toBeNull();
+    expect(readTicket(reset, "register")).toBeNull();
+    expect(readTicket(reset, "reset")!.scope).toBe("reset");
+  });
+
+  it("коды не переезжают между назначениями", () => {
+    const reg = readTicket(issueTicket("user@mail.ru", "111111"))!;
+    const reset = readTicket(
+      issueTicket("user@mail.ru", "222222", { previous: reg, scope: "reset" }),
+      "reset"
+    )!;
+    expect(reset.codes.map((c) => c.code)).toEqual(["222222"]);
+    expect(codeMatches(reset, "111111")).toBe(false);
+  });
+
   it("коды из билета другой почты не переносятся", () => {
     const mine = readTicket(issueTicket("a@mail.ru", "111111"))!;
-    const other = readTicket(issueTicket("b@mail.ru", "222222", mine))!;
+    const other = readTicket(issueTicket("b@mail.ru", "222222", { previous: mine }))!;
     expect(other.codes.map((c) => c.code)).toEqual(["222222"]);
   });
 
@@ -118,6 +139,7 @@ describe("билеты кода подтверждения", () => {
   it("сравнивает код без чувствительности к пробелам по краям", () => {
     const t = {
       email: "e",
+      scope: "register" as const,
       codes: [{ code: "123456", expiresAt: Date.now() + 60_000 }],
       expired: false,
     };
@@ -130,6 +152,7 @@ describe("билеты кода подтверждения", () => {
   it("истёкший код не подходит, даже если он в билете", () => {
     const t = {
       email: "e",
+      scope: "register" as const,
       codes: [{ code: "123456", expiresAt: Date.now() - 1 }],
       expired: true,
     };

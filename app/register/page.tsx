@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import AuthTabs from "@/components/auth-tabs";
 import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 export default function RegisterPage() {
@@ -216,7 +216,8 @@ export default function RegisterPage() {
   return (
     <div className="container-page py-16">
       <div className="card mx-auto max-w-md p-8">
-        <h1 className="text-2xl font-bold text-brand-800">Регистрация</h1>
+        <AuthTabs active="register" />
+        <h1 className="text-2xl font-bold text-brand-800">Создать аккаунт</h1>
         <p className="mt-1 text-sm text-brand-500">
           Регистрация доступна с российской почты (Яндекс, Mail.ru, Rambler,
           домены .ru / .рф). На неё придёт код подтверждения.
@@ -246,12 +247,6 @@ export default function RegisterPage() {
             {loading ? "Отправляем код…" : "Зарегистрироваться"}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-brand-500">
-          Уже есть аккаунт?{" "}
-          <Link href="/login" className="font-semibold text-brand-600 hover:text-brand-800">
-            Войти
-          </Link>
-        </p>
       </div>
     </div>
   );

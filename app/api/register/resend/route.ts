@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   // Прежний билет передаём дальше: его ещё живые коды остаются рабочими —
   // задержавшееся первое письмо покупатель откроет позже, и код подойдёт.
   return NextResponse.json({
-    ticket: issueTicket(ticket.email, code, ticket),
+    ticket: issueTicket(ticket.email, code, { previous: ticket }),
     expiresIn: Math.round(ttlMs() / 1000),
   });
 }

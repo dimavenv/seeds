@@ -40,9 +40,15 @@ export function generateCode(): string {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
+// Для чего выдан билет. Кодами из письма подтверждают и регистрацию, и сброс
+// пароля — назначение хранится ВНУТРИ билета, чтобы код от одного действия
+// нельзя было предъявить другому.
+export type TicketScope = "register" | "reset";
+
 export type IssuedCode = { code: string; expiresAt: number };
 export type Ticket = {
   email: string;
+  scope: TicketScope;
   codes: IssuedCode[];
   // true — ни одного живого кода не осталось (нужен новый).
   expired: boolean;
@@ -53,15 +59,22 @@ export type Ticket = {
 export function issueTicket(
   email: string,
   code: string,
-  previous?: Ticket | null
+  opts: { previous?: Ticket | null; scope?: TicketScope } = {}
 ): string {
+  const scope = opts.scope ?? "register";
+  const previous = opts.previous;
   const now = Date.now();
-  const kept = (previous?.email === email ? previous.codes : [])
+  const carryOver =
+    previous && previous.email === email && previous.scope === scope
+      ? previous.codes
+      : [];
+  const kept = carryOver
     .filter((c) => c.expiresAt > now)
     .slice(-(MAX_CODES - 1));
   const codes = [...kept, { code, expiresAt: now + ttlMs() }];
   const payload = JSON.stringify({
     e: email,
+    s: scope,
     l: codes.map((c) => [c.code, c.expiresAt]),
   });
   const iv = crypto.randomBytes(12);
@@ -72,7 +85,10 @@ export function issueTicket(
 
 // null — билет повреждён/подделан; expired проверяется отдельно, чтобы дать
 // понятную ошибку «код устарел» вместо «неверный код».
-export function readTicket(ticket: string): Ticket | null {
+export function readTicket(
+  ticket: string,
+  scope: TicketScope = "register"
+): Ticket | null {
   try {
     const raw = Buffer.from(ticket, "base64url");
     const decipher = crypto.createDecipheriv("aes-256-gcm", key(), raw.subarray(0, 12));
@@ -83,12 +99,15 @@ export function readTicket(ticket: string): Ticket | null {
     ]).toString("utf8");
     const p = JSON.parse(json) as {
       e?: string;
+      s?: string;
       l?: unknown;
       // старый формат (один код) — билеты, выданные до обновления сайта
       c?: string;
       x?: number;
     };
     if (typeof p.e !== "string") return null;
+    // Билеты без назначения выданы прежней версией сайта — это регистрация.
+    if ((p.s ?? "register") !== scope) return null;
 
     const codes: IssuedCode[] = [];
     if (Array.isArray(p.l)) {
@@ -104,7 +123,12 @@ export function readTicket(ticket: string): Ticket | null {
     if (codes.length === 0) return null;
 
     const now = Date.now();
-    return { email: p.e, codes, expired: codes.every((c) => c.expiresAt <= now) };
+    return {
+      email: p.e,
+      scope,
+      codes,
+      expired: codes.every((c) => c.expiresAt <= now),
+    };
   } catch {
     return null;
   }
