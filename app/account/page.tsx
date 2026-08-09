@@ -8,9 +8,9 @@ import { formatPrice, formatDate } from "@/lib/format";
 import { ORDER_STATUS_LABELS, type Order, type OrderStatus } from "@/lib/types";
 import LogoutButton from "@/components/logout-button";
 import ThemeToggle from "@/components/theme-toggle";
-import AccountProfileForm from "@/components/account-profile-form";
-import AccountPasswordForm from "@/components/account-password-form";
+import AccountSettings from "@/components/account-settings";
 import PayOrderButton from "@/components/pay-order-button";
+import CancelOrderButton from "@/components/cancel-order-button";
 import { EMPTY_PROFILE, profileFromRecord, type Profile } from "@/lib/profile";
 import { servicePageMetadata } from "@/lib/seo";
 
@@ -91,9 +91,11 @@ export default async function AccountPage() {
     for (const p of prods) imgMap.set(p.id, p.image_url || p.images?.[0] || null);
   }
 
-  const awaitingPayment = orders.filter(
-    (o) => o.payment_status === "pending" || o.payment_status === "failed"
-  );
+  // Ждут оплаты: отменённые сюда не попадают — платить по ним уже нечего.
+  const needsPayment = (o: Order) =>
+    (o.payment_status === "pending" || o.payment_status === "failed") &&
+    o.status !== "cancelled";
+  const awaitingPayment = orders.filter(needsPayment);
   const displayName =
     [profile.last_name, profile.first_name].filter(Boolean).join(" ") ||
     session.email ||
@@ -167,18 +169,22 @@ export default async function AccountPage() {
                     {formatDate(o.created_at)} · {formatPrice(o.total)}
                   </div>
                 </div>
-                <PayOrderButton orderId={o.id} />
+                <div className="flex flex-wrap items-center gap-4">
+                  <CancelOrderButton orderId={o.id} />
+                  <PayOrderButton orderId={o.id} />
+                </div>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* ===== Настройки ===== */}
-      <div className="mb-8 grid gap-4 lg:grid-cols-2">
-        <AccountProfileForm email={session.email} profile={profile} />
-        <AccountPasswordForm generated={autoPassword} />
-      </div>
+      {/* ===== Настройки: раскрываются по кнопке ===== */}
+      <AccountSettings
+        email={session.email}
+        profile={profile}
+        autoPassword={autoPassword}
+      />
 
       <h2 className="mb-3 text-lg font-bold text-brand-800">История заказов</h2>
 
@@ -194,8 +200,7 @@ export default async function AccountPage() {
           {orders.map((o) => {
             const items = o.order_items ?? [];
             const count = items.reduce((s, i) => s + i.qty, 0);
-            const needsPayment =
-              o.payment_status === "pending" || o.payment_status === "failed";
+            const unpaid = needsPayment(o);
             return (
               <div key={o.id} className="card p-5 transition hover:border-brand-300 hover:shadow-md">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -216,7 +221,7 @@ export default async function AccountPage() {
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    {needsPayment && (
+                    {unpaid && (
                       <span className="badge bg-accent-500/15 text-accent-700">
                         ● Не оплачен
                       </span>
@@ -270,8 +275,13 @@ export default async function AccountPage() {
                       +{items.length - 6}
                     </span>
                   )}
-                  <div className="ml-auto flex items-center gap-3">
-                    {needsPayment && <PayOrderButton orderId={o.id} />}
+                  <div className="ml-auto flex flex-wrap items-center gap-4">
+                    {unpaid && (
+                      <>
+                        <CancelOrderButton orderId={o.id} />
+                        <PayOrderButton orderId={o.id} />
+                      </>
+                    )}
                     <Link
                       href={`/account/orders/${o.id}`}
                       className="text-sm font-semibold text-brand-600 hover:text-brand-800"

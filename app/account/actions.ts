@@ -6,9 +6,75 @@ import { getSessionPb } from "@/lib/auth";
 import { isValidRecordId } from "@/lib/data";
 import { notifyNewReview } from "@/lib/admin-mail";
 import { joinFullName, parseProfile, type Profile } from "@/lib/profile";
+import { releaseOrderStock, toOrderRecord } from "@/lib/order-flow";
+import { releasePromoUseByOrder } from "@/lib/promo-server";
 
 export type ReviewFormState = { error?: string; ok?: boolean };
 export type ProfileFormState = { error?: string; ok?: boolean };
+
+// Отмена своего неоплаченного заказа.
+//
+// Заказ с онлайн-оплатой попадает в базу сразу при оформлении, поэтому в
+// истории может висеть то, что покупатель уже передумал брать. Отменять можно
+// только НЕОПЛАЧЕННЫЕ заказы: с оплаченными разбирается продавец (там возврат
+// денег, а не отмена).
+//
+// Что делаем: возвращаем товар в продажу (если резерв ещё держится), возвращаем
+// промокод покупателю и помечаем заказ отменённым. Сам заказ остаётся в базе —
+// он виден и покупателю, и продавцу.
+export async function cancelUnpaidOrder(
+  orderId: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const { session } = await getSessionPb();
+  if (!session.userId) return { error: "Войдите, чтобы отменить заказ" };
+  if (!isValidRecordId(orderId)) return { error: "Заказ не найден" };
+
+  let pb: Awaited<ReturnType<typeof pbAdmin>>;
+  try {
+    pb = await pbAdmin();
+  } catch {
+    return { error: "База недоступна — попробуйте позже" };
+  }
+
+  const rec = await pb.collection("orders").getOne(orderId).catch(() => null);
+  if (!rec) return { error: "Заказ не найден" };
+  const order = toOrderRecord(rec as unknown as Record<string, unknown>);
+  // Чужой заказ отменить нельзя — и «не ваш» наружу не сообщаем.
+  if (order.user !== session.userId) return { error: "Заказ не найден" };
+
+  if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
+    return { error: "Заказ уже оплачен — напишите нам, оформим возврат" };
+  }
+  if (order.status === "cancelled") return { ok: true };
+  if (order.status !== "new" && order.status !== "processing") {
+    return { error: "Заказ уже в работе — напишите нам" };
+  }
+
+  // Сначала помечаем заказ — и только потом возвращаем товар: иначе уборка,
+  // подошедшая в ту же секунду, вернула бы тот же резерв во второй раз
+  // (см. failPendingOrder).
+  try {
+    await pb.collection("orders").update(order.id, {
+      status: "cancelled",
+      // Больше не ждём денег: уборке этот заказ трогать незачем.
+      payment_status: "failed",
+      pay_started_at: "",
+    });
+  } catch {
+    return { error: "Не удалось отменить заказ, попробуйте ещё раз" };
+  }
+
+  // Товар придержан только у «ожидает оплаты»: у протухшей попытки (failed)
+  // резерв уже снят уборкой, второй раз возвращать нельзя.
+  if (order.paymentStatus === "pending") await releaseOrderStock(pb, order.id);
+
+  // Промокод возвращаем покупателю: на отменённом заказе он «сгорел» бы зря.
+  await releasePromoUseByOrder(pb, order.id);
+
+  revalidatePath("/account");
+  revalidatePath(`/account/orders/${order.id}`);
+  return { ok: true };
+}
 
 // Сохранение ФИО и телефона в личном кабинете. Пишем от имени самого
 // пользователя (правило updateRule в PocketBase разрешает менять свою запись,

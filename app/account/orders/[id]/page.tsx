@@ -11,6 +11,7 @@ import { ORDER_STATUS_LABELS, type Product, type Review } from "@/lib/types";
 import OrderStatusSteps from "@/components/order-status-steps";
 import ReorderButton from "@/components/reorder-button";
 import PayOrderButton from "@/components/pay-order-button";
+import CancelOrderButton from "@/components/cancel-order-button";
 import LeaveReview from "@/components/leave-review";
 import { servicePageMetadata } from "@/lib/seo";
 
@@ -75,8 +76,10 @@ export default async function OrderDetailPage({
   const myReview: Review | null = reviewRecord ? mapReview(reviewRecord) : null;
   const canReview = order.status === "shipped" || order.status === "done";
   // Онлайн-оплата не завершилась: заказ в базе есть, оплатить можно отсюда.
+  // Отменённый заказ сюда не попадает — платить по нему уже нечего.
   const needsPayment =
-    order.payment_status === "pending" || order.payment_status === "failed";
+    (order.payment_status === "pending" || order.payment_status === "failed") &&
+    order.status !== "cancelled";
 
   const reorderItems = items
     .map((i) => (i.product_id ? productMap.get(i.product_id) : null))
@@ -131,10 +134,14 @@ export default async function OrderDetailPage({
             <h2 className="font-bold text-brand-800">Заказ ждёт оплаты</h2>
             <p className="mt-1 text-sm text-brand-600">
               Оплата не завершилась — заказ мы сохранили. Оплатить{" "}
-              {formatPrice(order.total)} можно прямо сейчас.
+              {formatPrice(order.total)} можно прямо сейчас. Передумали —
+              отмените, товар вернётся в продажу.
             </p>
           </div>
-          <PayOrderButton orderId={order.id} />
+          <div className="flex flex-wrap items-center gap-4">
+            <CancelOrderButton orderId={order.id} />
+            <PayOrderButton orderId={order.id} />
+          </div>
         </div>
       )}
 

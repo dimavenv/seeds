@@ -140,6 +140,8 @@ export type OrderRecord = {
   number: number;
   invoiceId: number | null;
   paymentStatus: PaymentState;
+  // Статус самого заказа (new/processing/shipped/done/cancelled).
+  status: string;
   total: number;
   customerName: string;
   email: string;
@@ -161,6 +163,7 @@ export function toOrderRecord(rec: Record<string, unknown>): OrderRecord {
     number: Number(rec.number ?? 0),
     invoiceId: Number(rec.invoice_id ?? 0) || null,
     paymentStatus: (s(rec.payment_status) || "unpaid") as PaymentState,
+    status: s(rec.status) || "new",
     total: Number(rec.total ?? 0),
     customerName: s(rec.customer_name),
     email: s(rec.email),
@@ -251,6 +254,15 @@ export async function markOrderPaid(
 
   const lines = await orderLines(pb, order.id);
 
+  // Покупатель отменил заказ, а деньги всё равно пришли (успел оплатить в
+  // соседней вкладке). Статус «отменён» не трогаем — продавец увидит
+  // «Отменён · Оплачен» и вернёт деньги.
+  if (order.status === "cancelled") {
+    console.error(
+      `[robokassa] счёт ${invId}: оплата пришла по ОТМЕНЁННОМУ заказу №${order.number} — нужен возврат денег`
+    );
+  }
+
   // Попытка успела протухнуть (уборка сняла резерв), а деньги всё-таки
   // пришли — возвращаем товар в резерв. Не получилось (успели раскупить) —
   // громко в лог: разбираться придётся продавцу, деньги уже у него.
@@ -331,19 +343,33 @@ export async function markOrderPaid(
 // Попытка оплаты протухла: возвращаем товар на склад, заказ помечаем «не
 // оплачен». Сам заказ и его связь с промокодом остаются — покупатель может
 // оплатить его повторно, продавец видит его в админке.
+// Порядок важен: СНАЧАЛА снимаем с заказа признак «ждём оплату», и только потом
+// возвращаем товар. Так уборка и отмена заказа покупателем не вернут один и тот
+// же резерв дважды, столкнувшись в одну секунду (compare-and-set у PocketBase
+// нет, поэтому окно гонки просто сжимаем до промежутка между чтением и
+// записью). Если между записью и возвратом что-то упадёт, товар останется
+// придержанным — это честнее, чем продать его дважды.
 export async function failPendingOrder(
   pb: PocketBase,
   order: OrderRecord
 ): Promise<void> {
-  const lines = await orderLines(pb, order.id);
-  const release = lines
-    .filter((l) => l.product)
-    .map((l) => ({ productId: l.product, qty: l.qty }));
-  if (release.length > 0) await releaseStock(pb, release);
   await pb.collection("orders").update(order.id, {
     payment_status: "failed",
     pay_started_at: "",
   });
+  await releaseOrderStock(pb, order.id);
+}
+
+// Вернуть в продажу товар, придержанный за заказом.
+export async function releaseOrderStock(
+  pb: PocketBase,
+  orderId: string
+): Promise<void> {
+  const lines = await orderLines(pb, orderId);
+  const release = lines
+    .filter((l) => l.product)
+    .map((l) => ({ productId: l.product, qty: l.qty }));
+  if (release.length > 0) await releaseStock(pb, release);
 }
 
 export type PaymentAttempt =
@@ -380,6 +406,10 @@ export async function startPaymentAttempt(
       error: "Этот заказ оформлен без онлайн-оплаты",
       status: 409,
     };
+  }
+  // Покупатель сам отменил заказ (или это сделал продавец) — платить нечего.
+  if (order.status === "cancelled") {
+    return { ok: false, error: "Заказ отменён", status: 409 };
   }
 
   const lines = await orderLines(pb, order.id);
