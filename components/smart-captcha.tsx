@@ -36,6 +36,8 @@ export default function SmartCaptcha({
   resetSignal?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Обёртка, по ширине которой виджет вписывается на узком экране.
+  const wrapRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef<number | null>(null);
   const currentTheme = useRef<"light" | "dark">("light");
   const cb = useRef(onToken);
@@ -105,8 +107,49 @@ export default function SmartCaptcha({
     }
   }, [resetSignal]);
 
+  // Виджет SmartCaptcha имеет ФИКСИРОВАННУЮ ширину (302 px) — своей вёрстке он
+  // не подчиняется. На телефоне внутри карточки с полями места меньше, и он
+  // вылезал за её край. Ужимаем его целиком по доступной ширине: сам виджет
+  // остаётся кликабельным и читаемым, просто чуть меньше.
+  //
+  // Масштаб считаем в JS, а не в CSS: чистым CSS «вписать по ширине» нельзя —
+  // scale() требует безразмерное число, а поделить одну длину на другую в calc()
+  // не получится. ResizeObserver держит масштаб верным при поворотах экрана и
+  // когда виджет дорисовывается (он приезжает асинхронно).
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const widget = ref.current;
+    if (!SITE_KEY || !wrap || !widget) return;
+
+    const fit = () => {
+      const available = wrap.clientWidth;
+      // offsetWidth/offsetHeight — размеры ДО трансформации, поэтому пересчёт
+      // не зацикливается сам на себе.
+      const natural = widget.offsetWidth || 302;
+      const scale = Math.min(1, available / natural);
+      widget.style.transformOrigin = "left top";
+      widget.style.transform = scale < 1 ? `scale(${scale})` : "";
+      // Высоту обёртки подгоняем под ужатый виджет, иначе под ним осталась бы
+      // пустая полоса от исходной высоты.
+      wrap.style.height =
+        scale < 1 && widget.offsetHeight
+          ? `${Math.ceil(widget.offsetHeight * scale)}px`
+          : "";
+    };
+
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(wrap);
+    observer.observe(widget);
+    return () => observer.disconnect();
+  }, []);
+
   if (!SITE_KEY) return null;
-  return <div ref={ref} className="mt-1" />;
+  return (
+    <div ref={wrapRef} className="mt-1 w-full overflow-hidden">
+      <div ref={ref} />
+    </div>
+  );
 }
 
 // Включена ли капча на клиенте (задан публичный ключ).

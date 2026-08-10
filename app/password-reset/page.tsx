@@ -95,7 +95,7 @@ export default function PasswordResetPage() {
   if (done) {
     return (
       <div className="container-page py-16">
-        <div className="card mx-auto max-w-md p-8 text-center">
+        <div className="card mx-auto max-w-md p-6 sm:p-8 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-3xl">
             ✅
           </div>
@@ -118,7 +118,7 @@ export default function PasswordResetPage() {
   if (ticket) {
     return (
       <div className="container-page py-16">
-        <div className="card mx-auto max-w-md p-8">
+        <div className="card mx-auto max-w-md p-6 sm:p-8">
           <h1 className="text-2xl font-bold text-brand-800">Новый пароль</h1>
           <p className="mt-1 text-sm text-brand-500">
             Если аккаунт с адресом <b>{email.trim()}</b> существует, на него
@@ -228,7 +228,7 @@ export default function PasswordResetPage() {
   // ===== Шаг 1: почта =====
   return (
     <div className="container-page py-16">
-      <div className="card mx-auto max-w-md p-8">
+      <div className="card mx-auto max-w-md p-6 sm:p-8">
         <h1 className="text-2xl font-bold text-brand-800">Забыли пароль?</h1>
         <p className="mt-1 text-sm text-brand-500">
           Укажите почту, на которую зарегистрирован аккаунт, — пришлём код для

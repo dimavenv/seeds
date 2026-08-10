@@ -144,7 +144,7 @@ export default function RegisterPage() {
   if (ticket) {
     return (
       <div className="container-page py-16">
-        <div className="card mx-auto max-w-md p-8">
+        <div className="card mx-auto max-w-md p-6 sm:p-8">
           <h1 className="text-2xl font-bold text-brand-800">Подтвердите почту</h1>
           <p className="mt-1 text-sm text-brand-500">
             Мы отправили 6-значный код на <b>{email}</b>. Введите его, чтобы
@@ -216,7 +216,7 @@ export default function RegisterPage() {
 
   return (
     <div className="container-page py-16">
-      <div className="card mx-auto max-w-md p-8">
+      <div className="card mx-auto max-w-md p-6 sm:p-8">
         <AuthTabs active="register" />
         <h1 className="text-2xl font-bold text-brand-800">Создать аккаунт</h1>
         <p className="mt-1 text-sm text-brand-500">

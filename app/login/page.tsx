@@ -110,7 +110,7 @@ export default function LoginPage() {
 
   return (
     <div className="container-page py-16">
-      <div className="card mx-auto max-w-md p-8">
+      <div className="card mx-auto max-w-md p-6 sm:p-8">
         <AuthTabs active="login" />
         <h1 className="text-2xl font-bold text-brand-800">С возвращением!</h1>
         <p className="mt-1 text-sm text-brand-500">
