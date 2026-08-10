@@ -17,6 +17,7 @@ import crypto from "node:crypto";
 
 const AUTHORIZE_URL = "https://id.vk.ru/authorize";
 const TOKEN_URL = "https://id.vk.ru/oauth2/auth";
+const USER_INFO_URL = "https://id.vk.ru/oauth2/user_info";
 const USERS_GET_URL = "https://api.vk.com/method/users.get";
 const API_VERSION = "5.199";
 
@@ -75,9 +76,12 @@ export function vkidAuthUrl(o: {
 
 export type VkIdIdentity = {
   accessToken: string;
-  // Почта приходит claim'ом в id_token. Может отсутствовать: аккаунт ВК,
-  // заведённый по номеру телефона, почты не имеет.
+  // Почта из claim'а id_token. Приходит не всегда — даже когда в профиле ВК она
+  // есть: тогда её отдаёт отдельная ручка user_info (см. fetchVkIdUser).
   email: string | null;
+  // Доступы, которые ВКонтакте реально выдал. Нужны только для лога: если почты
+  // нет и в scope нет email — сразу видно, что дело в согласии, а не в коде.
+  scope: string;
 };
 
 export type VkIdExchange =
@@ -137,7 +141,14 @@ export async function exchangeVkIdCode(o: {
   const email =
     typeof payload.id_token === "string" ? emailFromIdToken(payload.id_token) : null;
 
-  return { ok: true, identity: { accessToken, email } };
+  return {
+    ok: true,
+    identity: {
+      accessToken,
+      email,
+      scope: typeof payload.scope === "string" ? payload.scope : "",
+    },
+  };
 }
 
 // Человекочитаемая причина отказа из ответа VK ID.
@@ -194,10 +205,70 @@ export function emailFromIdToken(jwt: string): string | null {
   }
 }
 
-// Имя и фамилия — обычным вызовом API от имени полученного токена.
-// Не критично: не ответил — заведём аккаунт без имени, покупатель впишет его
-// сам в кабинете.
-export async function fetchVkIdName(
+export type VkIdUser = {
+  email: string | null;
+  firstName: string;
+  lastName: string;
+};
+
+// Данные покупателя от VK ID.
+//
+// Основной источник — ручка user_info самого VK ID: именно она отдаёт почту,
+// даже когда её нет в claim'ах id_token. Запасной — обычный users.get у API
+// ВКонтакте: он почту не отдаёт, зато знает имя и фамилию.
+//
+// Ни один из вызовов не критичен: не ответили — заведём аккаунт без имени,
+// покупатель впишет его в кабинете. А вот без почты вход не состоится, и об
+// этом он получит понятное объяснение.
+export async function fetchVkIdUser(accessToken: string): Promise<VkIdUser> {
+  const fromUserInfo = await fetchUserInfo(accessToken);
+  if (fromUserInfo && (fromUserInfo.email || fromUserInfo.firstName)) {
+    return fromUserInfo;
+  }
+  const name = await fetchNameFromApi(accessToken);
+  return { email: fromUserInfo?.email ?? null, ...name };
+}
+
+async function fetchUserInfo(accessToken: string): Promise<VkIdUser | null> {
+  try {
+    const res = await fetch(USER_INFO_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        client_id: (process.env.VK_CLIENT_ID || "").trim(),
+        access_token: accessToken,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      user?: { email?: unknown; first_name?: unknown; last_name?: unknown };
+      error?: unknown;
+      error_description?: unknown;
+    };
+    if (!data.user) {
+      console.error(
+        `[oauth] vkid: user_info не отдал профиль (HTTP ${res.status})` +
+          (data.error ? `: ${String(data.error)} ${String(data.error_description ?? "")}` : "")
+      );
+      return null;
+    }
+    const email = typeof data.user.email === "string" ? data.user.email : "";
+    return {
+      email: email.includes("@") ? email : null,
+      firstName: typeof data.user.first_name === "string" ? data.user.first_name : "",
+      lastName: typeof data.user.last_name === "string" ? data.user.last_name : "",
+    };
+  } catch (e) {
+    console.error(`[oauth] vkid: user_info недоступен: ${(e as Error).message}`);
+    return null;
+  }
+}
+
+async function fetchNameFromApi(
   accessToken: string
 ): Promise<{ firstName: string; lastName: string }> {
   const empty = { firstName: "", lastName: "" };

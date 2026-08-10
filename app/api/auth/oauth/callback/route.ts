@@ -10,7 +10,7 @@ import {
   oauthRedirectUrl,
   unpackHandshake,
 } from "@/lib/oauth";
-import { VKID_PROVIDER, exchangeVkIdCode, fetchVkIdName } from "@/lib/vkid";
+import { VKID_PROVIDER, exchangeVkIdCode, fetchVkIdUser } from "@/lib/vkid";
 import { loginByVerifiedEmail, sessionCookie } from "@/lib/external-login";
 
 export const dynamic = "force-dynamic";
@@ -121,16 +121,23 @@ export async function GET(request: Request) {
       );
       return clear(fail("failed", VKID_PROVIDER));
     }
-    const { accessToken, email } = exchange.identity;
+    const { accessToken, scope } = exchange.identity;
+    // Почту берём из профиля VK ID, а claim id_token оставляем запасным
+    // вариантом: в id_token её может не быть, даже когда в профиле ВК она есть.
+    const profile = await fetchVkIdUser(accessToken);
+    const email = profile.email ?? exchange.identity.email;
     if (!email) {
       console.error(
-        "[oauth] vkid: ВКонтакте не передал почту (аккаунт по номеру телефона) — вход невозможен"
+        `[oauth] vkid: ВКонтакте не передал почту — вход невозможен (выданные доступы: ${scope || "не указаны"})`
       );
       return clear(fail("noemail", VKID_PROVIDER));
     }
 
-    const { firstName, lastName } = await fetchVkIdName(accessToken);
-    const login = await loginByVerifiedEmail({ email, firstName, lastName });
+    const login = await loginByVerifiedEmail({
+      email,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+    });
     if (!login.ok) return clear(fail(login.error, VKID_PROVIDER));
 
     console.log(
