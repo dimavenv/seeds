@@ -1,6 +1,8 @@
 import "server-only";
+import crypto from "node:crypto";
 import { createPublicPb } from "@/lib/pb/server";
 import { absoluteUrl } from "@/lib/seo";
+import { VKID_PROVIDER, generatePkce, isVkIdConfigured } from "@/lib/vkid";
 
 // Вход через Яндекс ID (OAuth2 у PocketBase).
 //
@@ -51,7 +53,7 @@ export function cookieHeader(
 // входа.
 const KNOWN: Record<string, { title: string }> = {
   yandex: { title: "Яндекс ID" },
-  vk: { title: "VK ID" },
+  [VKID_PROVIDER]: { title: "VK ID" },
 };
 
 export function providerTitle(name: string): string {
@@ -61,10 +63,13 @@ export function providerTitle(name: string): string {
 export type OAuthProvider = {
   name: string;
   title: string;
-  // Адрес авторизации без redirect_uri (его дописывает start-роут).
+  // Адрес авторизации без redirect_uri (его дописывает start-роут). Пустой у
+  // VK ID: там адрес собирается целиком в start-роуте.
   authURL: string;
   state: string;
   codeVerifier: string;
+  // Только для VK ID: PKCE-вызов, который уходит в адрес авторизации.
+  codeChallenge?: string;
 };
 
 // Куда Яндекс возвращает покупателя. Этот же адрес прописывается в настройках
@@ -73,29 +78,50 @@ export function oauthRedirectUrl(): string {
   return absoluteUrl("/api/auth/oauth/callback");
 }
 
-// Какие провайдеры реально включены в PocketBase. Пустой список — кнопок на
-// странице входа не будет, всё работает как раньше.
+// Какие входы доступны. Пустой список — кнопок на странице входа не будет, всё
+// работает как раньше.
+//
+// Источников два. Яндекс ID берёт на себя PocketBase (встроенный провайдер), и
+// адрес авторизации с PKCE выдаёт он. VK ID мы делаем сами (lib/vkid.ts) —
+// PocketBase его нынешний протокол не поддерживает, — поэтому он появляется в
+// списке просто по наличию ключей в окружении.
 export async function listOAuthProviders(): Promise<OAuthProvider[]> {
+  const out: OAuthProvider[] = [];
+
   try {
     const pb = createPublicPb();
     const methods = await pb.collection("users").listAuthMethods();
     const providers = methods.oauth2?.enabled ? methods.oauth2.providers : [];
-    return providers
-      .filter((p) => p.name in KNOWN)
-      .map((p) => ({
+    for (const p of providers) {
+      if (!(p.name in KNOWN) || p.name === VKID_PROVIDER) continue;
+      out.push({
         name: p.name,
         title: KNOWN[p.name].title,
         authURL: p.authURL,
         state: p.state,
-        // У провайдеров без PKCE (ВКонтакте) верификатора нет — и это нормально:
-        // на обмен кода он тогда просто не влияет.
         codeVerifier: p.codeVerifier ?? "",
-      }));
+      });
+    }
   } catch {
     // PocketBase недоступен или OAuth не настроен — просто не предлагаем вход
-    // через провайдера, обычный вход по паролю не затронут.
-    return [];
+    // через него, обычный вход по паролю не затронут.
   }
+
+  if (isVkIdConfigured()) {
+    // authURL и PKCE для VK ID собираются в start-роуте: там уже известен
+    // адрес возврата, а верификатор нужно сразу положить в cookie.
+    const { verifier, challenge } = generatePkce();
+    out.push({
+      name: VKID_PROVIDER,
+      title: KNOWN[VKID_PROVIDER].title,
+      authURL: "",
+      state: crypto.randomBytes(24).toString("base64url"),
+      codeVerifier: verifier,
+      codeChallenge: challenge,
+    });
+  }
+
+  return out;
 }
 
 export type OAuthHandshake = { state: string; codeVerifier: string; provider: string };

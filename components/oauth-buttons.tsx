@@ -14,7 +14,7 @@ type Provider = { name: string; title: string };
 // Фирменные цвета — по ним кнопку узнают раньше, чем прочитают подпись.
 const BRAND: Record<string, string> = {
   yandex: "bg-[#fc3f1d] hover:bg-[#e5381a] text-white",
-  vk: "bg-[#0077ff] hover:bg-[#0066dd] text-white",
+  vkid: "bg-[#0077ff] hover:bg-[#0066dd] text-white",
 };
 
 // Значок сервиса. Логотипы рисуем буквой, а не картинкой: правила
@@ -22,7 +22,7 @@ const BRAND: Record<string, string> = {
 // фирменном цвете ничего не нарушает и не тянет лишний файл.
 const MARK: Record<string, string> = {
   yandex: "Я",
-  vk: "VK",
+  vkid: "VK",
 };
 
 export default function OAuthButtons({ action }: { action: "login" | "register" }) {

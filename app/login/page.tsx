@@ -15,7 +15,7 @@ type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
 // браузер ради двух строк незачем.
 const PROVIDER_TITLES: Record<string, string> = {
   yandex: "Яндекс ID",
-  vk: "VK ID",
+  vkid: "VK ID",
 };
 
 export default function LoginPage() {

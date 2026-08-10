@@ -1,4 +1,5 @@
 import type PocketBase from "pocketbase";
+import { getTokenPayload } from "pocketbase";
 import { createServerPb } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
 
@@ -16,8 +17,18 @@ const GUEST: Omit<SessionInfo, "configured"> = {
 };
 
 // Сессия + авторизованный клиент PocketBase для действий от имени пользователя.
-// Роль берём ТОЛЬКО из ответа authRefresh (свежая запись из БД): содержимому
-// cookie доверять нельзя — его контролирует клиент.
+//
+// Роль и почту берём ТОЛЬКО из свежей записи в БД: содержимому cookie доверять
+// нельзя — его контролирует клиент. Запись читаем запросом getOne, который
+// PocketBase выполняет только с действительным токеном (проверяются подпись,
+// срок и tokenKey записи), а правило доступа отдаёт её лишь владельцу. То есть
+// это и проверка сессии, и получение актуальных данных — одним запросом.
+//
+// Раньше здесь был authRefresh. Он делал то же самое, но НЕ принимает
+// статические токены, а именно такие выдаёт impersonate — им мы логиним
+// покупателя после входа через VK ID (см. lib/external-login.ts), пароля
+// которого у нас нет. Проверок это не ослабило: authRefresh валидирует токен
+// ровно так же, а выдаваемый им новый токен мы всё равно не использовали.
 export async function getSessionPb(): Promise<{
   session: SessionInfo;
   pb: PocketBase;
@@ -26,11 +37,18 @@ export async function getSessionPb(): Promise<{
   if (!isDbConfigured()) {
     return { session: { configured: false, ...GUEST }, pb };
   }
-  if (!pb.authStore.token) {
+  // isValid проверяет срок токена локально — истёкший не стоит и слать.
+  // Чей это токен, берём из него самого: запись в cookie может оказаться
+  // урезанной (exportToCookie обрезает её, когда cookie не влезает в 4 КБ).
+  const userId =
+    pb.authStore.record?.id ||
+    (getTokenPayload(pb.authStore.token).id as string | undefined) ||
+    "";
+  if (!pb.authStore.token || !pb.authStore.isValid || !userId) {
     return { session: { configured: true, ...GUEST }, pb };
   }
   try {
-    const { record } = await pb.collection("users").authRefresh();
+    const record = await pb.collection("users").getOne(userId);
     return {
       session: {
         configured: true,

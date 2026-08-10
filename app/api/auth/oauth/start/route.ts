@@ -8,6 +8,7 @@ import {
   oauthRedirectUrl,
   packHandshake,
 } from "@/lib/oauth";
+import { VKID_PROVIDER, vkidAuthUrl } from "@/lib/vkid";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,17 @@ export async function GET(request: Request) {
     return NextResponse.redirect(absoluteUrl("/login?oauth=unavailable"), 303);
   }
 
-  // PocketBase отдаёт authURL, уже оканчивающийся на «redirect_uri=» —
+  // VK ID собираем сами (PocketBase его протокол не поддерживает), остальным
+  // PocketBase отдаёт authURL, уже оканчивающийся на «redirect_uri=» — туда
   // дописываем свой адрес возврата.
-  const url = provider.authURL + encodeURIComponent(oauthRedirectUrl());
+  const url =
+    provider.name === VKID_PROVIDER
+      ? vkidAuthUrl({
+          redirectUrl: oauthRedirectUrl(),
+          state: provider.state,
+          codeChallenge: provider.codeChallenge ?? "",
+        })
+      : provider.authURL + encodeURIComponent(oauthRedirectUrl());
 
   const res = NextResponse.redirect(url, 303);
   // Заголовок собираем сами (см. cookieHeader): SameSite=Lax тут обязателен —

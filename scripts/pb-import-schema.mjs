@@ -89,15 +89,23 @@ console.log(`Схема импортирована: ${schema.map((c) => c.name).
 // Возвращаем (или задаём) настройку входа через Яндекс ID и VK ID.
 {
   // Имя провайдера в PocketBase → префикс переменных в .env.production.
-  const FROM_ENV = [
-    ["yandex", "YANDEX"],
-    ["vk", "VK"],
-  ];
+  // VK ID здесь НЕТ намеренно: встроенный провайдер `vk` ходит по старому
+  // протоколу (oauth.vk.com), который нынешние приложения VK ID отвергают
+  // ошибкой «Security Error». Вход через ВК сайт делает своим кодом
+  // (lib/vkid.ts), и ключи VK_CLIENT_ID/VK_CLIENT_SECRET читает сам — в
+  // PocketBase их прописывать не нужно.
+  const FROM_ENV = [["yandex", "YANDEX"]];
 
   // Провайдеры, настроенные в админке вручную, сохраняем как есть — их
-  // перезаписывают только заданные в .env ключи.
-  let providers = savedOAuth2?.providers ?? [];
-  let changed = false;
+  // перезаписывают только заданные в .env ключи. Исключение — `vk`: если он
+  // остался от прошлых версий, убираем, чтобы в PocketBase не лежал ключ от
+  // нерабочего пути входа.
+  const hadVk = (savedOAuth2?.providers ?? []).some((p) => p.name === "vk");
+  let providers = (savedOAuth2?.providers ?? []).filter((p) => p.name !== "vk");
+  let changed = hadVk;
+  if (hadVk) {
+    console.log("Убран старый провайдер vk (вход через ВК идёт своим кодом сайта).");
+  }
   for (const [name, prefix] of FROM_ENV) {
     const id = (process.env[`${prefix}_CLIENT_ID`] || "").trim();
     const secret = (process.env[`${prefix}_CLIENT_SECRET`] || "").trim();
@@ -133,7 +141,7 @@ console.log(`Схема импортирована: ${schema.map((c) => c.name).
     }
   } else {
     console.log(
-      "Вход через Яндекс ID / VK ID не настроен (нет YANDEX_CLIENT_ID+SECRET и VK_CLIENT_ID+SECRET) — кнопок на сайте не будет."
+      "Вход через Яндекс ID не настроен (нет YANDEX_CLIENT_ID/YANDEX_CLIENT_SECRET) — этой кнопки на сайте не будет."
     );
   }
 }

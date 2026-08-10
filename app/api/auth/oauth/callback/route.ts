@@ -10,6 +10,8 @@ import {
   oauthRedirectUrl,
   unpackHandshake,
 } from "@/lib/oauth";
+import { VKID_PROVIDER, exchangeVkIdCode, fetchVkIdName } from "@/lib/vkid";
+import { loginByVerifiedEmail, sessionCookie } from "@/lib/external-login";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +99,42 @@ export async function GET(request: Request) {
   if (!sameState(state, handshake.state)) {
     console.error("[oauth] state из адреса не совпал с сохранённым");
     return clear(fail("failed", who));
+  }
+
+  // ===== VK ID: свой обмен кода (PocketBase его протокол не поддерживает) =====
+  if (handshake.provider === VKID_PROVIDER) {
+    const exchange = await exchangeVkIdCode({
+      code,
+      codeVerifier: handshake.codeVerifier,
+      redirectUrl: oauthRedirectUrl(),
+      // ВКонтакте передаёт device_id рядом с code — он нужен на обмене.
+      deviceId: params.get("device_id"),
+    });
+    if (!exchange.ok) {
+      console.error(`[oauth] vkid: обмен кода не удался: ${exchange.error}`);
+      return clear(fail("failed", VKID_PROVIDER));
+    }
+    const { accessToken, email } = exchange.identity;
+    if (!email) {
+      console.error(
+        "[oauth] vkid: ВКонтакте не передал почту (аккаунт по номеру телефона) — вход невозможен"
+      );
+      return clear(fail("noemail", VKID_PROVIDER));
+    }
+
+    const { firstName, lastName } = await fetchVkIdName(accessToken);
+    const login = await loginByVerifiedEmail({ email, firstName, lastName });
+    if (!login.ok) return clear(fail(login.error, VKID_PROVIDER));
+
+    console.log(
+      `[oauth] vkid: вход выполнен (${email}${login.created ? ", аккаунт создан" : ""})`
+    );
+    const res = NextResponse.redirect(absoluteUrl("/account"), 303);
+    res.headers.append(
+      "Set-Cookie",
+      sessionCookie(login.token, login.record, secure)
+    );
+    return clear(res);
   }
 
   const pb = createPublicPb();
