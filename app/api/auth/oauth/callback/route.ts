@@ -4,7 +4,12 @@ import { cookies } from "next/headers";
 import { createPublicPb } from "@/lib/pb/server";
 import { PB_COOKIE } from "@/lib/pb/shared";
 import { absoluteUrl } from "@/lib/seo";
-import { OAUTH_COOKIE, oauthRedirectUrl, unpackHandshake } from "@/lib/oauth";
+import {
+  OAUTH_COOKIE,
+  cookieHeader,
+  oauthRedirectUrl,
+  unpackHandshake,
+} from "@/lib/oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +35,14 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const params = url.searchParams;
 
+  const secure = (request.headers.get("x-forwarded-proto") || "https") === "https";
+
+  // Рукопожатие одноразовое — гасим cookie в любом исходе. Только сырым
+  // заголовком: NextResponse.cookies.set() пересобрал бы ВСЕ Set-Cookie ответа
+  // и заново закодировал бы сессионную cookie PocketBase, которая уже
+  // закодирована (см. cookieHeader в lib/oauth.ts).
   const clear = (res: NextResponse) => {
-    // Рукопожатие одноразовое — гасим cookie в любом исходе.
-    res.cookies.set(OAUTH_COOKIE, "", { path: "/", maxAge: 0 });
+    res.headers.append("Set-Cookie", cookieHeader(OAUTH_COOKIE, "", { maxAge: 0, secure }));
     return res;
   };
 
@@ -61,12 +71,24 @@ export async function GET(request: Request) {
     return clear(fail("failed"));
   }
 
+  // Дальше причины расписаны по отдельности: в прошлый раз одна общая строка в
+  // логе не давала понять, на каком именно шаге всё встало.
   const code = params.get("code") ?? "";
   const state = params.get("state") ?? "";
-  const handshake = unpackHandshake(cookies().get(OAUTH_COOKIE)?.value);
+  if (!code || !state) {
+    console.error("[oauth] возврат без code или state в адресе");
+    return clear(fail("failed"));
+  }
 
-  if (!code || !state || !handshake || !sameState(state, handshake.state)) {
-    console.error("[oauth] возврат без кода или с чужим state");
+  const handshake = unpackHandshake(cookies().get(OAUTH_COOKIE)?.value);
+  if (!handshake) {
+    console.error(
+      "[oauth] потеряна cookie рукопожатия: вход открывали дольше 10 минут либо сайт открыт не по тому домену, что в SITE_URL"
+    );
+    return clear(fail("failed"));
+  }
+  if (!sameState(state, handshake.state)) {
+    console.error("[oauth] state из адреса не совпал с сохранённым");
     return clear(fail("failed"));
   }
 
@@ -85,7 +107,10 @@ export async function GET(request: Request) {
     return clear(fail("failed"));
   }
 
-  const secure = (request.headers.get("x-forwarded-proto") || "https") === "https";
+  console.log(
+    `[oauth] ${handshake.provider}: вход выполнен (${pb.authStore.record?.email ?? "без почты"})`
+  );
+
   const res = NextResponse.redirect(absoluteUrl("/account"), 303);
   res.headers.append(
     "Set-Cookie",

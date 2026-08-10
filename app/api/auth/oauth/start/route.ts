@@ -3,6 +3,7 @@ import { absoluteUrl } from "@/lib/seo";
 import {
   OAUTH_COOKIE,
   OAUTH_COOKIE_MAX_AGE,
+  cookieHeader,
   listOAuthProviders,
   oauthRedirectUrl,
   packHandshake,
@@ -26,18 +27,23 @@ export async function GET(request: Request) {
   const url = provider.authURL + encodeURIComponent(oauthRedirectUrl());
 
   const res = NextResponse.redirect(url, 303);
-  res.cookies.set(OAUTH_COOKIE, packHandshake({
-    state: provider.state,
-    codeVerifier: provider.codeVerifier,
-    provider: provider.name,
-  }), {
-    httpOnly: true,
-    // Lax обязателен: возврат приходит с домена Яндекса, при Strict браузер
-    // cookie не пришлёт и вход сорвётся.
-    sameSite: "lax",
-    secure: (request.headers.get("x-forwarded-proto") || "https") === "https",
-    path: "/",
-    maxAge: OAUTH_COOKIE_MAX_AGE,
-  });
+  // Заголовок собираем сами (см. cookieHeader): SameSite=Lax тут обязателен —
+  // возврат приходит с домена Яндекса, при Strict браузер cookie не пришлёт и
+  // вход сорвётся.
+  res.headers.append(
+    "Set-Cookie",
+    cookieHeader(
+      OAUTH_COOKIE,
+      packHandshake({
+        state: provider.state,
+        codeVerifier: provider.codeVerifier,
+        provider: provider.name,
+      }),
+      {
+        maxAge: OAUTH_COOKIE_MAX_AGE,
+        secure: (request.headers.get("x-forwarded-proto") || "https") === "https",
+      }
+    )
+  );
   return res;
 }

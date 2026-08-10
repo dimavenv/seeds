@@ -21,6 +21,31 @@ import { absoluteUrl } from "@/lib/seo";
 export const OAUTH_COOKIE = "pb_oauth";
 export const OAUTH_COOKIE_MAX_AGE = 10 * 60;
 
+// Готовая строка заголовка Set-Cookie.
+//
+// Собираем её руками нарочно. NextResponse.cookies.set() при записи ПЕРЕСОБИРАЕТ
+// все Set-Cookie ответа и заново прогоняет их значения через encodeURIComponent
+// — а сессионная cookie PocketBase уже закодирована своим exportToCookie.
+// Второе кодирование ломает её так, что сервер потом не может её прочитать:
+// вход внешне «проходил», но пользователь возвращался гостем без единой ошибки.
+// Поэтому в ответах с сессией пользуемся только сырыми заголовками.
+export function cookieHeader(
+  name: string,
+  value: string,
+  opts: { maxAge: number; secure: boolean }
+): string {
+  return [
+    `${name}=${value}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    opts.secure ? "Secure" : "",
+    `Max-Age=${opts.maxAge}`,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
 // Провайдеры, которые сайт готов показывать. Список закрытый: включённый в
 // PocketBase «на посмотреть» провайдер не должен молча появиться на странице
 // входа.
@@ -68,14 +93,21 @@ export async function listOAuthProviders(): Promise<OAuthProvider[]> {
 
 export type OAuthHandshake = { state: string; codeVerifier: string; provider: string };
 
+// Рукопожатие едет в cookie, поэтому пакуем его в base64url, а не кладём JSON
+// как есть: в значении cookie кавычкам и фигурным скобкам не место (RFC 6265),
+// и по дороге их кто-нибудь обязательно перекодирует — а base64url переживает
+// и percent-encoding, и его отсутствие одинаково.
 export function packHandshake(h: OAuthHandshake): string {
-  return JSON.stringify(h);
+  return Buffer.from(JSON.stringify(h), "utf8").toString("base64url");
 }
 
 export function unpackHandshake(raw: string | undefined): OAuthHandshake | null {
   if (!raw) return null;
   try {
-    const p = JSON.parse(raw) as Partial<OAuthHandshake>;
+    // decodeURIComponent — на случай, если значение всё-таки закодировали:
+    // для чистого base64url это тождественное преобразование.
+    const json = Buffer.from(decodeURIComponent(raw), "base64url").toString("utf8");
+    const p = JSON.parse(json) as Partial<OAuthHandshake>;
     if (
       typeof p.state === "string" &&
       typeof p.codeVerifier === "string" &&
