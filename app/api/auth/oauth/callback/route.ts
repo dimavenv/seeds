@@ -36,8 +36,30 @@ export async function GET(request: Request) {
     return res;
   };
 
-  // Покупатель нажал «Отмена» на странице согласия.
-  if (params.get("error")) return clear(fail("denied"));
+  // Яндекс вернул ошибку вместо кода. Разбираем: «отменил вход» — это одно, а
+  // неверно заведённое приложение — совсем другое, и покупателю про него
+  // сказать нечего, зато в логе причина должна быть видна сразу.
+  const oauthError = params.get("error");
+  if (oauthError) {
+    console.error(
+      `[oauth] провайдер вернул ошибку «${oauthError}»${
+        params.get("error_description")
+          ? `: ${params.get("error_description")}`
+          : ""
+      }`
+    );
+    if (oauthError === "access_denied") return clear(fail("denied"));
+    if (oauthError === "invalid_scope") {
+      // Приложению на oauth.yandex.ru не выданы нужные доступы — см.
+      // SETUP-AUTH-RU.md, там перечислены все три (login:email, login:info,
+      // login:avatar).
+      console.error(
+        "[oauth] у приложения Яндекса нет запрошенных доступов — включите login:email, login:info и login:avatar в его настройках"
+      );
+      return clear(fail("misconfigured"));
+    }
+    return clear(fail("failed"));
+  }
 
   const code = params.get("code") ?? "";
   const state = params.get("state") ?? "";

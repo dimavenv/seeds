@@ -29,7 +29,9 @@ export default function LoginPage() {
     const oauth = params.get("oauth");
     if (oauth === "denied") {
       setError("Вход через Яндекс ID отменён. Можно войти по паролю.");
-    } else if (oauth === "unavailable") {
+    } else if (oauth === "unavailable" || oauth === "misconfigured") {
+      // misconfigured — приложению Яндекса не выданы нужные доступы. Покупателю
+      // об этом знать нечего, точная причина уходит в pm2 logs seeds.
       setError("Вход через Яндекс ID сейчас недоступен. Войдите по паролю.");
     } else if (oauth) {
       setError(
