@@ -43,13 +43,20 @@ export default function AccountSettings({
         aria-controls="account-settings-panel"
         className="card flex w-full items-center gap-4 p-4 text-left transition hover:border-brand-300 hover:shadow-md sm:p-5"
       >
+        {/* Шестерёнка — рисованная иконка, а не эмодзи: эмодзи в каждой системе
+            своё, а повёрнутое (так было раньше при раскрытии) выглядит просто
+            сломанным. Крутится теперь только стрелка справа. */}
         <span
           aria-hidden="true"
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xl transition ${
-            open ? "rotate-90" : ""
-          }`}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-600"
         >
-          ⚙️
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+            <path
+              fillRule="evenodd"
+              d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567l-.091.549a.798.798 0 01-.517.608 7.45 7.45 0 00-.478.198.798.798 0 01-.796-.064l-.453-.324a1.875 1.875 0 00-2.416.2l-.243.243a1.875 1.875 0 00-.2 2.416l.324.453a.798.798 0 01.064.796 7.448 7.448 0 00-.198.478.798.798 0 01-.608.517l-.55.092a1.875 1.875 0 00-1.566 1.849v.344c0 .917.663 1.699 1.567 1.85l.549.091c.281.047.508.25.608.517.06.162.127.322.198.478a.798.798 0 01-.064.796l-.324.453a1.875 1.875 0 00.2 2.416l.243.243c.648.648 1.67.733 2.416.2l.453-.324a.798.798 0 01.796-.064c.156.071.316.137.478.198.267.1.47.327.517.608l.092.55c.15.903.932 1.566 1.849 1.566h.344c.917 0 1.699-.663 1.85-1.567l.091-.549a.798.798 0 01.517-.608 7.473 7.473 0 00.478-.198.798.798 0 01.796.064l.453.324a1.875 1.875 0 002.416-.2l.243-.243c.648-.648.733-1.67.2-2.416l-.324-.453a.798.798 0 01-.064-.796c.071-.156.137-.316.198-.478.1-.267.327-.47.608-.517l.55-.091a1.875 1.875 0 001.566-1.85v-.344c0-.917-.663-1.699-1.567-1.85l-.549-.091a.798.798 0 01-.608-.517 7.462 7.462 0 00-.198-.478.798.798 0 01.064-.796l.324-.453a1.875 1.875 0 00-.2-2.416l-.243-.243a1.875 1.875 0 00-2.416-.2l-.453.324a.798.798 0 01-.796.064 7.453 7.453 0 00-.478-.198.798.798 0 01-.517-.608l-.091-.55a1.875 1.875 0 00-1.85-1.566h-.344zM12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z"
+              clipRule="evenodd"
+            />
+          </svg>
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
@@ -64,12 +71,20 @@ export default function AccountSettings({
             ФИО, телефон и пароль — подставим их в оформление заказа
           </span>
         </span>
-        <span
+        <svg
           aria-hidden="true"
-          className={`shrink-0 text-brand-400 transition ${open ? "rotate-180" : ""}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className={`h-5 w-5 shrink-0 text-brand-400 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
         >
-          ▾
-        </span>
+          <path
+            fillRule="evenodd"
+            d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
+            clipRule="evenodd"
+          />
+        </svg>
       </button>
 
       {open && (

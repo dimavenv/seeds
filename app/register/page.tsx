@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 import AuthTabs from "@/components/auth-tabs";
+import OAuthButtons from "@/components/oauth-buttons";
 import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 export default function RegisterPage() {
@@ -222,6 +223,15 @@ export default function RegisterPage() {
           Регистрация доступна с российской почты (Яндекс, Mail.ru, Rambler,
           домены .ru / .рф). На неё придёт код подтверждения.
         </p>
+
+        {/* Регистрироваться заранее не обязательно: кабинет заводится сам
+            после первой оплаты (см. lib/auto-account.ts). Об этом честно
+            говорим здесь, чтобы форма не выглядела барьером перед покупкой. */}
+        <p className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
+          Можно и не регистрироваться: оформите заказ как гость — после оплаты
+          мы сами заведём вам кабинет и пришлём пароль на указанную почту. Эта
+          форма — если хочется завести аккаунт сразу.
+        </p>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">Имя</span>
@@ -247,6 +257,8 @@ export default function RegisterPage() {
             {loading ? "Отправляем код…" : "Зарегистрироваться"}
           </button>
         </form>
+
+        <OAuthButtons action="register" />
       </div>
     </div>
   );

@@ -170,7 +170,7 @@ export default async function AccountPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
-                  <CancelOrderButton orderId={o.id} />
+                  <CancelOrderButton orderId={o.id} number={o.number} />
                   <PayOrderButton orderId={o.id} />
                 </div>
               </li>
@@ -278,7 +278,7 @@ export default async function AccountPage() {
                   <div className="ml-auto flex flex-wrap items-center gap-4">
                     {unpaid && (
                       <>
-                        <CancelOrderButton orderId={o.id} />
+                        <CancelOrderButton orderId={o.id} number={o.number} />
                         <PayOrderButton orderId={o.id} />
                       </>
                     )}

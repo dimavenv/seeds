@@ -139,7 +139,7 @@ export default async function OrderDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            <CancelOrderButton orderId={order.id} />
+            <CancelOrderButton orderId={order.id} number={order.number} />
             <PayOrderButton orderId={order.id} />
           </div>
         </div>

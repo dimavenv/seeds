@@ -5,6 +5,7 @@ import Link from "next/link";
 import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 import AuthTabs from "@/components/auth-tabs";
+import OAuthButtons from "@/components/oauth-buttons";
 import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
@@ -19,10 +20,21 @@ export default function LoginPage() {
   const [captchaReset, setCaptchaReset] = useState(0);
   const [registered, setRegistered] = useState(false);
 
-  // Пришли после регистрации (когда авто-вход не прошёл из-за капчи).
+  // Пришли после регистрации (когда авто-вход не прошёл из-за капчи) или с
+  // неудачного входа через Яндекс ID.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setRegistered(new URLSearchParams(window.location.search).has("registered"));
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setRegistered(params.has("registered"));
+    const oauth = params.get("oauth");
+    if (oauth === "denied") {
+      setError("Вход через Яндекс ID отменён. Можно войти по паролю.");
+    } else if (oauth === "unavailable") {
+      setError("Вход через Яндекс ID сейчас недоступен. Войдите по паролю.");
+    } else if (oauth) {
+      setError(
+        "Не получилось войти через Яндекс ID — попробуйте ещё раз или войдите по паролю."
+      );
     }
   }, []);
 
@@ -136,6 +148,8 @@ export default function LoginPage() {
             {loading ? "Входим…" : "Войти"}
           </button>
         </form>
+
+        <OAuthButtons action="login" />
       </div>
     </div>
   );
