@@ -116,7 +116,7 @@ export default function AccountProfileForm({
           {saved && !pending && (
             <span
               role="status"
-              className="badge bg-brand-100 text-brand-700"
+              className="animate-pop-in badge bg-brand-100 text-brand-700"
             >
               ✓ Сохранено
             </span>

@@ -63,7 +63,7 @@ export default function CancelOrderButton({
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-brand-900/40 p-4 backdrop-blur-sm sm:items-center"
+          className="animate-fade-in-fast fixed inset-0 z-50 flex items-end justify-center bg-brand-900/40 p-4 backdrop-blur-sm sm:items-center"
           role="dialog"
           aria-modal="true"
           aria-labelledby="cancel-order-title"
@@ -71,7 +71,9 @@ export default function CancelOrderButton({
             if (e.target === e.currentTarget && !pending) setOpen(false);
           }}
         >
-          <div className="card w-full max-w-sm p-6 text-center shadow-xl">
+          {/* На телефоне карточка выезжает снизу (там она и прижата к низу), на
+              большом экране — проявляется по центру с лёгким приближением. */}
+          <div className="animate-fade-up-sm card w-full max-w-sm p-6 text-center shadow-xl sm:animate-pop-in">
             <div
               aria-hidden="true"
               className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-accent-500/10 text-accent-600"

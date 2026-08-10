@@ -423,7 +423,7 @@ export default function CheckoutPage() {
               Укажите ФИО полностью, без сокращений.
             </p>
             {fromProfile && (
-              <p className="text-xs text-brand-600">
+              <p className="animate-fade-up-sm text-xs text-brand-600">
                 Заполнено из{" "}
                 <Link href="/account" className="font-semibold underline">
                   личного кабинета

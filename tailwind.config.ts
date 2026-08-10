@@ -50,6 +50,13 @@ const config: Config = {
           "0%": { opacity: "0", transform: "scale(0.96)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // Короткий «подъём» для мелких переключений внутри страницы: смена
+        // вкладки, появление подсказки. Смещение маленькое (8px) — на таком
+        // расстоянии движение читается как отклик, а не как переезд блока.
+        fadeUpSm: {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         // Бегунок полоски перехода: длительность перехода заранее неизвестна,
         // поэтому не «проценты загрузки», а бесконечная пробежка слева направо.
         navProgress: {
@@ -61,6 +68,9 @@ const config: Config = {
         "fade-up": "fadeUp 0.5s ease-out both",
         "fade-in": "fadeIn 0.6s ease-out both",
         "pop-in": "popIn 0.35s ease-out both",
+        "fade-up-sm": "fadeUpSm 0.22s ease-out both",
+        // Быстрое проявление для оверлеев: диалог не должен «выплывать».
+        "fade-in-fast": "fadeIn 0.18s ease-out both",
         "nav-progress": "navProgress 1.1s ease-in-out infinite",
       },
     },

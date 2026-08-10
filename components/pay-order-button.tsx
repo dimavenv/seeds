@@ -87,7 +87,7 @@ export default function PayOrderButton({
   }
 
   return (
-    <div className="rounded-2xl border border-brand-200 bg-surface p-4">
+    <div className="animate-fade-up-sm rounded-2xl border border-brand-200 bg-surface p-4">
       <p className="mb-3 text-sm font-semibold text-brand-700">
         Подтвердите, что вы не робот
       </p>

@@ -123,7 +123,10 @@ export default function AccountPasswordForm({ generated }: { generated: boolean 
           </p>
         )}
         {done && (
-          <p role="status" className="rounded-xl bg-brand-100 px-4 py-2 text-sm text-brand-700">
+          <p
+            role="status"
+            className="animate-fade-up-sm rounded-xl bg-brand-100 px-4 py-2 text-sm text-brand-700"
+          >
             {done}
           </p>
         )}
