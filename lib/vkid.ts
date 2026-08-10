@@ -28,10 +28,14 @@ const SCOPE = "email";
 // одноимённым встроенным провайдером PocketBase, который здесь не участвует.
 export const VKID_PROVIDER = "vkid";
 
+// Ключей у приложения ВК три, и обмен кода требует двух из них: идентификатора
+// и СЕРВИСНОГО ключа доступа (`service_token` в теле запроса — без него
+// id.vk.ru отвечает «invalid_grant: service_token is missing or invalid»).
+// Защищённый ключ (client_secret) отправляем, если задан.
 export function isVkIdConfigured(): boolean {
   return Boolean(
     (process.env.VK_CLIENT_ID || "").trim() &&
-      (process.env.VK_CLIENT_SECRET || "").trim()
+      (process.env.VK_SERVICE_TOKEN || "").trim()
   );
 }
 
@@ -92,12 +96,15 @@ export async function exchangeVkIdCode(o: {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: (process.env.VK_CLIENT_ID || "").trim(),
-    client_secret: (process.env.VK_CLIENT_SECRET || "").trim(),
+    // Именно в ТЕЛЕ, а не в адресе — на этом id.vk.ru настаивает отдельно.
+    service_token: (process.env.VK_SERVICE_TOKEN || "").trim(),
     redirect_uri: o.redirectUrl,
     code: o.code,
     code_verifier: o.codeVerifier,
     state: o.state,
   });
+  const clientSecret = (process.env.VK_CLIENT_SECRET || "").trim();
+  if (clientSecret) body.set("client_secret", clientSecret);
   if (o.deviceId) body.set("device_id", o.deviceId);
 
   let payload: Record<string, unknown>;
