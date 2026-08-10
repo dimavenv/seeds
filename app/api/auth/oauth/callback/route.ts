@@ -109,9 +109,16 @@ export async function GET(request: Request) {
       redirectUrl: oauthRedirectUrl(),
       // ВКонтакте передаёт device_id рядом с code — он нужен на обмене.
       deviceId: params.get("device_id"),
+      state: handshake.state,
     });
     if (!exchange.ok) {
-      console.error(`[oauth] vkid: обмен кода не удался: ${exchange.error}`);
+      // device_id упоминаем нарочно: если ВКонтакте его не прислал, обмен
+      // разваливается именно из-за этого, а по одному тексту ошибки не видно.
+      console.error(
+        `[oauth] vkid: обмен кода не удался: ${exchange.error}` +
+          ` (device_id ${params.get("device_id") ? "получен" : "НЕ получен"},` +
+          ` redirect_uri ${oauthRedirectUrl()})`
+      );
       return clear(fail("failed", VKID_PROVIDER));
     }
     const { accessToken, email } = exchange.identity;

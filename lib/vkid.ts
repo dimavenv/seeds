@@ -86,6 +86,8 @@ export async function exchangeVkIdCode(o: {
   redirectUrl: string;
   // ВКонтакте передаёт его в адресе возврата рядом с code и state.
   deviceId: string | null;
+  // Тот же state, что уходил в адрес авторизации: VK ID ждёт его и здесь.
+  state: string;
 }): Promise<VkIdExchange> {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -94,10 +96,12 @@ export async function exchangeVkIdCode(o: {
     redirect_uri: o.redirectUrl,
     code: o.code,
     code_verifier: o.codeVerifier,
+    state: o.state,
   });
   if (o.deviceId) body.set("device_id", o.deviceId);
 
   let payload: Record<string, unknown>;
+  let status = 0;
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
@@ -109,28 +113,60 @@ export async function exchangeVkIdCode(o: {
       cache: "no-store",
       signal: AbortSignal.timeout(15000),
     });
+    status = res.status;
     payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) {
-      const detail =
-        typeof payload.error_description === "string"
-          ? payload.error_description
-          : typeof payload.error === "string"
-            ? payload.error
-            : `HTTP ${res.status}`;
-      return { ok: false, error: detail };
-    }
   } catch (e) {
     return { ok: false, error: `сеть недоступна: ${(e as Error).message}` };
   }
 
   const accessToken =
     typeof payload.access_token === "string" ? payload.access_token : "";
-  if (!accessToken) return { ok: false, error: "в ответе нет access_token" };
+  // Токена нет — значит, отказ. Причину ВКонтакте кладёт в тело, причём
+  // нередко с кодом 200, поэтому смотрим на тело, а не на статус.
+  if (!accessToken) {
+    return { ok: false, error: describeTokenError(payload, status) };
+  }
 
   const email =
     typeof payload.id_token === "string" ? emailFromIdToken(payload.id_token) : null;
 
   return { ok: true, identity: { accessToken, email } };
+}
+
+// Человекочитаемая причина отказа из ответа VK ID.
+//
+// Пишется в лог целиком по делу: сообщение ВКонтакте, его код и — если ничего
+// узнаваемого нет — перечень полей ответа. Токенов в таком ответе нет (мы сюда
+// попадаем именно потому, что access_token отсутствует), так что показывать
+// нечего опасного, зато следующий разбор не начинается с гадания.
+export function describeTokenError(
+  payload: Record<string, unknown>,
+  status: number
+): string {
+  const str = (v: unknown) => (typeof v === "string" && v ? v : "");
+  // Формат OAuth: { error, error_description }.
+  const oauth = [str(payload.error), str(payload.error_description)]
+    .filter(Boolean)
+    .join(": ");
+  // Формат VK API: { error: { error_code, error_msg } } либо плоские поля.
+  const nested =
+    payload.error && typeof payload.error === "object"
+      ? (payload.error as Record<string, unknown>)
+      : payload;
+  const vk = [
+    nested.error_code !== undefined ? `код ${String(nested.error_code)}` : "",
+    str(nested.error_msg),
+  ]
+    .filter(Boolean)
+    .join(": ");
+
+  const detail = oauth || vk;
+  if (detail) return `${detail} (HTTP ${status})`;
+
+  const keys = Object.keys(payload);
+  return keys.length
+    ? `ответ без access_token (HTTP ${status}), поля: ${keys.join(", ")}`
+    : `пустой ответ (HTTP ${status})`;
 }
 
 // Почта из id_token. Подпись НЕ проверяем — и это осознанно: токен только что

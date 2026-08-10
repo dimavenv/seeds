@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import crypto from "node:crypto";
-import { emailFromIdToken, generatePkce, vkidAuthUrl } from "@/lib/vkid";
+import {
+  describeTokenError,
+  emailFromIdToken,
+  generatePkce,
+  vkidAuthUrl,
+} from "@/lib/vkid";
 
 // Сборка JWT без подписи: нам важен только разбор payload.
 function jwt(payload: Record<string, unknown>): string {
@@ -70,5 +75,32 @@ describe("адрес авторизации VK ID", () => {
     expect(url.searchParams.get("state")).toBe("st-1");
     expect(url.searchParams.get("code_challenge")).toBe("ch-1");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+  });
+});
+
+describe("разбор отказа от VK ID", () => {
+  it("формат OAuth: error + error_description", () => {
+    expect(
+      describeTokenError(
+        { error: "invalid_grant", error_description: "code expired" },
+        200
+      )
+    ).toBe("invalid_grant: code expired (HTTP 200)");
+  });
+
+  it("формат VK API: вложенный объект error", () => {
+    expect(
+      describeTokenError(
+        { error: { error_code: 5, error_msg: "User authorization failed" } },
+        200
+      )
+    ).toBe("код 5: User authorization failed (HTTP 200)");
+  });
+
+  it("ничего узнаваемого — показываем поля ответа", () => {
+    expect(describeTokenError({ foo: 1, bar: 2 }, 400)).toBe(
+      "ответ без access_token (HTTP 400), поля: foo, bar"
+    );
+    expect(describeTokenError({}, 500)).toBe("пустой ответ (HTTP 500)");
   });
 });
