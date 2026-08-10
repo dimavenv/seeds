@@ -8,12 +8,20 @@ export type SessionInfo = {
   userId: string | null;
   email: string | null;
   isAdmin: boolean;
+  // Аккаунт заблокирован продавцом. Такая сессия НЕ считается входом: userId
+  // остаётся null, поэтому заказы, отзывы, корзина аккаунта и админка ей
+  // недоступны так же, как гостю. Флаг нужен ровно для одного — показать в
+  // личном кабинете, что произошло, вместо молчаливого возврата на вход.
+  blocked: boolean;
+  blockedReason: string | null;
 };
 
 const GUEST: Omit<SessionInfo, "configured"> = {
   userId: null,
   email: null,
   isAdmin: false,
+  blocked: false,
+  blockedReason: null,
 };
 
 // Сессия + авторизованный клиент PocketBase для действий от имени пользователя.
@@ -49,12 +57,28 @@ export async function getSessionPb(): Promise<{
   }
   try {
     const record = await pb.collection("users").getOne(userId);
+    if (record.blocked) {
+      // Блокировка действует немедленно, а не со следующего входа: она
+      // проверяется здесь, на каждом запросе, по свежей записи из БД.
+      return {
+        session: {
+          configured: true,
+          ...GUEST,
+          email: (record.email as string) || null,
+          blocked: true,
+          blockedReason: (record.blocked_reason as string) || null,
+        },
+        pb,
+      };
+    }
     return {
       session: {
         configured: true,
         userId: record.id,
         email: (record.email as string) || null,
         isAdmin: record.role === "admin",
+        blocked: false,
+        blockedReason: null,
       },
       pb,
     };

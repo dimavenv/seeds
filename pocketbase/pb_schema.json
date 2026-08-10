@@ -170,6 +170,29 @@
         "type": "bool"
       },
       {
+        "hidden": false,
+        "id": "bool_blocked",
+        "name": "blocked",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text_blocked_reason",
+        "max": 300,
+        "min": 0,
+        "name": "blocked_reason",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
         "help": "",
         "hidden": false,
         "id": "file376926767",

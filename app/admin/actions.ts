@@ -721,3 +721,82 @@ export async function deletePromo(id: string): Promise<void> {
   await pb.collection("promos").delete(id).catch(() => {});
   revalidatePath("/admin/promos");
 }
+
+// ===== Аккаунты покупателей =====
+//
+// Общие правила для блокировки и удаления:
+//   • только администратор;
+//   • со своим аккаунтом ничего сделать нельзя — иначе легко запереть себя
+//     снаружи собственной админки;
+//   • другого администратора трогать тоже нельзя: снимать права должен тот, кто
+//     имеет доступ к базе, а не сосед по админке.
+async function targetUser(
+  id: string
+): Promise<
+  | { ok: true; pb: Awaited<ReturnType<typeof pbAdmin>>; email: string }
+  | { ok: false; error: string }
+> {
+  const { session } = await getSessionPb();
+  if (!session.isAdmin) return { ok: false, error: "Нет доступа" };
+  if (!isValidRecordId(id)) return { ok: false, error: "Аккаунт не найден" };
+  if (id === session.userId) {
+    return { ok: false, error: "Со своим аккаунтом этого сделать нельзя" };
+  }
+
+  const pb = await pbAdmin();
+  const rec = await pb.collection("users").getOne(id).catch(() => null);
+  if (!rec) return { ok: false, error: "Аккаунт не найден" };
+  if (rec.role === "admin") {
+    return { ok: false, error: "Аккаунт администратора трогать нельзя" };
+  }
+  return { ok: true, pb, email: String(rec.email ?? "") };
+}
+
+// Заблокировать или разблокировать покупателя. Блокировка действует сразу:
+// сессия проверяется по свежей записи на каждом запросе (см. lib/auth.ts).
+export async function setUserBlocked(
+  id: string,
+  blocked: boolean,
+  reason?: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const target = await targetUser(id);
+  if (!target.ok) return { error: target.error };
+
+  try {
+    await target.pb.collection("users").update(id, {
+      blocked,
+      // Причину показываем покупателю на экране блокировки, поэтому при снятии
+      // блокировки её обязательно стираем.
+      blocked_reason: blocked ? (reason ?? "").trim().slice(0, 300) : "",
+    });
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
+
+  revalidatePath("/admin/accounts");
+  revalidatePath(`/admin/accounts/${id}`);
+  return { ok: true };
+}
+
+// Удаление аккаунта. Необратимо — подтверждение спрашивает кнопка.
+//
+// Заказы при этом НЕ пропадают: связь orders.user не каскадная, и после
+// удаления заказ просто остаётся без владельца. Это нарочно — выручка и
+// история продаж не должны зависеть от судьбы аккаунта. Пропадают только то,
+// что без владельца бессмысленно: корзина с избранным (user_store) и отметки об
+// использованных промокодах.
+export async function deleteUser(
+  id: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const target = await targetUser(id);
+  if (!target.ok) return { error: target.error };
+
+  try {
+    await target.pb.collection("users").delete(id);
+  } catch (e) {
+    return { error: errMessage(e) };
+  }
+
+  revalidatePath("/admin/accounts");
+  return { ok: true };
+}

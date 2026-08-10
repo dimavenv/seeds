@@ -11,6 +11,7 @@ import ThemeToggle from "@/components/theme-toggle";
 import AccountSettings from "@/components/account-settings";
 import PayOrderButton from "@/components/pay-order-button";
 import CancelOrderButton from "@/components/cancel-order-button";
+import BlockedAccount from "@/components/blocked-account";
 import { EMPTY_PROFILE, profileFromRecord, type Profile } from "@/lib/profile";
 import { servicePageMetadata } from "@/lib/seo";
 
@@ -52,6 +53,13 @@ export default async function AccountPage() {
         </div>
       </div>
     );
+  }
+
+  // Блокировка — раньше проверки входа: заблокированная сессия числится
+  // гостевой (userId null), и без этой ветки покупателя молча отправляло бы на
+  // страницу входа, где он ничего бы не понял.
+  if (session.blocked) {
+    return <BlockedAccount email={session.email} reason={session.blockedReason} />;
   }
 
   if (!session.userId) {
