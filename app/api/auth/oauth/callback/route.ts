@@ -20,8 +20,11 @@ export const dynamic = "force-dynamic";
 // провайдера). Пароля у такого аккаунта нет — если он понадобится, покупатель
 // задаст его через «Забыли пароль?»: код туда придёт на ту же почту.
 
-function fail(reason: string): NextResponse {
-  return NextResponse.redirect(absoluteUrl(`/login?oauth=${reason}`), 303);
+// provider — чтобы страница входа назвала сервис, а не «внешний сервис вообще».
+function fail(reason: string, provider?: string): NextResponse {
+  const qs = new URLSearchParams({ oauth: reason });
+  if (provider) qs.set("p", provider);
+  return NextResponse.redirect(absoluteUrl(`/login?${qs.toString()}`), 303);
 }
 
 // Сравнение state без утечки по времени.
@@ -46,29 +49,33 @@ export async function GET(request: Request) {
     return res;
   };
 
-  // Яндекс вернул ошибку вместо кода. Разбираем: «отменил вход» — это одно, а
-  // неверно заведённое приложение — совсем другое, и покупателю про него
+  // Имя сервиса известно из cookie рукопожатия — им подписываем и лог, и
+  // сообщение покупателю.
+  const pending = unpackHandshake(cookies().get(OAUTH_COOKIE)?.value);
+  const who = pending?.provider;
+
+  // Провайдер вернул ошибку вместо кода. Разбираем: «отменил вход» — это одно,
+  // а неверно заведённое приложение — совсем другое, и покупателю про него
   // сказать нечего, зато в логе причина должна быть видна сразу.
   const oauthError = params.get("error");
   if (oauthError) {
     console.error(
-      `[oauth] провайдер вернул ошибку «${oauthError}»${
+      `[oauth] ${who ?? "провайдер"} вернул ошибку «${oauthError}»${
         params.get("error_description")
           ? `: ${params.get("error_description")}`
           : ""
       }`
     );
-    if (oauthError === "access_denied") return clear(fail("denied"));
+    if (oauthError === "access_denied") return clear(fail("denied", who));
     if (oauthError === "invalid_scope") {
-      // Приложению на oauth.yandex.ru не выданы нужные доступы — см.
-      // SETUP-AUTH-RU.md, там перечислены все три (login:email, login:info,
-      // login:avatar).
+      // Приложению не выданы доступы, которые запрашивает PocketBase — их
+      // список для каждого сервиса есть в SETUP-AUTH-RU.md.
       console.error(
-        "[oauth] у приложения Яндекса нет запрошенных доступов — включите login:email, login:info и login:avatar в его настройках"
+        "[oauth] у приложения нет запрошенных доступов: у Яндекса нужны login:email, login:info и login:avatar, у ВКонтакте — email. См. SETUP-AUTH-RU.md"
       );
-      return clear(fail("misconfigured"));
+      return clear(fail("misconfigured", who));
     }
-    return clear(fail("failed"));
+    return clear(fail("failed", who));
   }
 
   // Дальше причины расписаны по отдельности: в прошлый раз одна общая строка в
@@ -77,10 +84,10 @@ export async function GET(request: Request) {
   const state = params.get("state") ?? "";
   if (!code || !state) {
     console.error("[oauth] возврат без code или state в адресе");
-    return clear(fail("failed"));
+    return clear(fail("failed", who));
   }
 
-  const handshake = unpackHandshake(cookies().get(OAUTH_COOKIE)?.value);
+  const handshake = pending;
   if (!handshake) {
     console.error(
       "[oauth] потеряна cookie рукопожатия: вход открывали дольше 10 минут либо сайт открыт не по тому домену, что в SITE_URL"
@@ -89,7 +96,7 @@ export async function GET(request: Request) {
   }
   if (!sameState(state, handshake.state)) {
     console.error("[oauth] state из адреса не совпал с сохранённым");
-    return clear(fail("failed"));
+    return clear(fail("failed", who));
   }
 
   const pb = createPublicPb();
@@ -104,7 +111,18 @@ export async function GET(request: Request) {
       );
   } catch (e) {
     console.error(`[oauth] ${handshake.provider}: обмен кода не удался:`, e);
-    return clear(fail("failed"));
+    // Частый и понятный случай у ВКонтакте: аккаунт заведён по номеру телефона,
+    // почты у него нет — а без почты покупателю некуда слать чек и письма о
+    // заказе, поэтому запись в базе без неё не создать. Говорим об этом прямо,
+    // а не «попробуйте ещё раз»: пробовать бессмысленно.
+    const data = (e as { response?: { data?: Record<string, unknown> } })?.response?.data;
+    if (data && "email" in data) {
+      console.error(
+        `[oauth] ${handshake.provider} не передал почту — вход невозможен, покупателю предложена регистрация по почте`
+      );
+      return clear(fail("noemail", handshake.provider));
+    }
+    return clear(fail("failed", handshake.provider));
   }
 
   console.log(

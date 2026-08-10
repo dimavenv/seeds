@@ -11,9 +11,18 @@ import { useEffect, useState } from "react";
 // ключи приложения.
 type Provider = { name: string; title: string };
 
+// Фирменные цвета — по ним кнопку узнают раньше, чем прочитают подпись.
 const BRAND: Record<string, string> = {
-  // Фирменный красный Яндекса — по нему кнопку узнают без подписи.
   yandex: "bg-[#fc3f1d] hover:bg-[#e5381a] text-white",
+  vk: "bg-[#0077ff] hover:bg-[#0066dd] text-white",
+};
+
+// Значок сервиса. Логотипы рисуем буквой, а не картинкой: правила
+// использования фирменных знаков у обоих сервисов строгие, а буква в
+// фирменном цвете ничего не нарушает и не тянет лишний файл.
+const MARK: Record<string, string> = {
+  yandex: "Я",
+  vk: "VK",
 };
 
 export default function OAuthButtons({ action }: { action: "login" | "register" }) {
@@ -50,14 +59,13 @@ export default function OAuthButtons({ action }: { action: "login" | "register" 
           <a
             key={p.name}
             href={`/api/auth/oauth/start?provider=${encodeURIComponent(p.name)}`}
-            className={`btn w-full ${BRAND[p.name] ?? "btn-outline"}`}
+            className={`btn w-full transition-transform active:scale-[0.98] ${
+              BRAND[p.name] ?? "btn-outline"
+            }`}
           >
-            {p.name === "yandex" && (
-              <span
-                aria-hidden="true"
-                className="text-lg font-black leading-none"
-              >
-                Я
+            {MARK[p.name] && (
+              <span aria-hidden="true" className="text-base font-black leading-none">
+                {MARK[p.name]}
               </span>
             )}
             {action === "login" ? "Войти" : "Продолжить"} через {p.title}
@@ -66,7 +74,7 @@ export default function OAuthButtons({ action }: { action: "login" | "register" 
       </div>
 
       <p className="mt-3 text-center text-xs text-brand-400">
-        Пароль придумывать не нужно: почту и имя возьмём из {providers[0].title}.
+        Пароль придумывать не нужно: почту и имя возьмём из выбранного сервиса.
       </p>
     </div>
   );

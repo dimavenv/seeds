@@ -51,7 +51,12 @@ export function cookieHeader(
 // входа.
 const KNOWN: Record<string, { title: string }> = {
   yandex: { title: "Яндекс ID" },
+  vk: { title: "VK ID" },
 };
+
+export function providerTitle(name: string): string {
+  return KNOWN[name]?.title ?? "внешний сервис";
+}
 
 export type OAuthProvider = {
   name: string;
@@ -82,7 +87,9 @@ export async function listOAuthProviders(): Promise<OAuthProvider[]> {
         title: KNOWN[p.name].title,
         authURL: p.authURL,
         state: p.state,
-        codeVerifier: p.codeVerifier,
+        // У провайдеров без PKCE (ВКонтакте) верификатора нет — и это нормально:
+        // на обмен кода он тогда просто не влияет.
+        codeVerifier: p.codeVerifier ?? "",
       }));
   } catch {
     // PocketBase недоступен или OAuth не настроен — просто не предлагаем вход
@@ -108,12 +115,13 @@ export function unpackHandshake(raw: string | undefined): OAuthHandshake | null 
     // для чистого base64url это тождественное преобразование.
     const json = Buffer.from(decodeURIComponent(raw), "base64url").toString("utf8");
     const p = JSON.parse(json) as Partial<OAuthHandshake>;
-    if (
-      typeof p.state === "string" &&
-      typeof p.codeVerifier === "string" &&
-      typeof p.provider === "string"
-    ) {
-      return { state: p.state, codeVerifier: p.codeVerifier, provider: p.provider };
+    if (typeof p.state === "string" && typeof p.provider === "string") {
+      return {
+        state: p.state,
+        // Пустой верификатор — законный случай (провайдер без PKCE).
+        codeVerifier: typeof p.codeVerifier === "string" ? p.codeVerifier : "",
+        provider: p.provider,
+      };
     }
     return null;
   } catch {

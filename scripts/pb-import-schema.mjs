@@ -86,22 +86,31 @@ if (!importRes.ok) {
 }
 console.log(`Схема импортирована: ${schema.map((c) => c.name).join(", ")}`);
 
-// Возвращаем (или задаём) настройку входа через Яндекс ID.
+// Возвращаем (или задаём) настройку входа через Яндекс ID и VK ID.
 {
-  const id = (process.env.YANDEX_CLIENT_ID || "").trim();
-  const secret = (process.env.YANDEX_CLIENT_SECRET || "").trim();
-  let oauth2 = null;
+  // Имя провайдера в PocketBase → префикс переменных в .env.production.
+  const FROM_ENV = [
+    ["yandex", "YANDEX"],
+    ["vk", "VK"],
+  ];
 
-  if (id && secret) {
-    // Прочие провайдеры (если их настраивали в админке) сохраняем как есть.
-    const others = (savedOAuth2?.providers ?? []).filter((p) => p.name !== "yandex");
-    oauth2 = {
-      enabled: true,
-      providers: [...others, { name: "yandex", clientId: id, clientSecret: secret }],
-    };
-  } else if (savedOAuth2?.providers?.length) {
-    oauth2 = savedOAuth2; // ключей в .env нет — просто не теряем настроенное
+  // Провайдеры, настроенные в админке вручную, сохраняем как есть — их
+  // перезаписывают только заданные в .env ключи.
+  let providers = savedOAuth2?.providers ?? [];
+  let changed = false;
+  for (const [name, prefix] of FROM_ENV) {
+    const id = (process.env[`${prefix}_CLIENT_ID`] || "").trim();
+    const secret = (process.env[`${prefix}_CLIENT_SECRET`] || "").trim();
+    if (!id || !secret) continue;
+    providers = [
+      ...providers.filter((p) => p.name !== name),
+      { name, clientId: id, clientSecret: secret },
+    ];
+    changed = true;
   }
+
+  const oauth2 =
+    changed || providers.length ? { enabled: providers.length > 0, providers } : null;
 
   if (oauth2) {
     const res = await fetch(`${PB_URL}/api/collections/users`, {
@@ -122,9 +131,9 @@ console.log(`Схема импортирована: ${schema.map((c) => c.name).
         "Задайте провайдера вручную: админка PocketBase → Collections → users → Options → OAuth2."
       );
     }
-  } else if (!id && !secret) {
+  } else {
     console.log(
-      "Вход через Яндекс ID не настроен (нет YANDEX_CLIENT_ID/YANDEX_CLIENT_SECRET) — кнопки на сайте не будет."
+      "Вход через Яндекс ID / VK ID не настроен (нет YANDEX_CLIENT_ID+SECRET и VK_CLIENT_ID+SECRET) — кнопок на сайте не будет."
     );
   }
 }

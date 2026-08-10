@@ -23,6 +23,25 @@ describe("рукопожатие OAuth в cookie", () => {
     expect(unpackHandshake(encodeURIComponent(packed))).toEqual(handshake);
   });
 
+  it("переживает провайдера без PKCE (ВКонтакте)", () => {
+    // У ВК верификатора нет, и это не повод считать рукопожатие сломанным.
+    const packed = packHandshake({ ...handshake, provider: "vk", codeVerifier: "" });
+    expect(unpackHandshake(packed)).toEqual({
+      state: handshake.state,
+      codeVerifier: "",
+      provider: "vk",
+    });
+    // и если поля нет вовсе
+    const noVerifier = Buffer.from(
+      JSON.stringify({ state: "s", provider: "vk" })
+    ).toString("base64url");
+    expect(unpackHandshake(noVerifier)).toEqual({
+      state: "s",
+      codeVerifier: "",
+      provider: "vk",
+    });
+  });
+
   it("мусор не притворяется рукопожатием", () => {
     expect(unpackHandshake(undefined)).toBeNull();
     expect(unpackHandshake("")).toBeNull();

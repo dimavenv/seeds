@@ -10,6 +10,14 @@ import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
 
+// Названия сервисов для сообщений об ошибке входа. Дублируют KNOWN из
+// lib/oauth.ts, потому что тот модуль серверный ("server-only") — тащить его в
+// браузер ради двух строк незачем.
+const PROVIDER_TITLES: Record<string, string> = {
+  yandex: "Яндекс ID",
+  vk: "VK ID",
+};
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,15 +35,23 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     setRegistered(params.has("registered"));
     const oauth = params.get("oauth");
+    if (!oauth) return;
+    // Сервис называем по имени: «не получилось войти» без уточнения, куда
+    // именно, только путает.
+    const who = PROVIDER_TITLES[params.get("p") ?? ""] ?? "внешний сервис";
     if (oauth === "denied") {
-      setError("Вход через Яндекс ID отменён. Можно войти по паролю.");
-    } else if (oauth === "unavailable" || oauth === "misconfigured") {
-      // misconfigured — приложению Яндекса не выданы нужные доступы. Покупателю
-      // об этом знать нечего, точная причина уходит в pm2 logs seeds.
-      setError("Вход через Яндекс ID сейчас недоступен. Войдите по паролю.");
-    } else if (oauth) {
+      setError(`Вход через ${who} отменён. Можно войти по паролю.`);
+    } else if (oauth === "noemail") {
       setError(
-        "Не получилось войти через Яндекс ID — попробуйте ещё раз или войдите по паролю."
+        `${who} не передал вашу почту — без неё аккаунт не создать: на почту приходят чек и письма о заказе. Зарегистрируйтесь по почте или добавьте её в профиль сервиса.`
+      );
+    } else if (oauth === "unavailable" || oauth === "misconfigured") {
+      // misconfigured — приложению не выданы нужные доступы. Покупателю об
+      // этом знать нечего, точная причина уходит в pm2 logs seeds.
+      setError(`Вход через ${who} сейчас недоступен. Войдите по паролю.`);
+    } else {
+      setError(
+        `Не получилось войти через ${who} — попробуйте ещё раз или войдите по паролю.`
       );
     }
   }, []);
