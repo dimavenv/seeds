@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
-import { createPublicPb } from "@/lib/pb/server";
+import { pbAdmin } from "@/lib/pb/server";
 import { PB_COOKIE } from "@/lib/pb/shared";
 import { absoluteUrl } from "@/lib/seo";
 import {
@@ -15,12 +15,16 @@ import { loginByVerifiedEmail, sessionCookie } from "@/lib/external-login";
 
 export const dynamic = "force-dynamic";
 
-// Возврат с Яндекс ID. Меняем одноразовый код на сессию PocketBase и кладём её
-// в httpOnly-cookie — дальше сайт не отличает такой вход от входа по паролю.
+// Возврат с Яндекс ID или VK ID. Меняем одноразовый код на сессию и кладём её в
+// httpOnly-cookie — дальше сайт не отличает такой вход от входа по паролю.
 //
-// Аккаунт при первом входе PocketBase создаёт сам (почта и имя приходят от
-// провайдера). Пароля у такого аккаунта нет — если он понадобится, покупатель
-// задаст его через «Забыли пароль?»: код туда придёт на ту же почту.
+// Пути два и они разные: Яндексом занимается PocketBase (встроенный провайдер),
+// ВКонтакте — наш код (lib/vkid.ts), потому что его нынешний протокол
+// PocketBase не поддерживает.
+//
+// Аккаунт при первом входе заводится сам, почта и имя приходят от сервиса.
+// Пароля у такого аккаунта нет — если он понадобится, покупатель задаст его
+// через «Забыли пароль?»: код придёт на ту же почту.
 
 // provider — чтобы страница входа назвала сервис, а не «внешний сервис вообще».
 function fail(reason: string, provider?: string): NextResponse {
@@ -151,7 +155,25 @@ export async function GET(request: Request) {
     return clear(res);
   }
 
-  const pb = createPublicPb();
+  // Обмен кода выполняем клиентом СУПЕРПОЛЬЗОВАТЕЛЯ.
+  //
+  // Прямое создание аккаунтов в PocketBase у нас закрыто (createRule у users —
+  // null, регистрация идёт только через /api/register). А при первом входе
+  // через провайдера PocketBase как раз создаёт запись покупателя — и от имени
+  // гостя упирается в это правило: «Only superusers can perform this action».
+  // Под суперпользователем проверка проходит, а в ответе всё равно приходит
+  // сессия ПОКУПАТЕЛЯ — ею и заменяется стор этого клиента.
+  let pb: Awaited<ReturnType<typeof pbAdmin>>;
+  try {
+    pb = await pbAdmin();
+  } catch (e) {
+    console.error(
+      `[oauth] ${handshake.provider}: суперпользователь PocketBase недоступен (PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD):`,
+      e
+    );
+    return clear(fail("failed", handshake.provider));
+  }
+
   try {
     await pb
       .collection("users")
