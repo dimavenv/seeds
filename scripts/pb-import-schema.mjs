@@ -54,12 +54,21 @@ if (!authRes.ok) {
 }
 const { token } = await authRes.json();
 
-// ===== Вход через Яндекс ID: настройки OAuth2 нельзя терять при импорте =====
-// Ключи приложения живут в PocketBase (в pb_schema.json их, разумеется, нет), а
-// импорт перезаписывает коллекцию целиком — вместе с блоком oauth2. Поэтому:
-// читаем текущую настройку ДО импорта и возвращаем её ПОСЛЕ. Если в
-// .env.production заданы YANDEX_CLIENT_ID/YANDEX_CLIENT_SECRET, они выигрывают —
-// так провайдер настраивается одной командой, без админки.
+// ===== Вход через Яндекс ID: настройки OAuth2 восстанавливаем после импорта ==
+//
+// Импорт перезаписывает коллекцию users целиком — вместе с блоком oauth2, где
+// живут ключи приложения (в pb_schema.json их, разумеется, нет). Значит, после
+// импорта провайдера надо прописать заново.
+//
+// ЕДИНСТВЕННЫЙ источник ключей — .env.production. Прочитать их из PocketBase
+// нельзя: наружу он отдаёт clientSecret ПУСТЫМ (redactedProviders[i].
+// ClientSecret = "" в его коде). Раньше здесь была попытка «сохранить как
+// было» — она читала настройку до импорта и писала обратно, то есть подставляла
+// вместо секрета пустую строку и молча ломала вход через Яндекс.
+//
+// Поэтому: настроенное только в админке PocketBase импорт схемы сбросит, и
+// восстановить это отсюда невозможно — про такие провайдеры честно предупредим
+// и попросим положить ключи в .env.production.
 async function readUsersOAuth2() {
   try {
     const res = await fetch(`${PB_URL}/api/collections/users`, {
@@ -86,49 +95,40 @@ if (!importRes.ok) {
 }
 console.log(`Схема импортирована: ${schema.map((c) => c.name).join(", ")}`);
 
-// Возвращаем (или задаём) настройку входа через Яндекс ID и VK ID.
+// Прописываем вход через внешние сервисы заново — только из .env.production.
 {
   // Имя провайдера в PocketBase → префикс переменных в .env.production.
   // VK ID здесь НЕТ намеренно: встроенный провайдер `vk` ходит по старому
   // протоколу (oauth.vk.com), который нынешние приложения VK ID отвергают
   // ошибкой «Security Error». Вход через ВК сайт делает своим кодом
-  // (lib/vkid.ts), и ключи VK_CLIENT_ID/VK_CLIENT_SECRET читает сам — в
-  // PocketBase их прописывать не нужно.
+  // (lib/vkid.ts), и ключи VK_* читает сам — в PocketBase их прописывать не
+  // нужно.
   const FROM_ENV = [["yandex", "YANDEX"]];
 
-  // Провайдеры, настроенные в админке вручную, сохраняем как есть — их
-  // перезаписывают только заданные в .env ключи. Исключение — `vk`: если он
-  // остался от прошлых версий, убираем, чтобы в PocketBase не лежал ключ от
-  // нерабочего пути входа.
-  const hadVk = (savedOAuth2?.providers ?? []).some((p) => p.name === "vk");
-  let providers = (savedOAuth2?.providers ?? []).filter((p) => p.name !== "vk");
-  let changed = hadVk;
-  if (hadVk) {
-    console.log("Убран старый провайдер vk (вход через ВК идёт своим кодом сайта).");
-  }
+  const providers = [];
   for (const [name, prefix] of FROM_ENV) {
     const id = (process.env[`${prefix}_CLIENT_ID`] || "").trim();
     const secret = (process.env[`${prefix}_CLIENT_SECRET`] || "").trim();
-    if (!id || !secret) continue;
-    providers = [
-      ...providers.filter((p) => p.name !== name),
-      { name, clientId: id, clientSecret: secret },
-    ];
-    changed = true;
+    if (id && secret) providers.push({ name, clientId: id, clientSecret: secret });
   }
 
-  const oauth2 =
-    changed || providers.length ? { enabled: providers.length > 0, providers } : null;
+  // Что было настроено раньше, но ключей в .env нет. Восстановить нельзя —
+  // секрет наружу PocketBase не отдаёт, а записать пустой значит сломать вход.
+  const lost = (savedOAuth2?.providers ?? [])
+    .filter((p) => p.name !== "vk")
+    .filter((p) => !providers.some((c) => c.name === p.name))
+    .map((p) => p.name);
 
-  if (oauth2) {
+  if (providers.length > 0) {
     const res = await fetch(`${PB_URL}/api/collections/users`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: token },
-      body: JSON.stringify({ oauth2 }),
+      body: JSON.stringify({ oauth2: { enabled: true, providers } }),
     });
     if (res.ok) {
-      const names = oauth2.providers.map((p) => p.name).join(", ");
-      console.log(`Вход через внешние сервисы: ${names}`);
+      console.log(
+        `Вход через внешние сервисы прописан заново: ${providers.map((p) => p.name).join(", ")}`
+      );
     } else {
       console.error(
         "Не удалось сохранить настройки OAuth2:",
@@ -142,6 +142,16 @@ console.log(`Схема импортирована: ${schema.map((c) => c.name).
   } else {
     console.log(
       "Вход через Яндекс ID не настроен (нет YANDEX_CLIENT_ID/YANDEX_CLIENT_SECRET) — этой кнопки на сайте не будет."
+    );
+  }
+
+  if (lost.length > 0) {
+    console.error(
+      `\n⚠️  Импорт схемы сбросил настройки OAuth2 для: ${lost.join(", ")}.\n` +
+        "   Восстановить их отсюда нельзя: PocketBase не отдаёт clientSecret наружу.\n" +
+        "   Пропишите ключи в .env.production (например YANDEX_CLIENT_ID/\n" +
+        "   YANDEX_CLIENT_SECRET) и запустите npm run db:schema ещё раз — тогда\n" +
+        "   каждый импорт будет восстанавливать их сам.\n"
     );
   }
 }
