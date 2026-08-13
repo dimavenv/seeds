@@ -4,6 +4,7 @@ import { createServerPb } from "@/lib/pb/server";
 import { fetchOrdersWithItems } from "@/lib/orders";
 import { getProductsByIds } from "@/lib/data";
 import { formatPrice, formatDate } from "@/lib/format";
+import { normalizeSearch } from "@/lib/search";
 import type { Order, OrderStatus, PaymentStatus, Product } from "@/lib/types";
 import OrderStatusSelect from "@/components/admin/order-status-select";
 import DeleteButton from "@/components/admin/delete-button";
@@ -61,12 +62,13 @@ export default async function AdminOrders({
   let filtered = status ? orders.filter((o) => o.status === status) : orders;
   if (unpaidOnly) filtered = filtered.filter(isUnpaid);
   if (q) {
-    const needle = q.replace(/^#/, "").toLowerCase();
+    // Нормализация как в каталоге: регистр и ё/е искать не мешают.
+    const needle = normalizeSearch(q.replace(/^#/, ""));
     filtered = filtered.filter(
       (o) =>
         String(o.number).includes(needle) ||
-        o.customer_name.toLowerCase().includes(needle) ||
-        (o.tracking_number ?? "").toLowerCase().includes(needle)
+        normalizeSearch(o.customer_name).includes(needle) ||
+        normalizeSearch(o.tracking_number ?? "").includes(needle)
     );
   }
 

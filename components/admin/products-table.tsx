@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateProductInline, deleteProduct } from "@/app/admin/actions";
 import { formatPrice } from "@/lib/format";
+import { normalizeSearch } from "@/lib/search";
 import CategoryIcon from "@/components/category-icon";
 import type { Category, Product } from "@/lib/types";
 
@@ -121,14 +122,14 @@ export default function ProductsTable({
   const readyCount = products.filter((p) => p.stock <= 0).length;
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearch(query);
     return products.filter((p) => {
       const matchTab = tab === "on_sale" ? p.stock > 0 : p.stock <= 0;
       const matchCategory = !categoryId || p.category_id === categoryId;
       const matchQuery =
         !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.slug.toLowerCase().includes(q);
+        normalizeSearch(p.name).includes(q) ||
+        normalizeSearch(p.slug).includes(q);
       return matchTab && matchCategory && matchQuery;
     });
   }, [products, tab, categoryId, query]);

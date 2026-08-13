@@ -7,6 +7,7 @@ import {
   mapProduct,
 } from "@/lib/pb/shared";
 import { demoCategories, demoProducts } from "@/lib/demo-data";
+import { searchFilter } from "@/lib/search";
 import type { Category, Product } from "@/lib/types";
 
 // Демо-каталог показываем ТОЛЬКО когда база вообще не настроена, либо когда
@@ -95,36 +96,25 @@ function filterDemo(opts: ProductQuery): Product[] {
   let list = [...demoProducts];
   if (opts.categorySlug)
     list = list.filter((p) => p.category?.slug === opts.categorySlug);
-  if (opts.q) {
-    const q = opts.q.toLowerCase();
-    list = list.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q)
-    );
-  }
+  if (opts.q) list = searchFilter(list, opts.q);
   if (opts.featured) list = list.filter((p) => p.is_featured);
   if (opts.onlyNew) list = list.filter((p) => p.is_new);
   if (typeof opts.minPrice === "number")
     list = list.filter((p) => p.price >= opts.minPrice!);
   if (typeof opts.maxPrice === "number")
     list = list.filter((p) => p.price <= opts.maxPrice!);
+  // При поиске без явной сортировки порядок задаёт совпадение (searchFilter).
+  const keepRelevance = opts.q && !opts.sort;
   switch (opts.sort) {
     case "price_asc": list.sort((a, b) => a.price - b.price); break;
     case "price_desc": list.sort((a, b) => b.price - a.price); break;
     case "name": list.sort((a, b) => a.name.localeCompare(b.name, "ru")); break;
-    default: list.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+    default:
+      if (!keepRelevance) {
+        list.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+      }
   }
   return opts.limit ? list.slice(0, opts.limit) : list;
-}
-
-// SQLite LIKE регистронезависим только для латиницы, поэтому для кириллицы
-// ищем по нескольким вариантам регистра («томат», «Томат», как ввели).
-function searchVariants(q: string): string[] {
-  const t = q.trim();
-  const lower = t.toLowerCase();
-  const capital = lower.charAt(0).toUpperCase() + lower.slice(1);
-  return Array.from(new Set([t, lower, capital]));
 }
 
 const SORT_MAP: Record<NonNullable<ProductQuery["sort"]>, string> = {
@@ -158,15 +148,10 @@ export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
       params.categoryId = categoryId;
     }
 
-    if (opts.q) {
-      const variants = searchVariants(opts.q);
-      const or = variants
-        .map((_, i) => `name ~ {:q${i}}`)
-        .join(" || ");
-      parts.push(`(${or})`);
-      variants.forEach((v, i) => (params[`q${i}`] = v));
-    }
-
+    // Поисковый запрос в фильтр базы НЕ уходит: SQLite не умеет сравнивать
+    // кириллицу без учёта регистра (см. lib/search.ts). Остальные условия
+    // (категория, цена, флаги) базе достаются, а по словам запроса отбор идёт
+    // уже здесь — по названию и описанию, с упорядочиванием по совпадению.
     if (opts.featured) parts.push("is_featured = true");
     if (opts.onlyNew) parts.push("is_new = true");
     if (typeof opts.minPrice === "number") {
@@ -184,12 +169,24 @@ export async function getProducts(opts: ProductQuery = {}): Promise<Product[]> {
       expand: "category",
     };
 
-    if (opts.limit) {
+    // При поиске берём весь отобранный базой список и сокращаем его уже после
+    // сравнения слов: обрезать до limit раньше нельзя — в первые N записей по
+    // дате может не попасть ни одного подходящего товара.
+    if (opts.limit && !opts.q) {
       const page = await pb.collection("products").getList(1, opts.limit, query);
       return page.items.map(mapProduct);
     }
-    const list = await pb.collection("products").getFullList(query);
-    return list.map(mapProduct);
+
+    const list = (await pb.collection("products").getFullList(query)).map(mapProduct);
+    if (!opts.q) return list;
+
+    // Без явной сортировки первым идёт то, что ближе к запросу; выбранную
+    // покупателем сортировку (цена, название) не трогаем — её задал он сам.
+    const found = searchFilter(list, opts.q);
+    const ordered = opts.sort
+      ? list.filter((p) => found.includes(p))
+      : found;
+    return opts.limit ? ordered.slice(0, opts.limit) : ordered;
   } catch (e) {
     const dsu = dynamicServerUsageError(e);
     if (dsu) throw dsu; // сигнал Next выйти из статики, не сбой БД

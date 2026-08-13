@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerPb } from "@/lib/pb/server";
 import { fetchAccounts, accountHaystack, type Account } from "@/lib/accounts";
+import { normalizeSearch } from "@/lib/search";
 import { formatPrice, formatDate } from "@/lib/format";
 import { formatPhone } from "@/lib/profile";
 
@@ -23,8 +24,11 @@ export default async function AdminAccounts({
   if (filter === "blocked") shown = shown.filter((a) => a.blocked);
   if (filter === "buyers") shown = shown.filter((a) => a.ordersCount > 0);
   if (q) {
-    const needle = q.toLowerCase();
-    shown = shown.filter((a) => accountHaystack(a).includes(needle));
+    // Цифры телефона ищем как есть, остальное — по общим правилам каталога.
+    const needle = /\d/.test(q) && !/[a-zа-я]/i.test(q)
+      ? q.replace(/\D/g, "")
+      : normalizeSearch(q);
+    if (needle) shown = shown.filter((a) => accountHaystack(a).includes(needle));
   }
 
   const blockedCount = accounts.filter((a) => a.blocked).length;

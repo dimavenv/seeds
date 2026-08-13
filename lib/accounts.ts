@@ -1,6 +1,7 @@
 import "server-only";
 import type PocketBase from "pocketbase";
 import { profileFromRecord, type Profile } from "@/lib/profile";
+import { normalizeSearch } from "@/lib/search";
 
 // Чтение аккаунтов покупателей для админки.
 //
@@ -96,15 +97,24 @@ async function attachOrderStats(
 }
 
 // Строка для поиска: почта, ФИО и телефон одним куском.
+//
+// Телефон кладём дважды — как хранится (+79991234567) и одними цифрами: искать
+// продавец будет как придётся, «+7 999», «8 999» или просто «9991234».
+// Нормализация та же, что в каталоге: регистр и ё/е значения не имеют.
 export function accountHaystack(a: Account): string {
-  return [
-    a.email,
-    a.profile.last_name,
-    a.profile.first_name,
-    a.profile.middle_name,
-    a.profile.phone,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  const digits = a.profile.phone.replace(/\D/g, "");
+  return normalizeSearch(
+    [
+      a.email,
+      a.profile.last_name,
+      a.profile.first_name,
+      a.profile.middle_name,
+      a.profile.phone,
+      digits,
+      // 8-9991234567 — привычная запись того же номера
+      digits.startsWith("7") ? `8${digits.slice(1)}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
 }
