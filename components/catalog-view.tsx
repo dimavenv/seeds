@@ -1,4 +1,5 @@
 import CategoryNav from "@/components/category-nav";
+import CategoryRail, { CATEGORY_ANCHOR_ID } from "@/components/category-rail";
 import CatalogSort from "@/components/catalog-sort";
 import ProductGrid from "@/components/product-grid";
 import JsonLd from "@/components/json-ld";
@@ -88,7 +89,12 @@ export default async function CatalogView({
   return (
     <div className="container-page py-6">
       {category && <JsonLd data={breadcrumbsJsonLd(category)} />}
-      <CategoryNav categories={categories} activeSlug={category?.slug} />
+      <div id={CATEGORY_ANCHOR_ID}>
+        <CategoryNav categories={categories} activeSlug={category?.slug} />
+      </div>
+      {/* Та же навигация узкой колонкой слева — появляется, когда лента выше
+          уехала за край экрана. Только на широких экранах, см. компонент. */}
+      <CategoryRail categories={categories} activeSlug={category?.slug} />
       {/* Единственный h1 страницы: название категории — под него она и
           ранжируется по запросам вида «семена томатов купить». */}
       <h1 className="mb-1 text-2xl font-bold text-brand-800">{title}</h1>
