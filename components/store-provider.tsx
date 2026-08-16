@@ -15,6 +15,7 @@ import {
   SYNC_KEY,
   clearRemovedPending,
   consumePendingMerge,
+  dropMissingProducts,
   nextRemovedPending,
   readRemovedPending,
   resolveCartOnLoad,
@@ -123,6 +124,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [promo, setPromo] = useState<PromoRule | null>(null);
   const [ready, setReady] = useState(false);
+  // Синхронизация с сервером завершилась (или выяснилось, что синхронизировать
+  // не с чем). До этого момента трогать корзину нельзя: запись «на опережение»
+  // выглядела бы для резолвера как свежее локальное действие (localIsNewer) и
+  // отменила бы слияние с серверной корзиной.
+  const [synced, setSynced] = useState(false);
 
   // Рефы для записи из обработчиков действий (без устаревших замыканий).
   const userIdRef = useRef<string | null>(null);
@@ -246,7 +252,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!CONFIGURED || !ready || syncStartedRef.current) return;
     syncStartedRef.current = true;
     let active = true;
-    (async () => {
+    const sync = async () => {
       const data = await loadUserStore().catch(() => null);
       if (!active) return;
       if (!data || !data.signedIn || !data.userId) {
@@ -311,11 +317,69 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         } catch {}
         persist(resolved.cart, resolved.wishlist);
       }
-    })();
+    };
+    sync().finally(() => {
+      if (active) setSynced(true);
+    });
     return () => {
       active = false;
     };
   }, [ready, persist, flush, setCartSync, setWishSync]);
+
+  // 2б) Товары, удалённые из каталога, убираем из корзины и избранного.
+  //     Серверную копию (user_store) чистит сама админка при удалении товара —
+  //     см. lib/user-store-cleanup.ts, — но у покупателя есть ещё копия в
+  //     localStorage, до которой сервер не дотянется. Поэтому сверяемся с
+  //     каталогом здесь: один запрос за загрузку страницы (повторяется, только
+  //     если состав корзины изменился).
+  //
+  //     Ответ «не удалось проверить» (503, сеть, битый JSON) НЕ считается
+  //     ответом «товаров нет»: корзину в этом случае не трогаем вовсе, а метку
+  //     сбрасываем, чтобы проверка повторилась.
+  const checkedRef = useRef("");
+  useEffect(() => {
+    if (!CONFIGURED || !ready || !synced) return;
+    const ids = Array.from(new Set([...cart.map((i) => i.id), ...wishlist]));
+    if (ids.length === 0) {
+      checkedRef.current = "";
+      return;
+    }
+    const signature = [...ids].sort().join(",");
+    if (checkedRef.current === signature) return;
+    checkedRef.current = signature;
+
+    let active = true;
+    (async () => {
+      const res = await fetch(
+        `/api/products?exists=${encodeURIComponent(ids.join(","))}`
+      ).catch(() => null);
+      const data = res?.ok ? await res.json().catch(() => null) : null;
+      if (!active) return;
+      if (!Array.isArray(data?.ids)) {
+        checkedRef.current = "";
+        return;
+      }
+      // Считаем от РЕФОВ, а не от cart/wishlist из замыкания: пока шёл запрос,
+      // покупатель мог что-то добавить. Правило (и защита от того, чтобы
+      // добавленное за это время не сочли удалённым) — в lib/cart-sync.
+      const next = dropMissingProducts({
+        cart: cartRef.current,
+        wishlist: wishRef.current,
+        checkedIds: ids,
+        existingIds: data.ids as string[],
+      });
+      if (!next.changed) return;
+      writeRemovedPending(
+        nextRemovedPending(readRemovedPending(), cartRef.current, next.cart)
+      );
+      setCartSync(next.cart);
+      setWishSync(next.wishlist);
+      persist(next.cart, next.wishlist);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [ready, synced, cart, wishlist, persist, setCartSync, setWishSync]);
 
   // 3) Локальное сохранение (всегда — и для гостя, и как кэш).
   useEffect(() => {

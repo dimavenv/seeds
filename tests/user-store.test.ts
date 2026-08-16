@@ -4,6 +4,7 @@ import {
   normalizeWishlist,
   MAX_WISHLIST,
 } from "@/lib/user-store";
+import { purgeFromSnapshot } from "@/lib/user-store-cleanup";
 import { mergeCarts, sanitizeCartItems } from "@/lib/cart-merge";
 import { MAX_ITEMS_PER_ORDER, MAX_QTY_PER_ITEM } from "@/lib/checkout";
 import type { CartItem } from "@/lib/types";
@@ -190,5 +191,43 @@ describe("выбор источника истины при загрузке", (
 
   it("метка есть, но записи user_store нет — НЕ затираем локальную корзину", () => {
     expect(trustServer({ syncedUser: ID_A, userId: ID_A, exists: false })).toBe(false);
+  });
+});
+
+// ===== Зачистка удалённого товара из чужих корзин ============================
+
+describe("purgeFromSnapshot", () => {
+  const GONE = "goneitem0000001";
+
+  it("убирает товар и из корзины, и из избранного", () => {
+    const r = purgeFromSnapshot(
+      [
+        { id: ID_A, qty: 2, price: 100, name: "Живой" },
+        { id: GONE, qty: 1, price: 50, name: "Удалённый" },
+      ],
+      [ID_A, GONE],
+      [GONE]
+    );
+    expect(r.changed).toBe(true);
+    expect(r.cart.map((i) => i.id)).toEqual([ID_A]);
+    expect(r.wishlist).toEqual([ID_A]);
+  });
+
+  it("ничего не трогает, если удалённого товара у покупателя не было", () => {
+    const r = purgeFromSnapshot(
+      [{ id: ID_A, qty: 1, price: 100, name: "Живой" }],
+      [ID_A],
+      [GONE]
+    );
+    expect(r.changed).toBe(false);
+    expect(r.cart).toHaveLength(1);
+    expect(r.wishlist).toEqual([ID_A]);
+  });
+
+  it("переживает пустую и битую запись user_store", () => {
+    const r = purgeFromSnapshot(null, "не массив", [GONE]);
+    expect(r.changed).toBe(false);
+    expect(r.cart).toEqual([]);
+    expect(r.wishlist).toEqual([]);
   });
 });

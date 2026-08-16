@@ -9,6 +9,7 @@ import { mailOrderStatus, mailPayment, mailTracking } from "@/lib/order-mail";
 import { slugify } from "@/lib/slug";
 import { releasePromoUseByOrder } from "@/lib/promo-server";
 import { parseVariantMap, type ImageVariantMap } from "@/lib/image-variants";
+import { purgeProductsFromStores } from "@/lib/user-store-cleanup";
 import type { OrderStatus, ReviewStatus } from "@/lib/types";
 
 // Данные заказа для письма покупателю (почта хранится зашифрованной).
@@ -169,6 +170,9 @@ export async function deleteProduct(id: string): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
   await pb.collection("products").delete(id).catch(() => {});
+  // Товара больше нет в каталоге — убираем его и из корзин с избранным, иначе
+  // он висел бы там как живой, пока покупатель не уберёт сам.
+  await purgeProductsFromStores([id]);
   revalidateTag("products"); // товар исчез из карты сайта
   revalidatePath("/admin/products");
   revalidatePath("/catalog");

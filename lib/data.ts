@@ -285,6 +285,42 @@ export async function getProductsByIds(ids: string[]): Promise<Product[]> {
   }
 }
 
+// Какие из переданных id ещё есть в каталоге.
+//
+// Отдельная функция, а не «getProductsByIds и посмотреть, что вернулось»:
+// разница между «товар удалили» и «база не ответила» здесь принципиальна —
+// на этот ответ клиент чистит корзину и избранное (см. store-provider), и
+// принять сбой базы за «товаров нет» значит стереть покупателю корзину.
+// Поэтому null — «проверить не удалось», и трогать ничего нельзя.
+export async function existingProductIds(
+  ids: string[]
+): Promise<string[] | null> {
+  const valid = Array.from(new Set(ids.filter(isValidRecordId))).slice(0, 300);
+  if (valid.length === 0) return [];
+  if (!isDbConfigured())
+    return demoProducts.filter((p) => valid.includes(p.id)).map((p) => p.id);
+  const pb = createPublicPb();
+  try {
+    const params: Record<string, unknown> = {};
+    const or = valid.map((id, i) => {
+      params[`id${i}`] = id;
+      return `id = {:id${i}}`;
+    });
+    const list = await pb.collection("products").getFullList({
+      filter: pb.filter(or.join(" || "), params),
+      fields: "id",
+    });
+    return list.map((r) => String(r.id));
+  } catch (e) {
+    const dsu = dynamicServerUsageError(e);
+    if (dsu) throw dsu;
+    onDbError("existingProductIds", e);
+    return demoAllowed()
+      ? demoProducts.filter((p) => valid.includes(p.id)).map((p) => p.id)
+      : null;
+  }
+}
+
 export async function getCategoryBySlug(
   slug: string
 ): Promise<Category | null> {

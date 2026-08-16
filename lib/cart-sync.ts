@@ -186,6 +186,40 @@ export function tombstonesToBurn(
   return tombstones.filter((id) => !confirmed.has(id) && !latest.has(id));
 }
 
+// ===== Товары, удалённые из каталога =========================================
+// Корзина и избранное хранят СНИМОК товара (id, название, цена, картинка), а не
+// ссылку на каталог: иначе корзина не открылась бы без запроса за каждым
+// товаром. Плата за это — товар, удалённый из каталога, продолжал лежать в
+// корзине как живой. Сервер вычищает его из user_store при удалении
+// (lib/user-store-cleanup.ts), но копия в localStorage до сервера не дотянется,
+// поэтому браузер сверяется с каталогом сам.
+//
+// checkedIds — id, о которых МЫ СПРАШИВАЛИ. Это важно: пока шёл запрос,
+// покупатель мог положить в корзину новый товар, и его отсутствие в ответе
+// означает «мы про него не спрашивали», а не «его удалили».
+export function dropMissingProducts(input: {
+  cart: CartItem[];
+  wishlist: string[];
+  checkedIds: string[];
+  existingIds: string[];
+}): { cart: CartItem[]; wishlist: string[]; missing: string[]; changed: boolean } {
+  const { cart, wishlist, checkedIds, existingIds } = input;
+  const alive = new Set(existingIds);
+  const missing = new Set(checkedIds.filter((id) => !alive.has(id)));
+  if (missing.size === 0) {
+    return { cart, wishlist, missing: [], changed: false };
+  }
+  const nextCart = cart.filter((i) => !missing.has(i.id));
+  const nextWishlist = wishlist.filter((id) => !missing.has(id));
+  return {
+    cart: nextCart,
+    wishlist: nextWishlist,
+    missing: Array.from(missing),
+    changed:
+      nextCart.length !== cart.length || nextWishlist.length !== wishlist.length,
+  };
+}
+
 // Убрать из корзины позиции с надгробиями.
 export function subtractRemoved(
   cart: CartItem[],

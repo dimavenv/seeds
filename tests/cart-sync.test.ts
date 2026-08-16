@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   capQty,
+  dropMissingProducts,
   mergeCartsWithStock,
   nextRemovedPending,
   resolveCartOnLoad,
@@ -361,5 +362,66 @@ describe("mergeCartsWithStock / capQty", () => {
     expect(capQty(2.9, null)).toBe(2);
     expect(capQty(5, 3)).toBe(3);
     expect(capQty(5, undefined)).toBe(5);
+  });
+});
+
+// ===== Товары, удалённые из каталога ========================================
+
+describe("dropMissingProducts", () => {
+  const ALIVE = "aliveitem000001";
+  const GONE = "goneitem0000001";
+  const FRESH = "freshitem000001";
+
+  it("убирает удалённый товар из корзины и избранного", () => {
+    const r = dropMissingProducts({
+      cart: [ci(ALIVE), ci(GONE)],
+      wishlist: [ALIVE, GONE],
+      checkedIds: [ALIVE, GONE],
+      existingIds: [ALIVE],
+    });
+    expect(r.changed).toBe(true);
+    expect(ids(r.cart)).toEqual([ALIVE]);
+    expect(r.wishlist).toEqual([ALIVE]);
+    expect(r.missing).toEqual([GONE]);
+  });
+
+  it("товар, добавленный ПОКА шла проверка, не считается удалённым", () => {
+    // Про FRESH мы не спрашивали — его нет в ответе просто потому, что его не
+    // было в вопросе. Раньше такой товар вылетал бы из корзины сразу после
+    // добавления.
+    const r = dropMissingProducts({
+      cart: [ci(ALIVE), ci(FRESH)],
+      wishlist: [FRESH],
+      checkedIds: [ALIVE],
+      existingIds: [ALIVE],
+    });
+    expect(r.changed).toBe(false);
+    expect(ids(r.cart)).toEqual([ALIVE, FRESH].sort());
+    expect(r.wishlist).toEqual([FRESH]);
+  });
+
+  it("когда всё на месте, объекты не пересоздаются", () => {
+    const cart = [ci(ALIVE)];
+    const wishlist = [ALIVE];
+    const r = dropMissingProducts({
+      cart,
+      wishlist,
+      checkedIds: [ALIVE],
+      existingIds: [ALIVE],
+    });
+    expect(r.changed).toBe(false);
+    expect(r.cart).toBe(cart);
+    expect(r.wishlist).toBe(wishlist);
+  });
+
+  it("товар может быть только в избранном", () => {
+    const r = dropMissingProducts({
+      cart: [],
+      wishlist: [ALIVE, GONE],
+      checkedIds: [ALIVE, GONE],
+      existingIds: [ALIVE],
+    });
+    expect(r.changed).toBe(true);
+    expect(r.wishlist).toEqual([ALIVE]);
   });
 });
