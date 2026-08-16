@@ -140,7 +140,7 @@ export default function ProductForm({
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-brand-700">Семян в пакетике</span>
-          <input name="seeds_per_pack" type="number" min={0} defaultValue={product?.seeds_per_pack ?? ""} placeholder="напр. 10" className="input" />
+          <input name="seeds_per_pack" type="number" min={0} defaultValue={product?.seeds_per_pack ?? ""} className="input" />
         </label>
       </div>
 

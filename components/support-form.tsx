@@ -87,26 +87,26 @@ export default function SupportForm() {
           <span className="mb-1 block text-sm font-semibold text-brand-700">
             Имя *
           </span>
-          <input required value={form.name} onChange={update("name")} className="input" placeholder="Как к вам обращаться" />
+          <input required value={form.name} onChange={update("name")} className="input" />
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-brand-700">
             Email для ответа *
           </span>
-          <input required type="email" value={form.email} onChange={update("email")} className="input" placeholder="you@example.com" />
+          <input required type="email" value={form.email} onChange={update("email")} className="input" />
         </label>
       </div>
       <label className="block">
         <span className="mb-1 block text-sm font-semibold text-brand-700">
           Тема *
         </span>
-        <input required value={form.subject} onChange={update("subject")} className="input" placeholder="Кратко о чём вопрос" />
+        <input required value={form.subject} onChange={update("subject")} className="input" />
       </label>
       <label className="block">
         <span className="mb-1 block text-sm font-semibold text-brand-700">
           Вопрос *
         </span>
-        <textarea required value={form.message} onChange={update("message")} className="input min-h-32" placeholder="Опишите ваш вопрос подробнее" />
+        <textarea required value={form.message} onChange={update("message")} className="input min-h-32" />
       </label>
       <ConsentCheckbox checked={consent} onChange={setConsent} />
       <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />

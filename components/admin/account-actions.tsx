@@ -86,7 +86,6 @@ export default function AccountActions({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 maxLength={300}
-                placeholder="Например: подозрение на мошенничество с промокодами"
                 className="input min-h-20"
               />
             </label>

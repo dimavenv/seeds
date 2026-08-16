@@ -50,7 +50,6 @@ export default function PhoneInput({
           const next = localPhoneDigits(e.target.value);
           onChange(next ? `+7${next}` : "");
         }}
-        placeholder="999 123-45-67"
         aria-label="Телефон, код страны +7"
         className="w-full min-w-0 rounded-r-xl bg-transparent px-3 py-2.5 text-sm text-brand-900 placeholder:text-brand-400 focus:outline-none"
       />

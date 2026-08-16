@@ -124,13 +124,11 @@ export default function LeaveReview({
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Ваше имя"
         className="input mt-3"
       />
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Расскажите о сортах, всхожести, упаковке и доставке…"
         className="input mt-3 min-h-28"
       />
 

@@ -239,7 +239,7 @@ export default function RegisterPage() {
           </label>
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">Email</span>
-            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" placeholder="you@yandex.ru" />
+            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" />
           </label>
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-brand-700">

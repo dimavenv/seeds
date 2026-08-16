@@ -122,7 +122,7 @@ export default function SearchBox({
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => items.length > 0 && setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder="Поиск: томат, перец, баклажан…"
+          placeholder="Поиск"
           className="input pr-14 text-base md:py-3"
           aria-label="Поиск"
           autoComplete="off"

@@ -63,7 +63,6 @@ export default function AccountProfileForm({
               onChange={(e) => set("last_name", e.target.value)}
               className="input"
               autoComplete="family-name"
-              placeholder="Иванов"
             />
           </Field>
           <Field label="Имя">
@@ -72,7 +71,6 @@ export default function AccountProfileForm({
               onChange={(e) => set("first_name", e.target.value)}
               className="input"
               autoComplete="given-name"
-              placeholder="Иван"
             />
           </Field>
           <Field label="Отчество">
@@ -81,7 +79,6 @@ export default function AccountProfileForm({
               onChange={(e) => set("middle_name", e.target.value)}
               className="input"
               autoComplete="additional-name"
-              placeholder="Иванович"
             />
           </Field>
         </div>

@@ -129,14 +129,12 @@ export default function DadataAddress({
         onPick={(s) => applySuggestion("city", s)}
         value={value.city}
         onChange={(v) => set("city", v)}
-        placeholder="Москва"
         className="sm:col-span-2"
       />
       <PlainField
         label="Регион"
         value={value.region}
         onChange={(v) => set("region", v)}
-        placeholder="Московская обл."
         className="sm:col-span-2"
       />
       <AddressSuggestInput
@@ -148,7 +146,6 @@ export default function DadataAddress({
         onPick={(s) => applySuggestion("street", s)}
         value={value.street}
         onChange={(v) => set("street", v)}
-        placeholder="ул. Ленина"
         className="sm:col-span-2"
       />
       <AddressSuggestInput
@@ -160,14 +157,12 @@ export default function DadataAddress({
         onPick={(s) => applySuggestion("house", s)}
         value={value.house}
         onChange={(v) => set("house", v)}
-        placeholder="12"
         className="sm:col-span-1"
       />
       <PlainField
         label="Квартира"
         value={value.flat}
         onChange={(v) => set("flat", v)}
-        placeholder="34"
         className="sm:col-span-1"
       />
       {/* Индекс — последним; определяется автоматически, можно поправить */}

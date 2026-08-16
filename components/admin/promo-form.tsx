@@ -68,7 +68,6 @@ export default function PromoForm({
             name="code"
             required
             defaultValue={promo?.code}
-            placeholder="ВЕСНА25"
             autoCapitalize="characters"
             className="input uppercase"
           />
@@ -100,7 +99,6 @@ export default function PromoForm({
                 max={90}
                 required
                 defaultValue={promo?.percent || ""}
-                placeholder="10"
                 className="input"
               />
             ) : (
@@ -111,7 +109,6 @@ export default function PromoForm({
                 min={1}
                 required
                 defaultValue={promo?.amount || ""}
-                placeholder="300"
                 className="input"
               />
             )}
@@ -235,7 +232,6 @@ export default function PromoForm({
           name="note"
           maxLength={200}
           defaultValue={promo?.note}
-          placeholder="Например: рассылка ко Дню садовода"
           className="input"
         />
       </label>

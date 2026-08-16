@@ -436,19 +436,19 @@ export default function CheckoutPage() {
                 <span className="mb-1 block text-sm font-semibold text-brand-700">
                   Фамилия *
                 </span>
-                <input required value={form.last_name} onChange={update("last_name")} className="input" placeholder="Иванов" />
+                <input required value={form.last_name} onChange={update("last_name")} className="input" />
               </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-brand-700">
                   Имя *
                 </span>
-                <input required value={form.first_name} onChange={update("first_name")} className="input" placeholder="Иван" />
+                <input required value={form.first_name} onChange={update("first_name")} className="input" />
               </label>
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-brand-700">
                   Отчество
                 </span>
-                <input value={form.middle_name} onChange={update("middle_name")} className="input" placeholder="Иванович" />
+                <input value={form.middle_name} onChange={update("middle_name")} className="input" />
               </label>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -479,7 +479,6 @@ export default function CheckoutPage() {
                   value={form.email}
                   onChange={update("email")}
                   className="input"
-                  placeholder="для чека и писем о заказе"
                 />
               </label>
             </div>

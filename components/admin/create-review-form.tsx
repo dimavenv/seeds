@@ -64,7 +64,6 @@ export default function CreateReviewForm() {
             required
             value={form.author_name}
             onChange={(e) => setForm((f) => ({ ...f, author_name: e.target.value }))}
-            placeholder="Иван Петров"
           />
         </div>
         <div>
@@ -117,7 +116,6 @@ export default function CreateReviewForm() {
           required
           value={form.text}
           onChange={(e) => setForm((f) => ({ ...f, text: e.target.value }))}
-          placeholder="Текст отзыва покупателя..."
         />
       </div>
 

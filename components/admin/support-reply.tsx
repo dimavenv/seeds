@@ -71,7 +71,6 @@ export default function SupportReply({
             rows={4}
             maxLength={5000}
             autoFocus
-            placeholder="Здравствуйте! …"
             className="input !rounded-lg"
             disabled={pending}
           />

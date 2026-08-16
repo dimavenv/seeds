@@ -255,7 +255,6 @@ export default function PasswordResetPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="input"
-              placeholder="you@yandex.ru"
               autoComplete="email"
             />
           </label>

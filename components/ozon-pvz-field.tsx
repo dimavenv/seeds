@@ -34,7 +34,6 @@ export default function OzonPvzField({
           onChange(s.value);
           onRegionKladr?.(s.data?.region_kladr_id ?? null);
         }}
-        placeholder="Например: г Краснодар, ул Красная, д 176"
       />
       <p className="text-xs text-brand-500">
         Напишите удобный пункт выдачи Ozon. Найти адрес и посмотреть все точки
