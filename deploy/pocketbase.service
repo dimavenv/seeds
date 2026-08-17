@@ -13,18 +13,41 @@ Type=simple
 User=pocketbase
 Group=pocketbase
 WorkingDirectory=/opt/pocketbase
-# ДО домена: слушаем на всех интерфейсах (0.0.0.0), чтобы браузер покупателя
-# доставал базу напрямую по http://IP:8090 (фото, вход, корзина). Порт 8090
-# должен быть открыт в ufw.
-# ПОСЛЕ настройки домена и nginx (SETUP-DB-RU.md, шаг 10): верните на
-# 127.0.0.1:8090 (наружу отдаёт nginx по https://api.tomatsemena.ru) и
-# закройте порт 8090 — база не должна торчать в интернет по голому http.
-ExecStart=/opt/pocketbase/pocketbase serve --http=0.0.0.0:8090 --dir /opt/pocketbase/pb_data
+# База слушает ТОЛЬКО петлевой интерфейс: наружу её отдаёт nginx по HTTPS
+# (location /pb/ в deploy/nginx.conf), а админка /_/ закрыта там же. Порт 8090
+# в ufw открывать не нужно — из интернета он недоступен.
+#
+# Если домен и nginx ещё не настроены и браузер должен ходить в базу напрямую
+# по http://IP:8090, временно поставьте --http=0.0.0.0:8090 и откройте порт в
+# ufw. Это черновой режим: база торчит в интернет по голому http, пароли и
+# токены летят открытым текстом — возвращайте 127.0.0.1 сразу после настройки
+# nginx (SETUP-DB-RU.md, шаг 10).
+ExecStart=/opt/pocketbase/pocketbase serve --http=127.0.0.1:8090 --dir /opt/pocketbase/pb_data
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=4096
 StandardOutput=journal
 StandardError=journal
+
+# Песочница: RCE в базе не должно хватать на захват машины.
+# ProtectSystem=strict делает ВЕСЬ диск только для чтения, поэтому единственный
+# writable путь открываем явно — папку данных (SQLite, WAL, фото товаров).
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/opt/pocketbase/pb_data
+# Побочный эффект: сам каталог /opt/pocketbase только для чтения, поэтому
+# обновление бинарника (`pocketbase update`) под юнитом не пройдёт — обновляйте
+# при остановленной службе. Бэкапы (deploy/pb-backup.sh) это не задевает: их
+# делает отдельная задача по расписанию, а не сама служба.
 
 [Install]
 WantedBy=multi-user.target

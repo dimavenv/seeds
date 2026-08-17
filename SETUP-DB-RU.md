@@ -109,17 +109,21 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-И откройте порт 8090 для браузеров (временно, до домена):
-
-```bash
-sudo ufw allow 8090/tcp
-```
-
-> ℹ️ Служебный файл из шага 2 уже настроен слушать на `0.0.0.0:8090`, чтобы
-> браузер покупателя доставал базу по `http://IP:8090`. Это временно, до домена;
-> на шаге 10 база уедет за nginx на `https://api.tomatsemena.ru`, а порт 8090
-> закроется. Не тяните с доменом — держать базу в интернете по голому http долго
-> не стоит; пароль суперпользователя сделайте посложнее.
+> ℹ️ Служебный файл из шага 2 слушает только `127.0.0.1:8090`: наружу базу
+> отдаёт nginx по HTTPS (шаг 10). Открывать порт 8090 в интернет не нужно.
+>
+> Если домен ещё не подключён и вы хотите посмотреть сайт по `http://IP:3000`,
+> браузеру нужен прямой доступ к базе — тогда **временно**:
+>
+> ```bash
+> sudo sed -i 's|--http=127.0.0.1:8090|--http=0.0.0.0:8090|' /etc/systemd/system/pocketbase.service
+> sudo systemctl daemon-reload && sudo systemctl restart pocketbase
+> sudo ufw allow 8090/tcp
+> ```
+>
+> Это черновой режим: база торчит в интернет по голому http, пароли и токены
+> летят открытым текстом. Верните всё обратно на шаге 10 и не тяните с доменом;
+> пароль суперпользователя в любом случае сделайте посложнее.
 
 > ⚠️ `DATA_ENCRYPTION_KEY` должен остаться ТЕМ ЖЕ, что был: телефоны и адреса
 > в заказах переносятся в зашифрованном виде, и расшифровывает их этот ключ.
@@ -348,12 +352,15 @@ sudo systemctl start pocketbase && curl -s http://127.0.0.1:8090/api/health
    sudo cp deploy/nginx.conf /etc/nginx/sites-available/tomatsemena
    sudo nginx -t && sudo systemctl reload nginx
    ```
-5. Верните PocketBase на localhost и закройте прямой порт (теперь база за nginx):
+5. Если вы временно переключали базу на `0.0.0.0` (шаг 4), верните её на
+   localhost и закройте прямой порт — теперь база за nginx:
    ```bash
-   sudo sed -i 's|--http=0.0.0.0:8090|--http=127.0.0.1:8090|' /etc/systemd/system/pocketbase.service
+   sudo cp deploy/pocketbase.service /etc/systemd/system/pocketbase.service
    sudo systemctl daemon-reload && sudo systemctl restart pocketbase
    sudo ufw delete allow 8090/tcp
    ```
+   Проверьте снаружи, что порт действительно закрыт:
+   `nmap -Pn -p 8090 tomatsemena.ru` → `filtered`/`closed`.
 6. Пересоберите сайт: `bash deploy/update.sh`.
 7. Проверка: `https://tomatsemena.ru` (замок, фото, вход) и
    `curl -s https://tomatsemena.ru/pb/api/health` → `API is healthy`.

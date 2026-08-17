@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { getSession } from "@/lib/auth";
 import { pbAdmin } from "@/lib/pb/server";
 import { fileUrl } from "@/lib/pb/shared";
+import { probeImage, safeBaseName } from "@/lib/media";
 import {
   VARIANT_WIDTHS,
   variantField,
@@ -14,12 +15,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_BYTES = 10 * 1024 * 1024; // как maxSize поля file в коллекции media
-const ALLOWED = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-]);
 
 // Загрузка фото товара из админки.
 //
@@ -51,23 +46,33 @@ export async function POST(request: Request) {
       { error: "Файл больше 10 МБ" },
       { status: 413 }
     );
-  if (!ALLOWED.has(file.type))
+
+  const original = await file.arrayBuffer();
+
+  // Что это за файл, решаем по СОДЕРЖИМОМУ, а не по заявленному Content-Type
+  // (см. lib/media.ts).
+  const probe = await probeImage(original);
+  if (!probe) {
     return NextResponse.json(
       { error: "Поддерживаются JPEG, PNG, WebP и AVIF" },
       { status: 415 }
     );
+  }
 
-  const original = await file.arrayBuffer();
-
-  // Варианты делаем до записи в базу: если sharp не справился (битый файл,
-  // экзотический формат), запись всё равно создастся — с одним оригиналом.
-  const variants = await buildVariants(original);
+  // Варианты делаем до записи в базу: если sharp не справился с пережатием
+  // (экзотический профиль, нехватка памяти), запись всё равно создастся — с
+  // одним оригиналом.
+  const variants = await buildVariants(original, probe.width);
 
   try {
     const pb = await pbAdmin();
     const payload = new FormData();
-    payload.append("file", new Blob([original], { type: file.type }), file.name);
-    const base = file.name.replace(/\.[^.]+$/, "") || "photo";
+    const base = safeBaseName(file.name);
+    payload.append(
+      "file",
+      new Blob([original], { type: probe.mime }),
+      `${base}.${probe.ext}`
+    );
     for (const [width, buffer] of variants) {
       payload.append(
         variantField(width),
@@ -100,17 +105,11 @@ export async function POST(request: Request) {
 // WebP в трёх ширинах. Картинку только уменьшаем: растягивать фото 600 px до
 // 1200 px бессмысленно — вес вырастет, чёткость нет (withoutEnlargement).
 async function buildVariants(
-  original: ArrayBuffer
+  original: ArrayBuffer,
+  width: number
 ): Promise<[VariantWidth, ArrayBuffer][]> {
   const out: [VariantWidth, ArrayBuffer][] = [];
   const input = Buffer.from(original);
-  let width = 0;
-  try {
-    width = (await sharp(input).metadata()).width ?? 0;
-  } catch (e) {
-    console.error("[media] не удалось прочитать изображение:", e);
-    return out; // оригинал всё равно сохранится
-  }
 
   for (const target of VARIANT_WIDTHS) {
     // Вариант шире оригинала не нужен; самый маленький делаем всегда, иначе

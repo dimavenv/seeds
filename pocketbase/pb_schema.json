@@ -4,7 +4,7 @@
     "listRule": "id = @request.auth.id || @request.auth.role = \"admin\"",
     "viewRule": "id = @request.auth.id || @request.auth.role = \"admin\"",
     "createRule": null,
-    "updateRule": "(id = @request.auth.id && @request.body.role:isset = false) || @request.auth.role = \"admin\"",
+    "updateRule": "(id = @request.auth.id && @request.body.role:isset = false && @request.body.blocked:isset = false && @request.body.blocked_reason:isset = false) || @request.auth.role = \"admin\"",
     "deleteRule": "@request.auth.role = \"admin\"",
     "name": "users",
     "type": "auth",
@@ -201,7 +201,6 @@
         "mimeTypes": [
           "image/jpeg",
           "image/png",
-          "image/svg+xml",
           "image/gif",
           "image/webp"
         ],

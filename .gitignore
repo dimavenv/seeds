@@ -12,10 +12,11 @@
 /build
 
 # env
+# Ловим ЛЮБОЙ .env-файл (.env.production.bak, .env.old, .env.staging — их
+# заводят руками и именно они утекают), а пример настроек оставляем в репе.
 .env
-.env.local
-.env*.local
-.env.production
+.env*
+!.env.local.example
 
 # misc
 .DS_Store
