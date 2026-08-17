@@ -39,6 +39,8 @@ export function normalizeCart(raw: unknown): CartItem[] {
       name: str(e?.name),
       price: Number.isFinite(price) && price >= 0 ? price : 0,
       image_url: typeof e?.image_url === "string" ? str(e.image_url, MAX_URL) : null,
+      image_thumb:
+        typeof e?.image_thumb === "string" ? str(e.image_thumb, MAX_URL) : null,
       qty: Math.min(MAX_QTY_PER_ITEM, Math.max(1, Number.isFinite(qty) ? qty : 1)),
       stock:
         typeof stockRaw === "number" && Number.isFinite(stockRaw)

@@ -55,9 +55,9 @@ export default function CartPage() {
             // ниже — количество/сумма/удалить. С sm — всё в один ряд.
             <div key={item.id} className="card flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap sm:gap-4">
               <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-brand-50 sm:h-20 sm:w-20">
-                {item.image_url && (
+                {(item.image_thumb || item.image_url) && (
                   <Image
-                    src={item.image_url}
+                    src={item.image_thumb || item.image_url!}
                     alt={item.name}
                     fill
                     sizes="80px"

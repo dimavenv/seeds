@@ -32,6 +32,22 @@ export function variantsFor(
   return found && typeof found === "object" ? found : {};
 }
 
+// Самый лёгкий вариант фото — для МИНИАТЮР: корзина, история заказов, список
+// заказов в админке. Там картинка занимает 56–80 px, а оригинал с телефона
+// продавца весит мегабайт-другой: страница корзины на восемь позиций тянула
+// десяток мегабайт, чтобы показать восемь марок. srcset тут не нужен —
+// размер фиксированный, достаточно взять самый маленький вариант.
+//
+// Вернёт оригинал, если вариантов нет (старые фото) — как и было.
+export function thumbUrl(
+  map: ImageVariantMap | null | undefined,
+  originalUrl: string | null | undefined
+): string | null {
+  if (!originalUrl) return null;
+  const variants = variantsFor(map, originalUrl);
+  return variants[String(VARIANT_WIDTHS[0])] ?? originalUrl;
+}
+
 // srcset для <source type="image/webp">: «url 400w, url 800w, …».
 // Пустая строка — вариантов нет, вызывающий код не рисует <source> вовсе.
 export function webpSrcSet(

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { thumbUrl } from "@/lib/image-variants";
 import { decryptProfile } from "@/lib/crypto";
 import Image from "next/image";
 import { redirect } from "next/navigation";
@@ -99,7 +100,11 @@ export default async function AccountPage() {
   const imgMap = new Map<string, string | null>();
   if (ids.length) {
     const prods = await getProductsByIds(Array.from(new Set(ids)));
-    for (const p of prods) imgMap.set(p.id, p.image_url || p.images?.[0] || null);
+    for (const p of prods) {
+      // Миниатюра 56 px: тянуть ради неё оригинал с телефона продавца незачем.
+      const original = p.image_url || p.images?.[0] || null;
+      imgMap.set(p.id, thumbUrl(p.image_variants, original));
+    }
   }
 
   // Ждут оплаты: отменённые сюда не попадают — платить по ним уже нечего.

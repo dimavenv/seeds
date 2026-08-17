@@ -18,7 +18,8 @@
     "img:icons": "node scripts/normalize-category-icons.mjs",
     "db:strip-prefix": "node scripts/pb-strip-slug-prefix.mjs",
     "audit:check": "node scripts/audit-check.mjs",
-    "scan:secrets": "node scripts/scan-secrets.mjs"
+    "scan:secrets": "node scripts/scan-secrets.mjs",
+    "img:og": "node scripts/make-og-image.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { thumbUrl } from "@/lib/image-variants";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { getSessionPb } from "@/lib/auth";
@@ -55,7 +56,9 @@ export default async function OrderDetailPage({
 
   const imgOf = (pid: string | null) => {
     const p = pid ? productMap.get(pid) : null;
-    return p?.image_url || p?.images?.[0] || null;
+    // Миниатюра, а не оригинал: фото с телефона весит мегабайты, а показываем
+    // мы его в квадратике на несколько десятков пикселей.
+    return thumbUrl(p?.image_variants, p?.image_url || p?.images?.[0] || null);
   };
   const goods = items.reduce((s, i) => s + i.price * i.qty, 0);
   // Запасной расчёт доставки — с учётом скидки: total = товары − скидка + доставка.

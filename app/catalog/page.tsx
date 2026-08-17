@@ -3,7 +3,7 @@ import CatalogView, {
   type CatalogSearchParams,
   hasNarrowingParams,
 } from "@/components/catalog-view";
-import { SITE_DESCRIPTION } from "@/lib/seo";
+import { OG_IMAGE, SITE_DESCRIPTION } from "@/lib/seo";
 
 export const revalidate = 60;
 
@@ -36,6 +36,7 @@ export async function generateMetadata({
       type: "website",
       title: "Каталог семян",
       description: SITE_DESCRIPTION,
+      images: [OG_IMAGE],
     },
   };
 }

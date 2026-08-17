@@ -39,9 +39,17 @@ export default function ProductCard({ product }: { product: Product }) {
             <span className="badge bg-accent-500 text-white">Хит</span>
           )}
         </div>
+        {/* Кнопка-переключатель: без aria-pressed скринридер каждый раз читает
+            «в избранное» и не говорит, добавлен товар или нет. */}
         <button
+          type="button"
           onClick={() => toggleWish(product.id)}
-          aria-label="В избранное"
+          aria-pressed={wished}
+          aria-label={
+            wished
+              ? `Убрать «${product.name}» из избранного`
+              : `Добавить «${product.name}» в избранное`
+          }
           className={`absolute right-2 top-2 rounded-full p-2 shadow-sm transition ${
             wished ? "bg-accent-500 text-white" : "bg-white/90 text-brand-600 hover:bg-white"
           }`}

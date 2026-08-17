@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { thumbUrl } from "@/lib/image-variants";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { SearchIcon } from "@/components/icons";
@@ -157,7 +158,7 @@ export default function SearchBox({
                       <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-brand-50">
                         {p.image_url && (
                           <Image
-                            src={p.image_url}
+                            src={thumbUrl(p.image_variants, p.image_url) ?? p.image_url}
                             alt=""
                             fill
                             sizes="44px"

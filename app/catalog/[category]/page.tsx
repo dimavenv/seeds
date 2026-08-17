@@ -5,7 +5,7 @@ import CatalogView, {
   hasNarrowingParams,
 } from "@/components/catalog-view";
 import { getCategoryBySlug } from "@/lib/data";
-import { SITE_NAME } from "@/lib/seo";
+import { OG_IMAGE, SITE_NAME } from "@/lib/seo";
 
 export const revalidate = 60;
 
@@ -49,6 +49,7 @@ export async function generateMetadata({
       type: "website",
       title,
       description,
+      images: [OG_IMAGE],
     },
   };
 }

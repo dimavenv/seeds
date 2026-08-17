@@ -34,6 +34,7 @@ describe("normalizeCart (серверная корзина из браузера
         name: "Томат Черри",
         price: 120,
         image_url: null,
+        image_thumb: null,
         qty: 2,
         stock: 10,
       },
@@ -76,8 +77,29 @@ describe("normalizeCart (серверная корзина из браузера
     const dirty = { ...item(), role: "admin", user: "someone-else", __proto__: {} };
     const out = normalizeCart([dirty]);
     expect(Object.keys(out[0]).sort()).toEqual(
-      ["id", "image_url", "name", "price", "qty", "slug", "stock"].sort()
+      [
+        "id",
+        "image_url",
+        "image_thumb",
+        "name",
+        "price",
+        "qty",
+        "slug",
+        "stock",
+      ].sort()
     );
+  });
+
+  it("миниатюра: строка или null, длина ограничена", () => {
+    // Поле необязательное: у корзин, сохранённых до его появления, и у фото
+    // без облегчённых вариантов его просто нет.
+    expect(normalizeCart([item({ image_thumb: undefined })])[0].image_thumb).toBeNull();
+    expect(
+      normalizeCart([item({ image_thumb: "https://x/y-400.webp" })])[0].image_thumb
+    ).toBe("https://x/y-400.webp");
+    expect(
+      normalizeCart([item({ image_thumb: 42 as unknown as string })])[0].image_thumb
+    ).toBeNull();
   });
 
   it("строки обрезаются по длине", () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { thumbUrl } from "@/lib/image-variants";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -233,7 +234,13 @@ export default function ProductsTable({
                 <td className="p-3">
                   <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-brand-50">
                     {p.image_url && (
-                      <Image src={p.image_url} alt="" fill sizes="48px" className="object-cover" />
+                      <Image
+                        src={thumbUrl(p.image_variants, p.image_url) ?? p.image_url}
+                        alt=""
+                        fill
+                        sizes="48px"
+                        className="object-cover"
+                      />
                     )}
                   </div>
                 </td>

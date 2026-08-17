@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { StoreProvider } from "@/components/store-provider";
 import Header from "@/components/header";
@@ -16,6 +16,7 @@ import {
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_NAME_LATIN,
+  OG_IMAGE,
   absoluteUrl,
   siteUrl,
   verificationCodes,
@@ -42,7 +43,32 @@ export const metadata: Metadata = {
     url: siteUrl(),
     title: `${SITE_NAME} — семена томатов и овощей почтой по России`,
     description: SITE_DESCRIPTION,
+    // Без картинки ссылка на магазин в Telegram или ВК выглядит как голый
+    // серый прямоугольник — по такой не переходят.
+    images: [OG_IMAGE],
   },
+  // Twitter/X читает свои теги; summary_large_image — та же картинка крупно.
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} — семена томатов и овощей почтой по России`,
+    description: SITE_DESCRIPTION,
+    images: [OG_IMAGE.url],
+  },
+};
+
+// Цвет строки браузера на телефоне. Без него Android и iOS рисуют её белой
+// (а в тёмной теме — чёрной) поверх зелёной шапки сайта: заметный стык, из-за
+// которого страница выглядит незаконченной. Значения — те же brand-600 и фон
+// тёмной темы из app/globals.css.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#3c7424" },
+    { media: "(prefers-color-scheme: dark)", color: "#11160f" },
+  ],
+  // Значения по умолчанию оставляем явно: масштабирование страницы не
+  // запрещаем — это прямой барьер для тех, кому нужен крупный текст.
+  width: "device-width",
+  initialScale: 1,
 };
 
 // Организация и сайт — разметка уровня всего домена, поэтому живёт в layout.

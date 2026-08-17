@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { thumbUrl } from "@/lib/image-variants";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { createServerPb } from "@/lib/pb/server";
@@ -49,7 +50,9 @@ export default async function AdminOrderDetail({
   }
   const imgOf = (pid: string | null) => {
     const p = pid ? productMap.get(pid) : null;
-    return p?.image_url || p?.images?.[0] || null;
+    // Миниатюра, а не оригинал: фото с телефона весит мегабайты, а показываем
+    // мы его в квадратике на несколько десятков пикселей.
+    return thumbUrl(p?.image_variants, p?.image_url || p?.images?.[0] || null);
   };
 
   const qty = items.reduce((s, i) => s + i.qty, 0);

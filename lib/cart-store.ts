@@ -6,6 +6,7 @@
 // обычными юнит-тестами без React-окружения. Провайдер лишь вызывает редьюсер
 // от синхронного рефа и синхронизирует реф с состоянием.
 import { capQty } from "@/lib/cart-sync";
+import { thumbUrl } from "@/lib/image-variants";
 import type { CartItem, Product } from "@/lib/types";
 
 export type CartAction =
@@ -40,6 +41,7 @@ export function cartReducer(cart: CartItem[], action: CartAction): CartItem[] {
           name: product.name,
           price: product.price,
           image_url: product.image_url,
+          image_thumb: thumbUrl(product.image_variants, product.image_url),
           stock: product.stock,
           qty: Math.max(1, capQty(qty, product.stock)),
         },

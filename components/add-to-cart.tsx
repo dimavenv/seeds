@@ -47,9 +47,17 @@ export default function AddToCart({ product }: { product: Product }) {
             Нет в наличии
           </span>
         )}
+        {/* Кнопка-переключатель: без aria-pressed скринридер каждый раз читает
+            «в избранное» и не говорит, добавлен товар или нет. */}
         <button
+          type="button"
           onClick={() => toggleWish(product.id)}
-          aria-label="В избранное"
+          aria-pressed={wished}
+          aria-label={
+            wished
+              ? `Убрать «${product.name}» из избранного`
+              : `Добавить «${product.name}» в избранное`
+          }
           className={`btn !px-3 ${
             wished
               ? "bg-accent-500 text-white"
