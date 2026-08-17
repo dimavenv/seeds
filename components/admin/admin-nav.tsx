@@ -14,6 +14,7 @@ const LINKS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/admin/accounts", label: "Аккаунты" },
   { href: "/admin/support", label: "Заявки" },
   { href: "/admin/reviews", label: "Отзывы" },
+  { href: "/admin/log", label: "Журнал" },
   { href: "/account", label: "Личный кабинет", exact: true },
 ];
 

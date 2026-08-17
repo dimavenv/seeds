@@ -3,6 +3,7 @@
 import PocketBase from "pocketbase";
 import { markPendingMerge } from "@/lib/cart-sync";
 import { writeStoredPromo } from "@/lib/promo";
+import { secureClear, CHECKOUT_PROFILE_KEY } from "@/lib/secure-store";
 
 // Единый браузерный клиент PocketBase.
 //
@@ -76,4 +77,8 @@ export async function clearAuth(): Promise<void> {
   // он не должен «висеть» у следующего вошедшего в этом браузере. Сервер такой
   // код всё равно не примет, но и показывать чужую скидку незачем.
   writeStoredPromo(null);
+  // По той же причине стираем сохранённые «Запомнить меня» данные получателя:
+  // ФИО, телефон и адрес не должны подставляться следующему человеку за этим
+  // же компьютером (аудит 5.3).
+  secureClear(CHECKOUT_PROFILE_KEY);
 }

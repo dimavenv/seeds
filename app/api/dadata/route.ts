@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { allowAttempt } from "@/lib/email-code";
 import { fetchAddressSuggestions, hasServerDadata } from "@/lib/dadata-server";
@@ -9,6 +10,10 @@ export const dynamic = "force-dynamic";
 // троттлит запросы per-IP, чтобы боты не жгли квоту. Входные параметры
 // нормализуем и ограничиваем (длина запроса, число подсказок, размер locations).
 export async function POST(req: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(req);
+  if (csrf) return csrf;
+
   if (!hasServerDadata()) return NextResponse.json({ suggestions: [] });
 
   let body: {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { getSession } from "@/lib/auth";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
@@ -26,6 +27,10 @@ const NEED_AUTH =
   "Промокод действует только для покупателей с аккаунтом. Войдите в свой аккаунт (или зарегистрируйтесь) и примените код ещё раз.";
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: { code?: unknown };
   try {
     body = await request.json();

@@ -100,6 +100,28 @@ describe("правила доступа PocketBase", () => {
     }
   });
 
+  it("журнал действий администратора можно только читать и пополнять", () => {
+    // Смысл журнала в том, что запись из него нельзя убрать. Если update или
+    // delete когда-нибудь откроют, журнал перестанет быть доказательством:
+    // тот, чьи действия в нём записаны, сможет их же и стереть.
+    const c = collection("admin_log");
+    expect(c.listRule).toBe('@request.auth.role = "admin"');
+    expect(c.viewRule).toBe('@request.auth.role = "admin"');
+    // null = «только суперпользователь», то есть только серверный код.
+    expect(c.createRule).toBeNull();
+    expect(c.updateRule).toBeNull();
+    expect(c.deleteRule).toBeNull();
+  });
+
+  it("журнал согласий на обработку ПД закрыт и неизменяем", () => {
+    const c = collection("consents");
+    expect(c.listRule).toBe('@request.auth.role = "admin"');
+    expect(c.viewRule).toBe('@request.auth.role = "admin"');
+    expect(c.createRule).toBeNull();
+    expect(c.updateRule).toBeNull();
+    expect(c.deleteRule).toBeNull();
+  });
+
   it("в аватары нельзя загрузить SVG", () => {
     // SVG — это документ со скриптами внутри, а файлы отдаются с того же
     // origin, что и API базы.

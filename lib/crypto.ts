@@ -32,6 +32,15 @@ export function encryptField<T extends string | null | undefined>(
   return PREFIX + Buffer.concat([iv, tag, enc]).toString("base64");
 }
 
+// Телефон в профиле аккаунта хранится так же, как телефон в заказе, — иначе
+// шифрование заказов превращается в декорацию: тот же номер лежал бы рядом
+// открытым текстом (аудит 5.2). Помощник для мест, где профиль читают с
+// сервера. Старые записи в открытом виде продолжают читаться: decryptField
+// отдаёт незашифрованное значение как есть.
+export function decryptProfile<T extends { phone: string }>(profile: T): T {
+  return { ...profile, phone: decryptField(profile.phone) ?? "" };
+}
+
 export function decryptField(value: string | null | undefined): string | null {
   if (value == null) return null;
   if (!value.startsWith(PREFIX)) return value; // не зашифровано

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { encryptField } from "@/lib/crypto";
 import { pbAdmin } from "@/lib/pb/server";
 import { getSessionPb } from "@/lib/auth";
 import { isValidRecordId } from "@/lib/data";
@@ -90,6 +91,9 @@ export async function updateProfile(input: Profile): Promise<ProfileFormState> {
   try {
     await pb.collection("users").update(session.userId, {
       ...profile,
+      // Телефон — такие же персональные данные, как в заказе, и хранится так
+      // же: зашифрованным (аудит 5.2, см. lib/crypto.ts).
+      phone: encryptField(profile.phone) ?? "",
       // name — одна строка ФИО: ею подписаны отзывы и обращения в письмах.
       name: joinFullName(profile),
     });

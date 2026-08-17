@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { pbAdmin } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   const session = await getSession();
   if (!session.isAdmin) {
     return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });

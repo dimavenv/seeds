@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
@@ -24,6 +25,11 @@ import {
 } from "@/lib/order-flow";
 import { normalizePromoCode } from "@/lib/promo";
 import {
+  hasConsent,
+  recordConsent,
+  CONSENT_REQUIRED_MESSAGE,
+} from "@/lib/consent";
+import {
   attachPromoUseToOrder,
   checkPromo,
   releasePromoUse,
@@ -48,6 +54,10 @@ async function bestEffortUserId(): Promise<string | null> {
 }
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: {
     customer_name?: string;
     phone?: string;
@@ -59,6 +69,7 @@ export async function POST(request: Request) {
     items?: IncomingItem[];
     promo_code?: string | null;
     captchaToken?: string;
+    consent?: boolean;
   };
   try {
     body = await request.json();
@@ -91,6 +102,15 @@ export async function POST(request: Request) {
   }
   if (items.length === 0) {
     return NextResponse.json({ error: "Корзина пуста" }, { status: 400 });
+  }
+  // Согласие на обработку ПД. На странице оформления галочка есть и снята по
+  // умолчанию, но проверять её обязан сервер: иначе это украшение, а согласия
+  // на самом деле нет ни у кого (152-ФЗ, см. lib/consent.ts).
+  if (!hasConsent(body.consent)) {
+    return NextResponse.json(
+      { error: CONSENT_REQUIRED_MESSAGE },
+      { status: 400 }
+    );
   }
 
   // Ozon не возит в Крым, Калининград и на Камчатку — не даём оформить такой
@@ -360,6 +380,12 @@ export async function POST(request: Request) {
           paymentStatus: "pending",
         });
         if (promoUseId) await attachPromoUseToOrder(pb, promoUseId, order.id);
+        await recordConsent(pb, {
+          email: email?.trim() || null,
+          purpose: "order",
+          userId,
+          reference: `заказ №${order.number}`,
+        });
 
         const ttl = invoiceTtlMinutes();
         const payment = buildRobokassaPayment({
@@ -425,6 +451,12 @@ export async function POST(request: Request) {
     // Привязываем использование промокода к заказу: по этой связи код
     // вернётся покупателю, если заказ потом удалят.
     if (promoUseId) await attachPromoUseToOrder(pb, promoUseId, order.id);
+    await recordConsent(pb, {
+      email: email?.trim() || null,
+      purpose: "order",
+      userId,
+      reference: `заказ №${order.number}`,
+    });
 
     // Шлём «заказ принят».
     if (email?.trim()) {

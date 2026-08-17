@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
@@ -35,6 +36,10 @@ function bad(error: string, status = 400) {
 }
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: { orderId?: unknown; invoice?: unknown; captchaToken?: unknown };
   try {
     body = await request.json();

@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { verifyCaptcha } from "@/lib/captcha";
 import { isMailConfigured } from "@/lib/email";
-import { generateCode, issueTicket, allowAttempt, ttlMs, readTicket } from "@/lib/email-code";
+import {
+  generateCode,
+  issueTicket,
+  allowAttempt,
+  allowForEmail,
+  ttlMs,
+  readTicket,
+  CODE_EMAILS_PER_ADDRESS,
+  CODE_EMAIL_WINDOW_MS,
+} from "@/lib/email-code";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { hasAdminCredentials } from "@/lib/pb/server";
 import { accountExists, sendResetEmail } from "@/lib/password-reset";
@@ -24,6 +34,10 @@ function bad(error: string, status = 400) {
 }
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: { email?: unknown; captchaToken?: unknown; ticket?: unknown };
   try {
     body = await request.json();
@@ -40,6 +54,14 @@ export async function POST(request: Request) {
   // Письма стоят денег и репутации отправителя: 5 запросов за 10 минут с IP.
   if (!allowAttempt(`reset:${ip ?? "?"}`, 5, 10 * 60 * 1000)) {
     return bad("Слишком много попыток — подождите несколько минут", 429);
+  }
+  // И счётчик на сам ящик: смена IP не должна давать возможность засыпать
+  // чужой адрес письмами «восстановление пароля».
+  if (!allowForEmail("reset", email, CODE_EMAILS_PER_ADDRESS, CODE_EMAIL_WINDOW_MS)) {
+    return bad(
+      "На этот адрес уже отправлено несколько писем — проверьте почту или попробуйте через час",
+      429
+    );
   }
   if (
     !(await verifyCaptcha(

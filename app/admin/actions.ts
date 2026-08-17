@@ -10,6 +10,7 @@ import { slugify } from "@/lib/slug";
 import { releasePromoUseByOrder } from "@/lib/promo-server";
 import { parseVariantMap, type ImageVariantMap } from "@/lib/image-variants";
 import { purgeProductsFromStores } from "@/lib/user-store-cleanup";
+import { logAdminAction, describeChanges } from "@/lib/admin-log";
 import type { OrderStatus, ReviewStatus } from "@/lib/types";
 
 // Данные заказа для письма покупателю (почта хранится зашифрованной).
@@ -122,12 +123,38 @@ export async function saveProduct(
     is_featured: isFeatured,
   };
 
+  // Прежние значения — чтобы в журнале осталось «было → стало», а не просто
+  // «товар отредактирован».
+  const previous = id
+    ? await pb
+        .collection("products")
+        .getOne(id)
+        .catch(() => null)
+    : null;
+
   try {
     if (id) await pb.collection("products").update(id, payload);
     else await pb.collection("products").create(payload);
   } catch (e) {
     return { error: errMessage(e) };
   }
+
+  await logAdminAction(session, {
+    action: id ? "product.update" : "product.create",
+    target: name,
+    summary: describeChanges(
+      previous as Record<string, unknown> | null,
+      payload as unknown as Record<string, unknown>,
+      {
+        name: "название",
+        price: "цена",
+        stock: "остаток",
+        slug: "адрес",
+        is_new: "новинка",
+        is_featured: "на витрине",
+      }
+    ),
+  });
 
   // Набор URL товаров изменился — сбрасываем кэш карты сайта (tag "products").
   revalidateTag("products");
@@ -154,11 +181,26 @@ export async function updateProductInline(
   }
   if (Object.keys(payload).length === 0) return { error: "Нечего сохранять" };
 
+  const previous = await pb
+    .collection("products")
+    .getOne(id)
+    .catch(() => null);
+
   try {
     await pb.collection("products").update(id, payload);
   } catch (e) {
     return { error: errMessage(e) };
   }
+
+  await logAdminAction(session, {
+    action: "product.update",
+    target: String(previous?.name ?? id),
+    summary: describeChanges(
+      previous as Record<string, unknown> | null,
+      payload as Record<string, unknown>,
+      { price: "цена", stock: "остаток" }
+    ),
+  });
 
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
@@ -169,7 +211,16 @@ export async function updateProductInline(
 export async function deleteProduct(id: string): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
+  const removed = await pb
+    .collection("products")
+    .getOne(id)
+    .catch(() => null);
   await pb.collection("products").delete(id).catch(() => {});
+  await logAdminAction(session, {
+    action: "product.delete",
+    target: String(removed?.name ?? id),
+    summary: removed ? `цена ${removed.price} ₽, остаток ${removed.stock}` : "",
+  });
   // Товара больше нет в каталоге — убираем его и из корзин с избранным, иначе
   // он висел бы там как живой, пока покупатель не уберёт сам.
   await purgeProductsFromStores([id]);
@@ -190,6 +241,11 @@ export async function updateOrderStatus(
   } catch {
     return;
   }
+  await logAdminAction(session, {
+    action: "order.status",
+    target: before ? `заказ №${before.number}` : id,
+    summary: `статус: ${before?.status ?? "?"} → ${status}`,
+  });
   // Письмо покупателю — только если статус реально сменился.
   if (before && before.status !== status) {
     void mailOrderStatus({ to: before.to, number: before.number, name: before.name }, status, {
@@ -213,6 +269,11 @@ export async function updateOrderTracking(
   } catch {
     return;
   }
+  await logAdminAction(session, {
+    action: "order.tracking",
+    target: before ? `заказ №${before.number}` : id,
+    summary: `трек-номер: ${before?.tracking || "—"} → ${value || "—"}`,
+  });
   // Трек вписали после отправки — покупатель уже получил письмо «отправлен»
   // без номера, досылаем номер отдельным письмом.
   if (before && value && value !== (before.tracking ?? "") && before.status === "shipped") {
@@ -229,6 +290,11 @@ export async function updateVacationUntil(date: string | null): Promise<void> {
   const { session } = await getSessionPb();
   if (!session.isAdmin) return;
   const value = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : "";
+  await logAdminAction(session, {
+    action: "settings.vacation",
+    target: "режим отпуска",
+    summary: value ? `приём заказов приостановлен до ${value}` : "приём заказов возобновлён",
+  });
   // Единственную запись настроек создаёт/правит суперпользователь — так работает
   // даже на свежей базе, где записи ещё нет.
   const pb = await pbAdmin();
@@ -467,6 +533,14 @@ export async function refundOrder(
       { partial: !full }
     ).catch(() => {});
   }
+  await logAdminAction(session, {
+    action: "order.refund",
+    target: info ? `заказ №${info.number}` : id,
+    summary:
+      `возврат ${amount} ₽ (${full ? "полный" : "частичный"})` +
+      (viaApi ? ", через Robokassa" : ", отметка вручную") +
+      (unconfirmed ? ", подтверждение от банка не получено" : ""),
+  });
   revalidatePath("/admin/orders");
   revalidatePath("/account");
   return { ok: true, refunded: amount, full, unconfirmed, viaApi };
@@ -479,6 +553,8 @@ export async function deleteOrder(
 ): Promise<{ ok?: boolean; error?: string }> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
+  // Читаем заказ до удаления: в журнале должно остаться, ЧТО именно удалили.
+  const deleted = await pb.collection("orders").getOne(id).catch(() => null);
   try {
     // Промокод, потраченный на этот заказ, возвращаем покупателю — иначе он
     // «сгорел» бы на удалённом (тестовом или мусорном) заказе. Делать это надо
@@ -500,6 +576,13 @@ export async function deleteOrder(
   } catch (e) {
     return { error: errMessage(e) };
   }
+  await logAdminAction(session, {
+    action: "order.delete",
+    target: deleted ? `заказ №${deleted.number}` : id,
+    summary: deleted
+      ? `сумма ${deleted.total} ₽, оплата: ${deleted.payment_status ?? "?"}`
+      : "",
+  });
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
   return { ok: true };
@@ -510,11 +593,17 @@ export async function deleteReview(
 ): Promise<{ ok?: boolean; error?: string }> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return { error: "Нет доступа" };
+  const removed = await pb.collection("reviews").getOne(id).catch(() => null);
   try {
     await pb.collection("reviews").delete(id);
   } catch (e) {
     return { error: errMessage(e) };
   }
+  await logAdminAction(session, {
+    action: "review.delete",
+    target: String(removed?.author_name ?? id),
+    summary: removed ? `оценка ${removed.rating}, статус ${removed.status}` : "",
+  });
   revalidatePath("/admin/reviews");
   revalidatePath("/reviews");
   return { ok: true };
@@ -530,6 +619,7 @@ export async function deleteSupportRequest(
   } catch (e) {
     return { error: errMessage(e) };
   }
+  await logAdminAction(session, { action: "support.delete", target: id });
   revalidatePath("/admin/support");
   return { ok: true };
 }
@@ -590,6 +680,11 @@ export async function replySupportRequest(
       status: "done",
     })
     .catch(() => {});
+  await logAdminAction(session, {
+    action: "support.reply",
+    target: id,
+    summary: `отправлен ответ (${text.length} симв.)`,
+  });
   revalidatePath("/admin/support");
   return { ok: true };
 }
@@ -600,7 +695,13 @@ export async function updateReviewStatus(
 ): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
+  const before = await pb.collection("reviews").getOne(id).catch(() => null);
   await pb.collection("reviews").update(id, { status }).catch(() => {});
+  await logAdminAction(session, {
+    action: "review.status",
+    target: String(before?.author_name ?? id),
+    summary: `статус: ${before?.status ?? "?"} → ${status}`,
+  });
   revalidatePath("/admin/reviews");
   revalidatePath("/reviews");
 }
@@ -699,12 +800,33 @@ export async function savePromo(
     // Коллекции нет — сохранение ниже вернёт понятную ошибку от PocketBase.
   }
 
+  const previousPromo = id
+    ? await pb.collection("promos").getOne(id).catch(() => null)
+    : null;
+
   try {
     if (id) await pb.collection("promos").update(id, payload);
     else await pb.collection("promos").create(payload);
   } catch (e) {
     return { error: errMessage(e) };
   }
+
+  await logAdminAction(session, {
+    action: id ? "promo.update" : "promo.create",
+    target: String(payload.code ?? id ?? ""),
+    summary: describeChanges(
+      previousPromo as Record<string, unknown> | null,
+      payload as unknown as Record<string, unknown>,
+      {
+        code: "код",
+        percent: "процент",
+        amount: "сумма",
+        min_total: "минимальная сумма",
+        expires_at: "действует до",
+        enabled: "включён",
+      }
+    ),
+  });
 
   revalidatePath("/admin/promos");
   return { ok: true };
@@ -713,7 +835,13 @@ export async function savePromo(
 export async function setPromoEnabled(id: string, enabled: boolean): Promise<void> {
   const { session, pb } = await getSessionPb();
   if (!session.isAdmin || !isValidRecordId(id)) return;
+  const promo = await pb.collection("promos").getOne(id).catch(() => null);
   await pb.collection("promos").update(id, { enabled }).catch(() => {});
+  await logAdminAction(session, {
+    action: "promo.enabled",
+    target: String(promo?.code ?? id),
+    summary: enabled ? "включён" : "выключен",
+  });
   revalidatePath("/admin/promos");
 }
 
@@ -722,7 +850,12 @@ export async function deletePromo(id: string): Promise<void> {
   if (!session.isAdmin || !isValidRecordId(id)) return;
   // Записи об использованиях (promo_uses) НЕ трогаем: они привязаны к заказам
   // и нужны для истории, а код в них хранится строкой.
+  const promo = await pb.collection("promos").getOne(id).catch(() => null);
   await pb.collection("promos").delete(id).catch(() => {});
+  await logAdminAction(session, {
+    action: "promo.delete",
+    target: String(promo?.code ?? id),
+  });
   revalidatePath("/admin/promos");
 }
 
@@ -737,7 +870,12 @@ export async function deletePromo(id: string): Promise<void> {
 async function targetUser(
   id: string
 ): Promise<
-  | { ok: true; pb: Awaited<ReturnType<typeof pbAdmin>>; email: string }
+  | {
+      ok: true;
+      pb: Awaited<ReturnType<typeof pbAdmin>>;
+      email: string;
+      session: { userId: string | null; email: string | null };
+    }
   | { ok: false; error: string }
 > {
   const { session } = await getSessionPb();
@@ -753,7 +891,12 @@ async function targetUser(
   if (rec.role === "admin") {
     return { ok: false, error: "Аккаунт администратора трогать нельзя" };
   }
-  return { ok: true, pb, email: String(rec.email ?? "") };
+  return {
+    ok: true,
+    pb,
+    email: String(rec.email ?? ""),
+    session: { userId: session.userId, email: session.email },
+  };
 }
 
 // Заблокировать или разблокировать покупателя. Блокировка действует сразу:
@@ -776,6 +919,12 @@ export async function setUserBlocked(
   } catch (e) {
     return { error: errMessage(e) };
   }
+
+  await logAdminAction(target.session, {
+    action: blocked ? "user.block" : "user.unblock",
+    target: target.email || id,
+    summary: blocked ? `причина: ${(reason ?? "").trim() || "не указана"}` : "",
+  });
 
   revalidatePath("/admin/accounts");
   revalidatePath(`/admin/accounts/${id}`);
@@ -800,6 +949,11 @@ export async function deleteUser(
   } catch (e) {
     return { error: errMessage(e) };
   }
+
+  await logAdminAction(target.session, {
+    action: "user.delete",
+    target: target.email || id,
+  });
 
   revalidatePath("/admin/accounts");
   return { ok: true };

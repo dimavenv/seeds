@@ -47,7 +47,7 @@ export default function SupportForm() {
       const res = await fetch("/api/support", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, captchaToken }),
+        body: JSON.stringify({ ...form, captchaToken, consent }),
       });
       const data = await res.json();
       if (!res.ok) {

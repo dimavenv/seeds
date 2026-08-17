@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionPb } from "@/lib/auth";
 import { EMPTY_PROFILE, profileFromRecord } from "@/lib/profile";
+import { decryptProfile } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,9 @@ export async function GET() {
   let profile = EMPTY_PROFILE;
   try {
     const me = await pb.collection("users").getOne(session.userId);
-    profile = profileFromRecord(me as unknown as Record<string, unknown>);
+    profile = decryptProfile(
+      profileFromRecord(me as unknown as Record<string, unknown>)
+    );
   } catch {
     // База недоступна или в схеме ещё нет полей профиля — подставим только почту.
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { verifyCaptcha } from "@/lib/captcha";
 
@@ -9,6 +10,10 @@ import { verifyCaptcha } from "@/lib/captcha";
 // не получит. Пока капча не подключена (нет SMARTCAPTCHA_SERVER_KEY) — роут
 // всегда пропускает, вход работает как раньше.
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: { captchaToken?: string };
   try {
     body = await request.json();

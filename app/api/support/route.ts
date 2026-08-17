@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
@@ -7,6 +8,11 @@ import { encryptField } from "@/lib/crypto";
 import { notifyNewSupport } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
+import {
+  hasConsent,
+  recordConsent,
+  CONSENT_REQUIRED_MESSAGE,
+} from "@/lib/consent";
 
 // Привязка заявки к аккаунту — «по возможности» (не блокирует отправку).
 async function bestEffortUserId(): Promise<string | null> {
@@ -24,12 +30,17 @@ async function bestEffortUserId(): Promise<string | null> {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: {
     name?: string;
     email?: string;
     subject?: string;
     message?: string;
     captchaToken?: string;
+    consent?: boolean;
   };
   try {
     body = await request.json();
@@ -55,6 +66,13 @@ export async function POST(request: Request) {
   if (!EMAIL_RE.test(email)) {
     return NextResponse.json(
       { error: "Укажите корректный email для ответа" },
+      { status: 400 }
+    );
+  }
+  // Согласие на обработку ПД проверяем на сервере (152-ФЗ, lib/consent.ts).
+  if (!hasConsent(body.consent)) {
+    return NextResponse.json(
+      { error: CONSENT_REQUIRED_MESSAGE },
       { status: 400 }
     );
   }
@@ -94,6 +112,13 @@ export async function POST(request: Request) {
       message: encryptField(message),
       status: "new",
       user: userId ?? "",
+    });
+
+    await recordConsent(pb, {
+      email,
+      purpose: "support",
+      userId,
+      reference: subject.slice(0, 80),
     });
 
     // Продавцу «у вас новый вопрос» — с Reply-To покупателя, чтобы отвечать

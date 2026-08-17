@@ -1,0 +1,91 @@
+name: CI
+
+# Проверки на каждый push и pull request. Смысл — ловить то, что человек
+# пропускает: сломанные типы, упавшие тесты, уязвимую зависимость и секрет,
+# случайно закоммиченный в репозиторий.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # Уязвимости в зависимостях появляются без наших коммитов — проверяем и по
+  # расписанию, раз в неделю.
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  build:
+    name: Типы, тесты, сборка
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # npm ci, а не npm install: ставит РОВНО то, что в package-lock.json.
+      - run: npm ci
+
+      - name: Проверка типов
+        run: npx tsc --noEmit
+
+      - name: Тесты
+        run: npm test
+
+      - name: Сборка
+        run: npm run build
+
+      # Главная проверка этого шага — что серверные секреты не утекли в
+      # браузерный бандл. Next вшивает в него всё, к чему обратились из
+      # клиентского кода, и одна опечатка (NEXT_PUBLIC_ вместо обычной
+      # переменной) отправляет пароль базы в JS, который скачивает каждый
+      # посетитель. Глазами это не ловится — только так.
+      - name: Секреты в клиентском бандле
+        run: |
+          PATTERN='PB_ADMIN_PASSWORD|PB_ADMIN_EMAIL|DATA_ENCRYPTION_KEY|SMTP_PASSWORD|ROBOKASSA_PASSWORD|CRON_SECRET|SMARTCAPTCHA_SERVER_KEY|DADATA_TOKEN'
+          if grep -rlE "$PATTERN" .next/static 2>/dev/null; then
+            echo "::error::В клиентском бандле найдено имя серверного секрета — проверьте, не помечена ли переменная как NEXT_PUBLIC_"
+            exit 1
+          fi
+          echo "Клиентский бандл чист."
+
+  audit:
+    name: Уязвимости в зависимостях
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Отдельной задачей: разрыв здесь означает «вышла новая уязвимость», а не
+      # «код сломан», и не должен маскировать результат основной проверки.
+      #
+      # Не голый `npm audit`: он горел бы постоянно из-за уязвимостей, которые
+      # сегодня закрыть нечем, к красному билду привыкли бы — и настоящая
+      # новая уязвимость прошла бы незамеченной. Принятые исключения лежат в
+      # security/audit-allowlist.json с причиной и датой пересмотра;
+      # просроченное исключение роняет проверку так же, как новая уязвимость.
+      - name: Проверка зависимостей
+        run: npm run audit:check
+
+  secrets:
+    name: Секреты в истории репозитория
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Вся история: секрет, закоммиченный год назад и «удалённый»
+          # следующим коммитом, никуда из репозитория не делся.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Свой сканер (scripts/scan-secrets.mjs), а не gitleaks: он не тянет
+      # ничего извне, знает имена переменных именно этого проекта и не срывается
+      # на образцах настроек с русскими подсказками. Проверен на подложенном
+      # секрете — см. комментарий в самом скрипте.
+      - name: Поиск секретов
+        run: npm run scan:secrets

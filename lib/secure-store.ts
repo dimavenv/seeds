@@ -72,12 +72,25 @@ function fromB64(b64: string): Uint8Array {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
 
+// Имя записи «Запомнить меня» на странице оформления. Живёт здесь, чтобы
+// выход из аккаунта мог её стереть, не зная ничего про страницу оформления.
+export const CHECKOUT_PROFILE_KEY = "checkout_profile";
+
+// Сколько хранить сохранённые данные. Отметка «запомнить» не должна означать
+// «навсегда»: ФИО, телефон и адрес доставки остаются на устройстве, а
+// устройство бывает общим (аудит 5.3). Через месяц данные протухают сами.
+const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 export async function secureSet(name: string, obj: unknown): Promise<void> {
   const key = await getKey();
   if (!key) return;
   try {
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const data = new TextEncoder().encode(JSON.stringify(obj));
+    // Время записи кладём ВНУТРЬ шифртекста: снаружи его можно было бы
+    // подправить и продлить срок хранения.
+    const data = new TextEncoder().encode(
+      JSON.stringify({ savedAt: Date.now(), value: obj })
+    );
     const cipher = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv: iv as BufferSource },
       key,
@@ -104,7 +117,23 @@ export async function secureGet<T>(name: string): Promise<T | null> {
       key,
       fromB64(data) as BufferSource
     );
-    return JSON.parse(new TextDecoder().decode(plain)) as T;
+    const parsed = JSON.parse(new TextDecoder().decode(plain)) as unknown;
+    // Записи прежнего формата (без отметки времени) читаем, но считаем
+    // просроченными: срок хранения у них неизвестен.
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof (parsed as { savedAt?: unknown }).savedAt !== "number"
+    ) {
+      secureClear(name);
+      return null;
+    }
+    const { savedAt, value } = parsed as { savedAt: number; value: T };
+    if (Date.now() - savedAt > MAX_AGE_MS) {
+      secureClear(name);
+      return null;
+    }
+    return value;
   } catch {
     return null;
   }

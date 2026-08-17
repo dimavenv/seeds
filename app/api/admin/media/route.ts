@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import sharp from "sharp";
 import { getSession } from "@/lib/auth";
 import { pbAdmin } from "@/lib/pb/server";
@@ -27,6 +28,10 @@ const MAX_BYTES = 10 * 1024 * 1024; // как maxSize поля file в колл�
 // поэтому сбой пережатия не ломает загрузку — фото просто останется без
 // облегчённых вариантов.
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   const session = await getSession();
   if (!session.isAdmin) {
     return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });

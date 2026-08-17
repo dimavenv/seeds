@@ -1,4 +1,5 @@
 import "server-only";
+import { encryptField } from "@/lib/crypto";
 import crypto from "node:crypto";
 import type PocketBase from "pocketbase";
 import { sendMail, mailLayout, escapeHtml, isMailConfigured } from "@/lib/email";
@@ -94,7 +95,8 @@ export async function ensureAccountForOrder(
       passwordConfirm: password,
       name: joinFullName(fio) || o.customerName.trim(),
       ...fio,
-      phone: normalizePhone(o.phone),
+      // Хранится зашифрованным — как и телефон в самом заказе.
+      phone: encryptField(normalizePhone(o.phone)) ?? "",
       // Почта подтверждена делом: на неё ушла оплата и уходит пароль.
       verified: true,
       // Пароль придуман сайтом — в кабинете подскажем заменить его на свой.

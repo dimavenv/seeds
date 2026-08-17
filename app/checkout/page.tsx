@@ -18,6 +18,7 @@ import {
   secureGet,
   secureSet,
   secureClear,
+  CHECKOUT_PROFILE_KEY,
 } from "@/lib/secure-store";
 import { localPhoneDigits, normalizePhone, type Profile } from "@/lib/profile";
 import { submitPaymentForm } from "@/lib/payment-form";
@@ -32,7 +33,8 @@ import OzonPvzField from "@/components/ozon-pvz-field";
 import Spinner from "@/components/spinner";
 import { GOALS, reachGoal, stashPurchase } from "@/lib/metrika";
 
-const PROFILE_KEY = "checkout_profile";
+// Ключ общий с lib/secure-store: выход из аккаунта стирает эту же запись.
+const PROFILE_KEY = CHECKOUT_PROFILE_KEY;
 
 // Пустая форма получателя — и начальное состояние, и база для слияния с
 // данными личного кабинета.
@@ -302,6 +304,10 @@ export default function CheckoutPage() {
           // Только сам код: размер скидки сервер считает по своим правилам.
           promo_code: promo?.code ?? null,
           captchaToken,
+          // Согласие на обработку ПД: сервер обязан его увидеть и записать
+          // (152-ФЗ), поэтому оно едет вместе с заказом, а не остаётся
+          // галочкой в браузере.
+          consent,
         }),
       });
       const data = await res.json();

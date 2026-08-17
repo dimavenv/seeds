@@ -5,6 +5,7 @@ import { serverLogin } from "@/lib/pb/client";
 import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 import AuthTabs from "@/components/auth-tabs";
 import OAuthButtons from "@/components/oauth-buttons";
+import ConsentCheckbox from "@/components/consent-checkbox";
 import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 export default function RegisterPage() {
@@ -12,6 +13,9 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
+  // Согласие на обработку ПД. Снято по умолчанию — иначе это не согласие
+  // (152-ФЗ); сервер его тоже проверяет и записывает.
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -51,6 +55,10 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
 
+    if (!consent) {
+      setError("Подтвердите согласие на обработку персональных данных");
+      return;
+    }
     if (captchaEnabled && !captchaToken) {
       setError("Подтвердите, что вы не робот");
       return;
@@ -67,6 +75,7 @@ export default function RegisterPage() {
           password,
           name: fullName.trim(),
           captchaToken,
+          consent,
         }),
       });
       const data = await res.json();
@@ -248,12 +257,18 @@ export default function RegisterPage() {
             <input required minLength={8} type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
           </label>
 
+          <ConsentCheckbox checked={consent} onChange={setConsent} />
+
           <SmartCaptcha onToken={setCaptchaToken} />
 
           {error && (
             <p role="alert" className="alert-error">{error}</p>
           )}
-          <button type="submit" disabled={loading} className="btn-primary w-full">
+          <button
+            type="submit"
+            disabled={loading || !consent}
+            className="btn-primary w-full"
+          >
             {loading ? "Отправляем код…" : "Зарегистрироваться"}
           </button>
         </form>

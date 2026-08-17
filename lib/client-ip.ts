@@ -6,8 +6,14 @@
 // прислать сам клиент и, например, обходить лимит попыток, меняя подделку
 // на каждый запрос.
 export function clientIp(request: Request): string | undefined {
-  const xff = request.headers.get("x-forwarded-for");
-  if (!xff) return undefined;
+  return clientIpFromHeaders(request.headers);
+}
+
+// То же самое, но от готовых заголовков: server actions получают их через
+// headers() из next/headers, объекта Request у них нет.
+export function clientIpFromHeaders(h: Headers): string | undefined {
+  const xff = h.get("x-forwarded-for");
+  if (!xff) return h.get("x-real-ip") ?? undefined;
   const parts = xff
     .split(",")
     .map((s) => s.trim())

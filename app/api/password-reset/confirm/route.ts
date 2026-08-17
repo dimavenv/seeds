@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
-import { readTicket, codeMatches, allowAttempt } from "@/lib/email-code";
+import {
+  readTicket,
+  codeMatches,
+  allowAttempt,
+  allowForEmail,
+  CODE_ATTEMPTS_PER_EMAIL,
+  CODE_ATTEMPT_WINDOW_MS,
+} from "@/lib/email-code";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { hasAdminCredentials } from "@/lib/pb/server";
 import { applyNewPassword, sendPasswordChangedEmail } from "@/lib/password-reset";
@@ -18,6 +26,10 @@ function bad(error: string, status = 400) {
 }
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: { ticket?: unknown; code?: unknown; password?: unknown };
   try {
     body = await request.json();
@@ -34,6 +46,21 @@ export async function POST(request: Request) {
   const ticket = readTicket(String(body.ticket ?? ""), "reset");
   if (!ticket) return bad("Сессия сброса не найдена — начните заново");
   if (ticket.expired) return bad("Код устарел — запросите новый");
+  // Попытки ввода считаем и на сам ящик — здесь ставкой уже пароль от
+  // аккаунта, и смена IP защиту обнулять не должна.
+  if (
+    !allowForEmail(
+      "reset-confirm",
+      ticket.email,
+      CODE_ATTEMPTS_PER_EMAIL,
+      CODE_ATTEMPT_WINDOW_MS
+    )
+  ) {
+    return bad(
+      "Слишком много неверных кодов — запросите новый код через несколько минут",
+      429
+    );
+  }
   if (!codeMatches(ticket, String(body.code ?? ""))) {
     return bad("Неверный код, проверьте письмо");
   }

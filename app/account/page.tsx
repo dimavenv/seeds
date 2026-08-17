@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { decryptProfile } from "@/lib/crypto";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getSessionPb } from "@/lib/auth";
@@ -72,7 +73,9 @@ export default async function AccountPage() {
   let autoPassword = false;
   try {
     const me = await pb.collection("users").getOne(session.userId);
-    profile = profileFromRecord(me as unknown as Record<string, unknown>);
+    profile = decryptProfile(
+      profileFromRecord(me as unknown as Record<string, unknown>)
+    );
     autoPassword = Boolean(me.auto_password);
   } catch {
     profile = EMPTY_PROFILE;

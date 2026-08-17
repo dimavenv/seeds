@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import {
   readTicket,
   generateCode,
   issueTicket,
   allowAttempt,
+  allowForEmail,
   ttlMs,
+  CODE_EMAILS_PER_ADDRESS,
+  CODE_EMAIL_WINDOW_MS,
 } from "@/lib/email-code";
 import { sendCodeEmail } from "@/lib/registration";
 
@@ -18,6 +22,10 @@ function bad(error: string, status = 400) {
 // продолжают работать (см. lib/email-code.ts: письма приходят с задержкой и не
 // обязательно в том порядке, в каком мы их отправили).
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -32,6 +40,22 @@ export async function POST(request: Request) {
 
   const ticket = readTicket(String(body.ticket ?? ""));
   if (!ticket) return bad("Сессия подтверждения не найдена — начните заново");
+
+  // Общий с шагом 1 счётчик писем на адрес: иначе «отправить ещё раз» —
+  // это обход лимита из /api/register.
+  if (
+    !allowForEmail(
+      "start",
+      ticket.email,
+      CODE_EMAILS_PER_ADDRESS,
+      CODE_EMAIL_WINDOW_MS
+    )
+  ) {
+    return bad(
+      "На этот адрес уже отправлено несколько писем — проверьте почту, в том числе «Спам»",
+      429
+    );
+  }
 
   const code = generateCode();
   const name = String(body.name ?? "").trim().slice(0, 100);

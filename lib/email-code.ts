@@ -168,6 +168,12 @@ export function codeMatches(ticket: Ticket, input: string): boolean {
 
 // Простейший лимитер попыток в памяти процесса (на воркер) — от перебора кода
 // и спама повторной отправкой. Для магазина этого достаточно.
+//
+// ВАЖНО про ключ. Лимит по одному лишь IP закрывает только половину задачи:
+// у кого угодно есть пул адресов, а цель у перебора и у «письмобомбёжки» одна
+// и та же — конкретный ящик. Поэтому дорогие действия ограничиваем ПАРОЙ
+// счётчиков: по IP (чтобы один клиент не портил жизнь всем) и по адресу почты
+// (чтобы смена IP не обнуляла защиту конкретного ящика) — см. limitByEmail.
 const buckets = new Map<string, { n: number; resetAt: number }>();
 
 export function allowAttempt(bucket: string, max: number, windowMs: number): boolean {
@@ -188,3 +194,32 @@ export function allowAttempt(bucket: string, max: number, windowMs: number): boo
   b.n += 1;
   return b.n <= max;
 }
+
+// Лимит, привязанный к почтовому адресу. Адрес нормализуем, чтобы
+// «Ivan@Mail.ru » и «ivan@mail.ru» считались одним ящиком и счётчик нельзя
+// было обнулить регистром или пробелом.
+export function allowForEmail(
+  action: string,
+  email: string,
+  max: number,
+  windowMs: number
+): boolean {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return true; // адреса нет — ограничивать нечего
+  // Сам адрес в ключ не кладём: ключи живут в памяти процесса и попадают в
+  // дампы при отладке. Хеша достаточно, чтобы считать попытки.
+  const id = crypto.createHash("sha256").update(normalized).digest("base64url").slice(0, 22);
+  return allowAttempt(`${action}:email:${id}`, max, windowMs);
+}
+
+// Сколько попыток ввода кода даём на один ящик. Пространство перебора —
+// миллион значений, срок жизни кода — минуты: пяти попыток за десять минут
+// заведомо хватает человеку и заведомо мало перебору.
+export const CODE_ATTEMPTS_PER_EMAIL = 5;
+export const CODE_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+
+// Сколько писем с кодом можно заказать на один ящик. Защита не от нас, а от
+// того, кто решит завалить чужой почтовый ящик нашими письмами (и заодно
+// сжечь квоту отправителя и репутацию домена).
+export const CODE_EMAILS_PER_ADDRESS = 5;
+export const CODE_EMAIL_WINDOW_MS = 60 * 60 * 1000;

@@ -289,29 +289,41 @@ sudo /opt/pocketbase/pb-backup.sh          # проверка: OK (локаль�
    chmod 600 /root/.config/rclone/rclone.conf
    rclone lsd yandex:                        # должен показать бакет
    ```
-4. Укажите бакет скрипту — и он будет выгружать каждую копию сам:
+4. Укажите бакет и пароль шифрования — дальше скрипт всё делает сам:
    ```bash
-   echo 'RCLONE_REMOTE=yandex:tomatsemena-backups' > /opt/pocketbase/backup.conf
+   sudo tee /opt/pocketbase/backup.conf >/dev/null <<EOF
+   RCLONE_REMOTE=yandex:tomatsemena-backups
+   BACKUP_PASSPHRASE=$(openssl rand -base64 32)
+   EOF
+   sudo chmod 600 /opt/pocketbase/backup.conf
+   sudo apt install -y gnupg
    sudo /opt/pocketbase/pb-backup.sh          # OK (локально) + OK (облако)
    ```
 
+> ⚠️ **Пароль шифрования запишите отдельно** — в менеджер паролей, не только на
+> сервер. В архиве лежат телефоны, адреса и почта покупателей, хеши паролей и
+> сессии, а уезжает он в чужое хранилище: без шифрования его прочитает любой,
+> у кого есть доступ к бакету. Но и обратное верно — потеряете пароль, и архив
+> не восстановить ничем. Если `BACKUP_PASSPHRASE` не задан, скрипт работает
+> по-старому и предупреждает в выводе.
+
 ### Восстановление из бэкапа
 
-Проверенное восстановление — часть бэкапа. Как развернуть копию:
+Проверенное восстановление — часть бэкапа. Бэкап, который ни разу не
+разворачивали, бэкапом не является: проверяйте раз в квартал.
 
 ```bash
-# 1. Взять нужный архив: локально из /opt/pocketbase/backups/ или из облака:
-rclone copy yandex:tomatsemena-backups/pb_data_ДАТА.tar.gz /tmp/
-# 2. Остановить базу, отложить текущие данные, распаковать бэкап:
-sudo systemctl stop pocketbase
-sudo mv /opt/pocketbase/pb_data /opt/pocketbase/pb_data.old
-sudo tar xzf /tmp/pb_data_ДАТА.tar.gz -C /opt/pocketbase/
-sudo chown -R pocketbase:pocketbase /opt/pocketbase/pb_data
-# 3. Запустить:
-sudo systemctl start pocketbase && curl -s http://127.0.0.1:8090/api/health
+# Проверка без замены базы: развернёт архив во временную папку, проверит
+# целостность и покажет, сколько внутри заказов, товаров и аккаунтов.
+sudo bash deploy/pb-restore.sh --check /opt/pocketbase/backups/pb_data_ДАТА.tar.gz.gpg
+
+# Настоящее восстановление (спросит подтверждение; текущие данные не удалит,
+# а отложит рядом как pb_data.before-restore-ДАТА):
+rclone copy yandex:tomatsemena-backups/pb_data_ДАТА.tar.gz.gpg /tmp/
+sudo bash deploy/pb-restore.sh /tmp/pb_data_ДАТА.tar.gz.gpg
 ```
 
-Убедившись, что всё на месте, удалите `pb_data.old`.
+Убедившись, что всё на месте, удалите отложенную папку `pb_data.before-restore-*`.
 
 ## Шаг 9. Отключить Supabase
 

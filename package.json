@@ -16,7 +16,9 @@
     "db:categories": "node scripts/pb-categories-singular.mjs",
     "img:optimize": "node scripts/optimize-public-images.mjs",
     "img:icons": "node scripts/normalize-category-icons.mjs",
-    "db:strip-prefix": "node scripts/pb-strip-slug-prefix.mjs"
+    "db:strip-prefix": "node scripts/pb-strip-slug-prefix.mjs",
+    "audit:check": "node scripts/audit-check.mjs",
+    "scan:secrets": "node scripts/scan-secrets.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

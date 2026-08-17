@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { allowAttempt } from "@/lib/email-code";
 import { getSessionPb } from "@/lib/auth";
@@ -19,6 +20,10 @@ function bad(error: string, status = 400) {
 }
 
 export async function POST(request: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(request);
+  if (csrf) return csrf;
+
   if (!isDbConfigured()) return bad("База недоступна", 503);
 
   let body: { current?: unknown; next?: unknown };

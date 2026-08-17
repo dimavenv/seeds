@@ -1,6 +1,7 @@
 import "server-only";
 import type PocketBase from "pocketbase";
 import { profileFromRecord, type Profile } from "@/lib/profile";
+import { decryptProfile } from "@/lib/crypto";
 import { normalizeSearch } from "@/lib/search";
 
 // Чтение аккаунтов покупателей для админки.
@@ -31,7 +32,9 @@ function toAccount(rec: Record<string, unknown>): Account {
   return {
     id: String(rec.id),
     email: s(rec.email),
-    profile: profileFromRecord(rec),
+    // Телефон в аккаунте хранится зашифрованным (аудит 5.2) — админке
+    // и поиску по списку он нужен в открытом виде.
+    profile: decryptProfile(profileFromRecord(rec)),
     isAdmin: rec.role === "admin",
     verified: Boolean(rec.verified),
     blocked: Boolean(rec.blocked),

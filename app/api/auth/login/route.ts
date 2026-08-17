@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
 import { verifyCaptcha } from "@/lib/captcha";
-import { allowAttempt } from "@/lib/email-code";
+import { allowAttempt, allowForEmail } from "@/lib/email-code";
 import { createPublicPb } from "@/lib/pb/server";
 import { PB_COOKIE, isDbConfigured } from "@/lib/pb/shared";
 
@@ -15,6 +16,10 @@ export const dynamic = "force-dynamic";
 // Authorization. В фазе 2 эти запросы переедут на сервер, в фазе 3 токен
 // перестанем отдавать в браузер вовсе.
 export async function POST(req: Request) {
+  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
+  const csrf = csrfGuard(req);
+  if (csrf) return csrf;
+
   if (!isDbConfigured()) {
     return NextResponse.json({ error: "База недоступна" }, { status: 503 });
   }
@@ -33,8 +38,12 @@ export async function POST(req: Request) {
   }
 
   const ip = clientIp(req);
-  // Троттлинг перебора паролей per-IP (аудит 4.6).
-  if (!allowAttempt(`login:${ip ?? "?"}`, 10, 5 * 60 * 1000)) {
+  // Троттлинг перебора паролей: по IP и по аккаунту (аудит 4.6). Второй
+  // счётчик — главный: адреса у перебора меняются, а цель остаётся одна.
+  if (
+    !allowAttempt(`login:${ip ?? "?"}`, 10, 5 * 60 * 1000) ||
+    !allowForEmail("login", email, 10, 15 * 60 * 1000)
+  ) {
     return NextResponse.json(
       { error: "Слишком много попыток входа — подождите пару минут" },
       { status: 429 }
