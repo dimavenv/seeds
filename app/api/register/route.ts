@@ -12,11 +12,7 @@ import {
   CODE_EMAILS_PER_ADDRESS,
   CODE_EMAIL_WINDOW_MS,
 } from "@/lib/email-code";
-import {
-  hasConsent,
-  recordConsent,
-  CONSENT_REQUIRED_MESSAGE,
-} from "@/lib/consent";
+import { consentError, recordConsent } from "@/lib/consent";
 import { pbAdmin } from "@/lib/pb/server";
 import {
   parseRegInput,
@@ -51,7 +47,8 @@ export async function POST(request: Request) {
   if (error) return bad(error);
   // Согласие на обработку ПД (152-ФЗ): проверяем на сервере, а не только
   // галочкой на форме — см. lib/consent.ts.
-  if (!hasConsent(body.consent)) return bad(CONSENT_REQUIRED_MESSAGE);
+  const consentProblem = consentError(body);
+  if (consentProblem) return bad(consentProblem);
 
   const ip = clientIp(request);
   const human = await verifyCaptcha(String(body.captchaToken ?? ""), ip, {

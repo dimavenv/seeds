@@ -8,11 +8,7 @@ import { encryptField } from "@/lib/crypto";
 import { notifyNewSupport } from "@/lib/admin-mail";
 import { verifyCaptcha } from "@/lib/captcha";
 import { allowAttempt } from "@/lib/email-code";
-import {
-  hasConsent,
-  recordConsent,
-  CONSENT_REQUIRED_MESSAGE,
-} from "@/lib/consent";
+import { consentError, recordConsent } from "@/lib/consent";
 
 // Привязка заявки к аккаунту — «по возможности» (не блокирует отправку).
 async function bestEffortUserId(): Promise<string | null> {
@@ -70,11 +66,9 @@ export async function POST(request: Request) {
     );
   }
   // Согласие на обработку ПД проверяем на сервере (152-ФЗ, lib/consent.ts).
-  if (!hasConsent(body.consent)) {
-    return NextResponse.json(
-      { error: CONSENT_REQUIRED_MESSAGE },
-      { status: 400 }
-    );
+  const consentProblem = consentError(body);
+  if (consentProblem) {
+    return NextResponse.json({ error: consentProblem }, { status: 400 });
   }
 
   const ip = clientIp(request);

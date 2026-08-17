@@ -35,24 +35,24 @@ function contentSecurityPolicy() {
     "https://smartcaptcha.yandexcloud.net",
     "https://captcha-api.yandex.ru",
   ];
-  const ga = ["https://www.googletagmanager.com", "https://www.google-analytics.com"];
   const robokassa = ["https://auth.robokassa.ru"];
 
   const directives = {
     "default-src": ["'self'"],
     // 'unsafe-inline' — см. пояснение выше; 'unsafe-eval' НЕ разрешаем.
-    "script-src": ["'self'", "'unsafe-inline'", ...metrika, ...captcha, ...ga],
+    "script-src": ["'self'", "'unsafe-inline'", ...metrika, ...captcha],
     // Tailwind и inline-стили компонентов, виджет капчи рисует свои стили.
     "style-src": ["'self'", "'unsafe-inline'"],
-    "img-src": ["'self'", "data:", "blob:", pbOrigin, ...metrika, ...ga],
+    "img-src": ["'self'", "data:", "blob:", pbOrigin, ...metrika],
     "font-src": ["'self'", "data:"],
     "connect-src": [
       "'self'",
       pbOrigin,
-      "https://suggestions.dadata.ru", // остался на случай прямых подсказок
+      // DaData здесь нет намеренно: подсказки адреса идут через собственный
+      // прокси /api/dadata (токен не должен попадать в браузер), значит
+      // напрямую браузер туда не ходит — и разрешать этот адрес незачем.
       ...metrika,
       ...captcha,
-      ...ga,
     ],
     // Капча рисует себя во фрейме; Метрика использует фрейм для синхронизации.
     "frame-src": ["'self'", ...captcha, ...metrika],

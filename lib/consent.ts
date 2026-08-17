@@ -32,6 +32,21 @@ export function hasConsent(value: unknown): boolean {
 export const CONSENT_REQUIRED_MESSAGE =
   "Подтвердите согласие на обработку персональных данных";
 
+// Страница, открытая ДО обновления сайта, поля consent не отправляет вовсе.
+// Для покупателя это выглядело бы издевательством: галочка стоит, а сервер
+// упорно просит её поставить — и так до перезагрузки, о которой никто не
+// догадается. Поэтому «поля нет» и «галочка снята» — разные случаи с разными
+// подсказками.
+export const CONSENT_STALE_PAGE_MESSAGE =
+  "Страница была открыта давно и устарела. Обновите её (F5) и оформите заказ заново — данные в форме сохранятся.";
+
+export function consentError(body: { consent?: unknown }): string | null {
+  if (hasConsent(body.consent)) return null;
+  return body.consent === undefined
+    ? CONSENT_STALE_PAGE_MESSAGE
+    : CONSENT_REQUIRED_MESSAGE;
+}
+
 // Запись согласия. Никогда не бросает: отказать покупателю в заказе из-за
 // сбоя журнала было бы хуже, чем потерять одну строку — но сбой обязан быть
 // виден в логе.

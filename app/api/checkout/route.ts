@@ -24,11 +24,7 @@ import {
   nextInvoiceId,
 } from "@/lib/order-flow";
 import { normalizePromoCode } from "@/lib/promo";
-import {
-  hasConsent,
-  recordConsent,
-  CONSENT_REQUIRED_MESSAGE,
-} from "@/lib/consent";
+import { consentError, recordConsent } from "@/lib/consent";
 import {
   attachPromoUseToOrder,
   checkPromo,
@@ -106,11 +102,9 @@ export async function POST(request: Request) {
   // Согласие на обработку ПД. На странице оформления галочка есть и снята по
   // умолчанию, но проверять её обязан сервер: иначе это украшение, а согласия
   // на самом деле нет ни у кого (152-ФЗ, см. lib/consent.ts).
-  if (!hasConsent(body.consent)) {
-    return NextResponse.json(
-      { error: CONSENT_REQUIRED_MESSAGE },
-      { status: 400 }
-    );
+  const consentProblem = consentError(body);
+  if (consentProblem) {
+    return NextResponse.json({ error: consentProblem }, { status: 400 });
   }
 
   // Ozon не возит в Крым, Калининград и на Камчатку — не даём оформить такой
