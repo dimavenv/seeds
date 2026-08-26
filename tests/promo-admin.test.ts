@@ -26,7 +26,7 @@ function fakePb(opts: {
     // Настоящий pb.filter подставляет параметры; для теста достаточно строки.
     filter: (expr: string) => expr,
     collection: (name: string) => ({
-      getFullList: async (q?: { filter?: string }) => {
+      getFullList: async () => {
         if (name === opts.failOn) throw new Error("база недоступна");
         if (name === "promos") return promos;
         if (name === "orders") return orders;

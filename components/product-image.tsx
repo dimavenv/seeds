@@ -32,7 +32,6 @@ export default function ProductImage({
   return (
     <picture>
       {srcSet && <source type="image/webp" srcSet={srcSet} sizes={sizes} />}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt}

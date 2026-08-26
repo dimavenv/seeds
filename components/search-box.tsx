@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { thumbUrl } from "@/lib/image-variants";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -27,6 +27,7 @@ export default function SearchBox({
   const [loading, setLoading] = useState(false);
   // Подсвеченная стрелками подсказка (-1 — ничего не выбрано).
   const [active, setActive] = useState(-1);
+  const listboxId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -50,14 +51,19 @@ export default function SearchBox({
   useEffect(() => {
     const query = q.trim();
     if (query.length < 2) {
+      abortRef.current?.abort();
+      abortRef.current = null;
       setItems([]);
       setOpen(false);
+      setLoading(false);
+      setActive(-1);
       return;
     }
     setLoading(true);
+    let ctrl: AbortController | null = null;
     const t = setTimeout(async () => {
       abortRef.current?.abort();
-      const ctrl = new AbortController();
+      ctrl = new AbortController();
       abortRef.current = ctrl;
       try {
         const res = await fetch(`/api/products?q=${encodeURIComponent(query)}`, {
@@ -73,7 +79,10 @@ export default function SearchBox({
         setLoading(false);
       }
     }, 250);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      ctrl?.abort();
+    };
   }, [q]);
 
   function submit(e: React.FormEvent) {
@@ -130,6 +139,10 @@ export default function SearchBox({
           role="combobox"
           aria-expanded={open && query.length >= 2}
           aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-activedescendant={
+            open && active >= 0 ? `${listboxId}-option-${active}` : undefined
+          }
         />
         <button
           type="submit"
@@ -144,9 +157,19 @@ export default function SearchBox({
         <div className="absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-xl">
           {items.length > 0 ? (
             <>
-              <ul role="listbox" aria-label="Подсказки" className="max-h-[60vh] overflow-auto py-1">
+              <ul
+                id={listboxId}
+                role="listbox"
+                aria-label="Подсказки"
+                className="max-h-[60vh] overflow-auto py-1"
+              >
                 {items.map((p, i) => (
-                  <li key={p.id} role="option" aria-selected={i === active}>
+                  <li
+                    id={`${listboxId}-option-${i}`}
+                    key={p.id}
+                    role="option"
+                    aria-selected={i === active}
+                  >
                     <button
                       type="button"
                       onClick={() => goto(p.slug)}

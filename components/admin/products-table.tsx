@@ -6,7 +6,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateProductInline, deleteProduct } from "@/app/admin/actions";
-import { formatPrice } from "@/lib/format";
 import { normalizeSearch } from "@/lib/search";
 import CategoryIcon from "@/components/category-icon";
 import type { Category, Product } from "@/lib/types";

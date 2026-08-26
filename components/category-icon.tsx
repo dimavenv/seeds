@@ -28,7 +28,6 @@ export default function CategoryIcon({
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       // alt пустой: рядом всегда идёт название категории, и озвучивать его

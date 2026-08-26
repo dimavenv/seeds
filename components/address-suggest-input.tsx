@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { suggestAddress, hasDadata, type DadataSuggestion } from "@/lib/dadata";
 
 export function FieldLabel({
@@ -51,6 +51,7 @@ export default function AddressSuggestInput({
   const [items, setItems] = useState<DadataSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const listboxId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -68,12 +69,17 @@ export default function AddressSuggestInput({
   // Запрос подсказок с дебаунсом.
   useEffect(() => {
     if (!hasDadata || value.trim().length < minChars) {
+      abortRef.current?.abort();
+      abortRef.current = null;
       setItems([]);
+      setActive(-1);
+      setOpen(false);
       return;
     }
+    let ctrl: AbortController | null = null;
     const t = setTimeout(async () => {
       abortRef.current?.abort();
-      const ctrl = new AbortController();
+      ctrl = new AbortController();
       abortRef.current = ctrl;
       const list = await suggestAddress({
         query: value,
@@ -87,7 +93,10 @@ export default function AddressSuggestInput({
       setItems(list);
       setActive(-1);
     }, 300);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      ctrl?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
@@ -131,14 +140,25 @@ export default function AddressSuggestInput({
         autoComplete="off"
         role="combobox"
         aria-expanded={open && items.length > 0}
+        aria-controls={listboxId}
+        aria-autocomplete="list"
+        aria-activedescendant={
+          open && active >= 0 ? `${listboxId}-option-${active}` : undefined
+        }
       />
       {hasDadata && open && items.length > 0 && (
         <ul
+          id={listboxId}
           role="listbox"
           className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-brand-200 bg-surface py-1 shadow-lg"
         >
           {items.map((s, i) => (
-            <li key={`${s.value}-${i}`} role="option" aria-selected={i === active}>
+            <li
+              id={`${listboxId}-option-${i}`}
+              key={`${s.value}-${i}`}
+              role="option"
+              aria-selected={i === active}
+            >
               <button
                 type="button"
                 onMouseEnter={() => setActive(i)}

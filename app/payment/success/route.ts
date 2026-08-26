@@ -57,7 +57,7 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
     const pb = await pbAdmin();
 
     const existing = await findOrderByInvoice(pb, invoice);
-    let number = existing ? existing.number : null;
+    const number = existing ? existing.number : null;
 
     // Оплату мог уже подтвердить Result URL — тогда просто ведём на заказ.
     if (existing && existing.paymentStatus !== "paid" && existing.paymentStatus !== "refunded") {

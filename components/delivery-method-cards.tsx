@@ -69,7 +69,6 @@ export default function DeliveryMethodCards({
                   {m.id === "post" ? "📮" : "📦"}
                 </span>
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={m.icon}
                   alt=""

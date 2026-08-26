@@ -18,7 +18,6 @@ export default function Logo({ className = "h-9 w-9" }: { className?: string }) 
       {lightFailed ? (
         <LeafIcon className={`${imgClass} dark:hidden`} />
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src="/logo.webp"
           alt="Tomat Semena"
@@ -31,7 +30,6 @@ export default function Logo({ className = "h-9 w-9" }: { className?: string }) 
       {darkFailed ? (
         <LeafIcon className={`${imgClass} hidden dark:block`} />
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src="/logo-dark.webp"
           alt="Tomat Semena"
