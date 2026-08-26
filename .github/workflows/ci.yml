@@ -30,6 +30,9 @@ jobs:
       - name: Проверка типов
         run: npx tsc --noEmit
 
+      - name: Линтер
+        run: npm run lint
+
       - name: Тесты
         run: npm test
 
