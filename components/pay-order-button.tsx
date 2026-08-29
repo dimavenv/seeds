@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import { useEffect, useRef, useState } from "react";
+import SmartCaptcha, {
+  captchaEnabled,
+  type SmartCaptchaHandle,
+} from "@/components/smart-captcha";
 import { submitPaymentForm, type PaymentResponse } from "@/lib/payment-form";
 import Spinner from "@/components/spinner";
 
@@ -11,8 +14,8 @@ import Spinner from "@/components/spinner";
 // поэтому оплатить его можно в любой момент: сервер выставляет новый счёт и
 // возвращает данные POST-формы для Robokassa.
 //
-// Капча появляется по клику, а не висит на странице: в истории заказов их может
-// быть несколько, и рисовать под каждым по виджету — некрасиво и лишний вес.
+// Капча создаётся только после клика: в истории заказов кнопок может быть много,
+// поэтому не создаём отдельный невидимый виджет заранее для каждого заказа.
 export default function PayOrderButton({
   orderId,
   invoice,
@@ -27,102 +30,81 @@ export default function PayOrderButton({
   label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [token, setToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [captchaReset, setCaptchaReset] = useState(0);
+  const captchaRef = useRef<SmartCaptchaHandle>(null);
 
-  async function pay() {
-    setError(null);
-    setLoading(true);
+  async function pay(captchaToken: string) {
     try {
       const res = await fetch("/api/payment/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, invoice, captchaToken: token }),
+        body: JSON.stringify({ orderId, invoice, captchaToken }),
       });
       const data = (await res.json().catch(() => ({}))) as PaymentResponse;
       if (!res.ok || !data.payment?.url || !data.payment?.fields) {
         setError(data.error ?? "Не удалось открыть оплату");
         setLoading(false);
-        // Токен капчи одноразовый — сбрасываем виджет для повторной попытки.
-        setToken("");
-        setCaptchaReset((n) => n + 1);
+        captchaRef.current?.reset();
         return;
       }
       submitPaymentForm(data.payment.url, data.payment.fields);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setLoading(false);
+      captchaRef.current?.reset();
     }
   }
 
-  // Капча выключена на сайте — платим сразу по клику.
-  if (!captchaEnabled) {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={pay}
-          disabled={loading}
-          className={className}
-        >
-          {loading ? "Открываем оплату…" : label}
-        </button>
-        {error && (
-          <p role="alert" className="alert-error mt-2 text-sm">
-            {error}
-          </p>
-        )}
-      </div>
-    );
+  function startPayment() {
+    setError(null);
+    setLoading(true);
+    if (!captchaEnabled) {
+      void pay("");
+    } else if (open) {
+      captchaRef.current?.execute();
+    } else {
+      setOpen(true);
+    }
   }
 
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className={className}>
-        {label}
-      </button>
-    );
+  useEffect(() => {
+    if (open) captchaRef.current?.execute();
+  }, [open]);
+
+  function captchaError(message: string) {
+    setError(message);
+    setLoading(false);
   }
 
   return (
-    <div className="animate-fade-up-sm rounded-2xl border border-brand-200 bg-surface p-4">
-      <p className="mb-3 text-sm font-semibold text-brand-700">
-        Подтвердите, что вы не робот
-      </p>
-      <SmartCaptcha onToken={setToken} resetSignal={captchaReset} />
+    <div>
+      {open && (
+        <SmartCaptcha
+          ref={captchaRef}
+          onToken={(token) => void pay(token)}
+          onError={captchaError}
+        />
+      )}
+      <button
+        type="button"
+        onClick={startPayment}
+        disabled={loading}
+        className={className}
+      >
+        {loading ? (
+          <span className="flex items-center gap-2">
+            <Spinner className="h-4 w-4" /> Открываем оплату…
+          </span>
+        ) : (
+          label
+        )}
+      </button>
       {error && (
-        <p role="alert" className="alert-error mt-3 text-sm">
+        <p role="alert" className="alert-error mt-2 text-sm">
           {error}
         </p>
       )}
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={pay}
-          disabled={loading || !token}
-          className={className}
-        >
-          {loading ? (
-            <span className="flex items-center gap-2">
-              <Spinner className="h-4 w-4" /> Открываем оплату…
-            </span>
-          ) : (
-            label
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            setError(null);
-          }}
-          className="text-sm text-brand-500 hover:text-brand-700"
-        >
-          Отмена
-        </button>
-      </div>
     </div>
   );
 }

@@ -24,7 +24,10 @@ import { localPhoneDigits, normalizePhone, type Profile } from "@/lib/profile";
 import { submitPaymentForm } from "@/lib/payment-form";
 import PhoneInput from "@/components/phone-input";
 import ConsentCheckbox from "@/components/consent-checkbox";
-import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import SmartCaptcha, {
+  captchaEnabled,
+  type SmartCaptchaHandle,
+} from "@/components/smart-captcha";
 import DadataAddress, {
   emptyAddress,
   type AddressValue,
@@ -95,8 +98,7 @@ export default function CheckoutPage() {
   const [pvzRegionKladr, setPvzRegionKladr] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [remember, setRemember] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState("");
-  const [captchaReset, setCaptchaReset] = useState(0);
+  const captchaRef = useRef<SmartCaptchaHandle>(null);
   // Стоимость доставки зависит от способа: Почтой России — бесплатно от
   // FREE_DELIVERY_FROM, Ozon — всегда DELIVERY_COST.
   const deliveryCost = deliveryCostFor(deliveryMethod, cartTotal);
@@ -219,8 +221,7 @@ export default function CheckoutPage() {
     };
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function placeOrder(captchaToken?: string) {
     setError(null);
 
     if (!consent) {
@@ -281,8 +282,9 @@ export default function CheckoutPage() {
         .join(", ");
     }
 
-    if (captchaEnabled && !captchaToken) {
-      setError("Подтвердите, что вы не робот");
+    if (captchaEnabled && captchaToken === undefined) {
+      setSubmitting(true);
+      captchaRef.current?.execute();
       return;
     }
 
@@ -303,7 +305,7 @@ export default function CheckoutPage() {
           items: cart.map((i) => ({ id: i.id, qty: i.qty })),
           // Только сам код: размер скидки сервер считает по своим правилам.
           promo_code: promo?.code ?? null,
-          captchaToken,
+          captchaToken: captchaToken ?? "",
           // Согласие на обработку ПД: сервер обязан его увидеть и записать
           // (152-ФЗ), поэтому оно едет вместе с заказом, а не остаётся
           // галочкой в браузере.
@@ -321,8 +323,7 @@ export default function CheckoutPage() {
         }
         setSubmitting(false);
         // Токен капчи одноразовый — сбрасываем виджет для повторной попытки.
-        setCaptchaToken("");
-        setCaptchaReset((n) => n + 1);
+        captchaRef.current?.reset();
         return;
       }
       // Состав заказа для цели «покупка». Саму цель засчитывает страница
@@ -372,9 +373,18 @@ export default function CheckoutPage() {
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setSubmitting(false);
-      setCaptchaToken("");
-      setCaptchaReset((n) => n + 1);
+      captchaRef.current?.reset();
     }
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    void placeOrder(captchaEnabled ? undefined : "");
+  }
+
+  function captchaError(message: string) {
+    setError(message);
+    setSubmitting(false);
   }
 
   // Пока корзина поднимается из localStorage — не мигаем пустой формой.
@@ -584,14 +594,17 @@ export default function CheckoutPage() {
             </label>
           </div>
 
-          <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+          <SmartCaptcha
+            ref={captchaRef}
+            onToken={(token) => void placeOrder(token)}
+            onError={captchaError}
+          />
 
           <button
             type="submit"
             disabled={
               submitting ||
               !consent ||
-              (captchaEnabled && !captchaToken) ||
               (deliveryMethod === "ozon" &&
                 (!pvz.trim() || Boolean(ozonRestrictedRegion(pvz))))
             }

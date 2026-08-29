@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import SmartCaptcha, {
+  captchaEnabled,
+  type SmartCaptchaHandle,
+} from "@/components/smart-captcha";
 
 // Сброс пароля в два шага, как и подтверждение почты при регистрации:
 // 1) почта + капча → на неё уходит 6-значный код, клиент получает «билет»;
@@ -12,8 +15,8 @@ import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
 // текст на экране написан так, чтобы не выдавать, есть ли аккаунт.
 export default function PasswordResetPage() {
   const [email, setEmail] = useState("");
-  const [captchaToken, setCaptchaToken] = useState("");
-  const [captchaReset, setCaptchaReset] = useState(0);
+  const captchaRef = useRef<SmartCaptchaHandle>(null);
+  const resendRequest = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -38,9 +41,7 @@ export default function PasswordResetPage() {
   }, [codeLeft]);
 
   // Запрос кода — он же повторная отправка (сервер сохраняет прежние коды).
-  async function requestCode(again = false) {
-    setError(null);
-    setLoading(true);
+  async function requestCode(captchaToken: string, again = false) {
     try {
       const res = await fetch("/api/password-reset", {
         method: "POST",
@@ -54,8 +55,7 @@ export default function PasswordResetPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Не удалось отправить код");
-        setCaptchaToken("");
-        setCaptchaReset((n) => n + 1);
+        captchaRef.current?.reset();
         setLoading(false);
         return;
       }
@@ -64,9 +64,31 @@ export default function PasswordResetPage() {
       setCodeLeft(Number(data.expiresIn) || 0);
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
+      captchaRef.current?.reset();
     }
     setLoading(false);
   }
+
+  function startCodeRequest(again = false) {
+    setError(null);
+    setLoading(true);
+    resendRequest.current = again;
+    if (captchaEnabled) captchaRef.current?.execute();
+    else void requestCode("", again);
+  }
+
+  function captchaError(message: string) {
+    setError(message);
+    setLoading(false);
+  }
+
+  const captcha = (
+    <SmartCaptcha
+      ref={captchaRef}
+      onToken={(token) => void requestCode(token, resendRequest.current)}
+      onError={captchaError}
+    />
+  );
 
   async function submitNewPassword(e: React.FormEvent) {
     e.preventDefault();
@@ -197,10 +219,11 @@ export default function PasswordResetPage() {
             </button>
           </form>
 
+          {captcha}
           <div className="mt-4 flex items-center justify-between text-sm">
             <button
               type="button"
-              onClick={() => requestCode(true)}
+              onClick={() => startCodeRequest(true)}
               disabled={resendIn > 0 || loading}
               className="font-semibold text-brand-600 hover:text-brand-800 disabled:cursor-default disabled:text-brand-400"
             >
@@ -237,11 +260,7 @@ export default function PasswordResetPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (captchaEnabled && !captchaToken) {
-              setError("Подтвердите, что вы не робот");
-              return;
-            }
-            void requestCode();
+            startCodeRequest();
           }}
           className="mt-6 space-y-4"
         >
@@ -259,7 +278,7 @@ export default function PasswordResetPage() {
             />
           </label>
 
-          <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+          {captcha}
 
           {error && (
             <p role="alert" className="alert-error">

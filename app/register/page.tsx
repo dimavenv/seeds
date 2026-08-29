@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { serverLogin } from "@/lib/pb/client";
-import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import SmartCaptcha, {
+  captchaEnabled,
+  type SmartCaptchaHandle,
+} from "@/components/smart-captcha";
 import AuthTabs from "@/components/auth-tabs";
 import OAuthButtons from "@/components/oauth-buttons";
 import ConsentCheckbox from "@/components/consent-checkbox";
@@ -12,7 +15,7 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRef = useRef<SmartCaptchaHandle>(null);
   // Согласие на обработку ПД. Снято по умолчанию — иначе это не согласие
   // (152-ФЗ); сервер его тоже проверяет и записывает.
   const [consent, setConsent] = useState(false);
@@ -51,20 +54,7 @@ export default function RegisterPage() {
     reachGoalThen(GOALS.signup, undefined, () => window.location.assign(to));
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    if (!consent) {
-      setError("Подтвердите согласие на обработку персональных данных");
-      return;
-    }
-    if (captchaEnabled && !captchaToken) {
-      setError("Подтвердите, что вы не робот");
-      return;
-    }
-    setLoading(true);
-
+  async function register(captchaToken: string) {
     try {
       // Шаг 1 — на сервере: проверка почты и капчи, отправка кода.
       const res = await fetch("/api/register", {
@@ -82,6 +72,7 @@ export default function RegisterPage() {
       if (!res.ok) {
         setError(data.error ?? "Не удалось зарегистрироваться");
         setLoading(false);
+        captchaRef.current?.reset();
         return;
       }
       if (data.needCode && data.ticket) {
@@ -97,7 +88,25 @@ export default function RegisterPage() {
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setLoading(false);
+      captchaRef.current?.reset();
     }
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!consent) {
+      setError("Подтвердите согласие на обработку персональных данных");
+      return;
+    }
+    setLoading(true);
+    if (captchaEnabled) captchaRef.current?.execute();
+    else void register("");
+  }
+
+  function captchaError(message: string) {
+    setError(message);
+    setLoading(false);
   }
 
   async function confirm(e: React.FormEvent) {
@@ -259,7 +268,11 @@ export default function RegisterPage() {
 
           <ConsentCheckbox checked={consent} onChange={setConsent} />
 
-          <SmartCaptcha onToken={setCaptchaToken} />
+          <SmartCaptcha
+            ref={captchaRef}
+            onToken={(token) => void register(token)}
+            onError={captchaError}
+          />
 
           {error && (
             <p role="alert" className="alert-error">{error}</p>

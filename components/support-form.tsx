@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import ConsentCheckbox from "@/components/consent-checkbox";
-import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import SmartCaptcha, {
+  captchaEnabled,
+  type SmartCaptchaHandle,
+} from "@/components/smart-captcha";
 import { GOALS, reachGoal } from "@/lib/metrika";
 
 export default function SupportForm() {
@@ -13,36 +16,17 @@ export default function SupportForm() {
     message: "",
   });
   const [consent, setConsent] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState("");
-  const [captchaReset, setCaptchaReset] = useState(0);
+  const captchaRef = useRef<SmartCaptchaHandle>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-
-  // Токен капчи одноразовый: после неудачной отправки сбрасываем виджет,
-  // иначе повторная попытка невозможна без перезагрузки страницы.
-  function resetCaptcha() {
-    setCaptchaToken("");
-    setCaptchaReset((n) => n + 1);
-  }
 
   function update(field: keyof typeof form) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [field]: e.target.value }));
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!consent) {
-      setError("Подтвердите согласие на обработку персональных данных");
-      return;
-    }
-    if (captchaEnabled && !captchaToken) {
-      setError("Подтвердите, что вы не робот");
-      return;
-    }
-    setSubmitting(true);
+  async function send(captchaToken: string) {
     try {
       const res = await fetch("/api/support", {
         method: "POST",
@@ -53,7 +37,7 @@ export default function SupportForm() {
       if (!res.ok) {
         setError(data.error ?? "Не удалось отправить заявку");
         setSubmitting(false);
-        resetCaptcha();
+        captchaRef.current?.reset();
         return;
       }
       reachGoal(GOALS.supportRequest, { subject: form.subject });
@@ -61,8 +45,25 @@ export default function SupportForm() {
     } catch {
       setError("Сеть недоступна. Попробуйте ещё раз.");
       setSubmitting(false);
-      resetCaptcha();
+      captchaRef.current?.reset();
     }
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!consent) {
+      setError("Подтвердите согласие на обработку персональных данных");
+      return;
+    }
+    setSubmitting(true);
+    if (captchaEnabled) captchaRef.current?.execute();
+    else void send("");
+  }
+
+  function captchaError(message: string) {
+    setError(message);
+    setSubmitting(false);
   }
 
   if (done) {
@@ -109,7 +110,11 @@ export default function SupportForm() {
         <textarea required value={form.message} onChange={update("message")} className="input min-h-32" />
       </label>
       <ConsentCheckbox checked={consent} onChange={setConsent} />
-      <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+      <SmartCaptcha
+        ref={captchaRef}
+        onToken={(token) => void send(token)}
+        onError={captchaError}
+      />
       {error && (
         <p role="alert" className="alert-error">
           {error}
@@ -117,7 +122,7 @@ export default function SupportForm() {
       )}
       <button
         type="submit"
-        disabled={submitting || !consent || (captchaEnabled && !captchaToken)}
+        disabled={submitting || !consent}
         className="btn-accent w-full sm:w-auto"
       >
         {submitting ? "Отправляем…" : "Отправить вопрос"}

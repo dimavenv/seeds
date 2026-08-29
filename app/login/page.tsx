@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { serverLogin } from "@/lib/pb/client";
-import SmartCaptcha, { captchaEnabled } from "@/components/smart-captcha";
+import SmartCaptcha, {
+  captchaEnabled,
+  type SmartCaptchaHandle,
+} from "@/components/smart-captcha";
 import AuthTabs from "@/components/auth-tabs";
 import OAuthButtons from "@/components/oauth-buttons";
 import { GOALS, reachGoalThen } from "@/lib/metrika";
@@ -24,8 +27,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
-  const [captchaToken, setCaptchaToken] = useState("");
-  const [captchaReset, setCaptchaReset] = useState(0);
+  const captchaRef = useRef<SmartCaptchaHandle>(null);
   const [registered, setRegistered] = useState(false);
 
   // Пришли после регистрации (когда авто-вход не прошёл из-за капчи) или с
@@ -66,22 +68,7 @@ export default function LoginPage() {
       );
   }, []);
 
-  // Сброс одноразовой капчи после неудачной попытки входа.
-  function resetCaptcha() {
-    setCaptchaToken("");
-    setCaptchaReset((n) => n + 1);
-  }
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    if (captchaEnabled && !captchaToken) {
-      setError("Подтвердите, что вы не робот");
-      return;
-    }
-    setLoading(true);
-
+  async function login(captchaToken: string) {
     // Защита от вечного спиннера.
     const safety = setTimeout(() => {
       setError(
@@ -96,7 +83,7 @@ export default function LoginPage() {
     if (!result.ok) {
       setError(result.error);
       setLoading(false);
-      resetCaptcha();
+      captchaRef.current?.reset();
       return;
     }
     // Жёсткий переход — надёжнее обновляет сессию. Цель успеваем отправить до
@@ -104,6 +91,19 @@ export default function LoginPage() {
     reachGoalThen(GOALS.login, undefined, () =>
       window.location.assign("/account")
     );
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    if (captchaEnabled) captchaRef.current?.execute();
+    else void login("");
+  }
+
+  function captchaError(message: string) {
+    setError(message);
+    setLoading(false);
   }
 
   const dbDown = health && !health.ok;
@@ -151,7 +151,11 @@ export default function LoginPage() {
             </span>
             <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" />
           </label>
-          <SmartCaptcha onToken={setCaptchaToken} resetSignal={captchaReset} />
+          <SmartCaptcha
+            ref={captchaRef}
+            onToken={(token) => void login(token)}
+            onError={captchaError}
+          />
 
           {error && (
             <p role="alert" className="alert-error">
@@ -160,7 +164,7 @@ export default function LoginPage() {
           )}
           <button
             type="submit"
-            disabled={loading || (captchaEnabled && !captchaToken)}
+            disabled={loading}
             className="btn-primary w-full"
           >
             {loading ? "Входим…" : "Войти"}

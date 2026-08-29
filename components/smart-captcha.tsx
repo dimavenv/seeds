@@ -1,156 +1,218 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from "react";
 
 const SITE_KEY = process.env.NEXT_PUBLIC_SMARTCAPTCHA_SITE_KEY;
+const SCRIPT_ID = "smartcaptcha-script";
+const SCRIPT_READY_EVENT = "smartcaptcha-script-ready";
+const SCRIPT_ERROR_EVENT = "smartcaptcha-script-error";
 
 declare global {
   interface Window {
     smartCaptcha?: {
       render: (container: HTMLElement, options: Record<string, unknown>) => number;
+      execute: (id?: number) => void;
       reset: (id?: number) => void;
       destroy: (id: number) => void;
+      subscribe: (
+        id: number,
+        event:
+          | "network-error"
+          | "javascript-error"
+          | "token-expired",
+        callback: () => void
+      ) => () => void;
     };
+    __smartCaptchaOnload?: () => void;
   }
 }
 
-// Тема виджета берётся с сайта: тёмная, если на <html> висит класс dark
-// (его ставит переключатель темы). SmartCaptcha сам тему не переключает —
-// параметр передаётся при отрисовке, а при смене темы виджет перерисовываем.
-function siteTheme(): "light" | "dark" {
-  return typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark")
-    ? "dark"
-    : "light";
-}
+export type SmartCaptchaHandle = {
+  execute: () => void;
+  reset: () => void;
+};
 
-// Виджет Yandex SmartCaptcha. Если ключ не задан — ничего не рендерит и не
-// мешает форме (капча просто выключена). resetSignal: при изменении значения
-// виджет сбрасывается, а токен обнуляется — нужно после неудачной отправки
-// формы (токен одноразовый), чтобы пользователь мог пройти проверку заново.
-export default function SmartCaptcha({
-  onToken,
-  resetSignal,
-}: {
+type Props = {
   onToken: (token: string) => void;
-  resetSignal?: number;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  // Обёртка, по ширине которой виджет вписывается на узком экране.
-  const wrapRef = useRef<HTMLDivElement>(null);
+  onError?: (message: string) => void;
+};
+
+// Невидимая SmartCaptcha запускается только через execute(), обычно после
+// submit формы. Если запрос выглядит обычным, пользователь ничего не увидит;
+// подозрительному запросу Яндекс покажет задание.
+const SmartCaptcha = forwardRef<SmartCaptchaHandle, Props>(function SmartCaptcha(
+  { onToken, onError },
+  forwardedRef
+) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef<number | null>(null);
-  const currentTheme = useRef<"light" | "dark">("light");
-  const cb = useRef(onToken);
-  cb.current = onToken;
+  const pendingExecute = useRef(false);
+  const awaitingToken = useRef(false);
+  const scriptLoadFailed = useRef(false);
+  const unsubscribe = useRef<Array<() => void>>([]);
+  const tokenCallback = useRef(onToken);
+  const errorCallback = useRef(onError);
+  tokenCallback.current = onToken;
+  errorCallback.current = onError;
+
+  function resetWidget() {
+    pendingExecute.current = false;
+    awaitingToken.current = false;
+    if (widgetId.current !== null && window.smartCaptcha) {
+      window.smartCaptcha.reset(widgetId.current);
+    }
+  }
+
+  function clearSubscriptions() {
+    for (const stop of unsubscribe.current) stop();
+    unsubscribe.current = [];
+  }
+
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      execute() {
+        awaitingToken.current = true;
+        if (scriptLoadFailed.current) {
+          awaitingToken.current = false;
+          errorCallback.current?.(
+            "Не удалось загрузить проверку от роботов. Обновите страницу и попробуйте ещё раз."
+          );
+          return;
+        }
+        if (widgetId.current !== null && window.smartCaptcha) {
+          window.smartCaptcha.execute(widgetId.current);
+        } else {
+          // Пользователь может нажать submit раньше, чем загрузился скрипт.
+          // Запускаем проверку сразу после отрисовки виджета.
+          pendingExecute.current = true;
+        }
+      },
+      reset: resetWidget,
+    }),
+    []
+  );
 
   useEffect(() => {
     if (!SITE_KEY) return;
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function reportError() {
+      const active = awaitingToken.current || pendingExecute.current;
+      pendingExecute.current = false;
+      awaitingToken.current = false;
+      if (active) {
+        errorCallback.current?.(
+          "Не удалось загрузить проверку от роботов. Обновите страницу и попробуйте ещё раз."
+        );
+      }
+    }
+
+    function reportExpired() {
+      const active = awaitingToken.current || pendingExecute.current;
+      pendingExecute.current = false;
+      awaitingToken.current = false;
+      if (active) {
+        errorCallback.current?.(
+          "Время проверки истекло. Нажмите кнопку ещё раз."
+        );
+      }
+    }
+
+    function reportScriptError() {
+      scriptLoadFailed.current = true;
+      reportError();
+    }
 
     function renderWidget() {
-      if (cancelled || !window.smartCaptcha || !ref.current) return;
-      currentTheme.current = siteTheme();
-      widgetId.current = window.smartCaptcha.render(ref.current, {
+      if (cancelled || !window.smartCaptcha || !containerRef.current) return;
+      widgetId.current = window.smartCaptcha.render(containerRef.current, {
         sitekey: SITE_KEY,
+        invisible: true,
         hl: "ru",
-        theme: currentTheme.current,
-        callback: (t: string) => cb.current(t),
+        // Не скрываем обязательное уведомление SmartCaptcha об обработке данных.
+        hideShield: false,
+        shieldPosition: "bottom-right",
+        callback: (token: string) => {
+          if (
+            awaitingToken.current &&
+            typeof token === "string" &&
+            token.length > 0
+          ) {
+            awaitingToken.current = false;
+            tokenCallback.current(token);
+          }
+        },
       });
+      unsubscribe.current = [
+        window.smartCaptcha.subscribe(
+          widgetId.current,
+          "network-error",
+          reportError
+        ),
+        window.smartCaptcha.subscribe(
+          widgetId.current,
+          "javascript-error",
+          reportError
+        ),
+        window.smartCaptcha.subscribe(
+          widgetId.current,
+          "token-expired",
+          reportExpired
+        ),
+      ];
+      if (pendingExecute.current) {
+        pendingExecute.current = false;
+        window.smartCaptcha.execute(widgetId.current);
+      }
     }
 
     function waitAndRender() {
       if (cancelled || widgetId.current !== null) return;
-      if (window.smartCaptcha && ref.current) renderWidget();
-      else setTimeout(waitAndRender, 200);
+      if (window.smartCaptcha && containerRef.current) renderWidget();
+      else retryTimer = setTimeout(waitAndRender, 200);
     }
 
-    // Перерисовать виджет при смене темы сайта (класс dark на <html>).
-    const observer = new MutationObserver(() => {
-      if (widgetId.current === null || !window.smartCaptcha) return;
-      const next = siteTheme();
-      if (next === currentTheme.current) return;
-      cb.current(""); // тема сменилась — сбрасываем прошлый токен
-      window.smartCaptcha.destroy(widgetId.current);
-      widgetId.current = null;
-      renderWidget();
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
+    window.addEventListener(SCRIPT_READY_EVENT, waitAndRender);
+    window.addEventListener(SCRIPT_ERROR_EVENT, reportScriptError);
 
-    if (!document.getElementById("smartcaptcha-script")) {
-      const s = document.createElement("script");
-      s.id = "smartcaptcha-script";
-      s.src = "https://smartcaptcha.yandexcloud.net/captcha.js";
-      s.defer = true;
-      document.head.appendChild(s);
+    if (!document.getElementById(SCRIPT_ID)) {
+      window.__smartCaptchaOnload = () =>
+        window.dispatchEvent(new Event(SCRIPT_READY_EVENT));
+      const script = document.createElement("script");
+      script.id = SCRIPT_ID;
+      script.src =
+        "https://smartcaptcha.cloud.yandex.ru/captcha.js?render=onload&onload=__smartCaptchaOnload";
+      script.defer = true;
+      script.onerror = () => window.dispatchEvent(new Event(SCRIPT_ERROR_EVENT));
+      document.head.appendChild(script);
     }
     waitAndRender();
 
     return () => {
       cancelled = true;
-      observer.disconnect();
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener(SCRIPT_READY_EVENT, waitAndRender);
+      window.removeEventListener(SCRIPT_ERROR_EVENT, reportScriptError);
       if (widgetId.current !== null && window.smartCaptcha) {
+        clearSubscriptions();
         window.smartCaptcha.destroy(widgetId.current);
         widgetId.current = null;
       }
     };
   }, []);
 
-  // Сброс виджета по сигналу извне (после неудачной отправки формы).
-  useEffect(() => {
-    if (resetSignal === undefined || resetSignal === 0) return;
-    if (widgetId.current !== null && window.smartCaptcha) {
-      window.smartCaptcha.reset(widgetId.current);
-      cb.current(""); // прошлый одноразовый токен больше не действителен
-    }
-  }, [resetSignal]);
-
-  // Виджет SmartCaptcha имеет ФИКСИРОВАННУЮ ширину (302 px) — своей вёрстке он
-  // не подчиняется. На телефоне внутри карточки с полями места меньше, и он
-  // вылезал за её край. Ужимаем его целиком по доступной ширине: сам виджет
-  // остаётся кликабельным и читаемым, просто чуть меньше.
-  //
-  // Масштаб считаем в JS, а не в CSS: чистым CSS «вписать по ширине» нельзя —
-  // scale() требует безразмерное число, а поделить одну длину на другую в calc()
-  // не получится. ResizeObserver держит масштаб верным при поворотах экрана и
-  // когда виджет дорисовывается (он приезжает асинхронно).
-  useEffect(() => {
-    const wrap = wrapRef.current;
-    const widget = ref.current;
-    if (!SITE_KEY || !wrap || !widget) return;
-
-    const fit = () => {
-      const available = wrap.clientWidth;
-      // offsetWidth/offsetHeight — размеры ДО трансформации, поэтому пересчёт
-      // не зацикливается сам на себе.
-      const natural = widget.offsetWidth || 302;
-      const scale = Math.min(1, available / natural);
-      widget.style.transformOrigin = "left top";
-      widget.style.transform = scale < 1 ? `scale(${scale})` : "";
-      // Высоту обёртки подгоняем под ужатый виджет, иначе под ним осталась бы
-      // пустая полоса от исходной высоты.
-      wrap.style.height =
-        scale < 1 && widget.offsetHeight
-          ? `${Math.ceil(widget.offsetHeight * scale)}px`
-          : "";
-    };
-
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(wrap);
-    observer.observe(widget);
-    return () => observer.disconnect();
-  }, []);
-
   if (!SITE_KEY) return null;
-  return (
-    <div ref={wrapRef} className="mt-1 w-full overflow-hidden">
-      <div ref={ref} />
-    </div>
-  );
-}
+  return <div ref={containerRef} />;
+});
+
+export default SmartCaptcha;
 
 // Включена ли капча на клиенте (задан публичный ключ).
 export const captchaEnabled = Boolean(SITE_KEY);

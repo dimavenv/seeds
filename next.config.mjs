@@ -32,6 +32,7 @@ function contentSecurityPolicy() {
 
   const metrika = ["https://mc.yandex.ru", "https://mc.yandex.com"];
   const captcha = [
+    "https://smartcaptcha.cloud.yandex.ru",
     "https://smartcaptcha.yandexcloud.net",
     "https://captcha-api.yandex.ru",
   ];

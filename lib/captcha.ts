@@ -27,7 +27,7 @@ export async function verifyCaptcha(
     const params = new URLSearchParams({ secret, token });
     if (userIp) params.set("ip", userIp);
     const res = await fetch(
-      "https://smartcaptcha.yandexcloud.net/validate",
+      "https://smartcaptcha.cloud.yandex.ru/validate",
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
