@@ -7,19 +7,9 @@ import SmartCaptcha, {
   captchaEnabled,
   type SmartCaptchaHandle,
 } from "@/components/smart-captcha";
-import AuthTabs from "@/components/auth-tabs";
-import OAuthButtons from "@/components/oauth-buttons";
 import { GOALS, reachGoalThen } from "@/lib/metrika";
 
 type Health = { ok: boolean; configured: boolean; ms?: number; error?: string };
-
-// Названия сервисов для сообщений об ошибке входа. Дублируют KNOWN из
-// lib/oauth.ts, потому что тот модуль серверный ("server-only") — тащить его в
-// браузер ради двух строк незачем.
-const PROVIDER_TITLES: Record<string, string> = {
-  yandex: "Яндекс ID",
-  vkid: "VK ID",
-};
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -28,34 +18,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
   const captchaRef = useRef<SmartCaptchaHandle>(null);
-  const [registered, setRegistered] = useState(false);
+  const [orderOnly, setOrderOnly] = useState(false);
 
-  // Пришли после регистрации (когда авто-вход не прошёл из-за капчи) или с
-  // неудачного входа через Яндекс ID.
+  // Старые ссылки на удалённую страницу регистрации приводят сюда. Объясняем,
+  // где теперь появляется аккаунт, вместо молчаливого редиректа.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    setRegistered(params.has("registered"));
-    const oauth = params.get("oauth");
-    if (!oauth) return;
-    // Сервис называем по имени: «не получилось войти» без уточнения, куда
-    // именно, только путает.
-    const who = PROVIDER_TITLES[params.get("p") ?? ""] ?? "внешний сервис";
-    if (oauth === "denied") {
-      setError(`Вход через ${who} отменён. Можно войти по паролю.`);
-    } else if (oauth === "noemail") {
-      setError(
-        `${who} не передал вашу почту — без неё аккаунт не создать: на почту приходят чек и письма о заказе. Зарегистрируйтесь по почте или добавьте её в профиль сервиса.`
-      );
-    } else if (oauth === "unavailable" || oauth === "misconfigured") {
-      // misconfigured — приложению не выданы нужные доступы. Покупателю об
-      // этом знать нечего, точная причина уходит в pm2 logs seeds.
-      setError(`Вход через ${who} сейчас недоступен. Войдите по паролю.`);
-    } else {
-      setError(
-        `Не получилось войти через ${who} — попробуйте ещё раз или войдите по паролю.`
-      );
-    }
+    setOrderOnly(params.has("first-order"));
   }, []);
 
   // Проверка доступности базы при загрузке страницы.
@@ -111,15 +81,16 @@ export default function LoginPage() {
   return (
     <div className="container-page py-16">
       <div className="card mx-auto max-w-md p-6 sm:p-8">
-        <AuthTabs active="login" />
-        <h1 className="text-2xl font-bold text-brand-800">С возвращением!</h1>
+        <h1 className="text-2xl font-bold text-brand-800">Вход в кабинет</h1>
         <p className="mt-1 text-sm text-brand-500">
           Войдите, чтобы видеть свои заказы, избранное и данные для оформления.
         </p>
 
-        {registered && (
+        {orderOnly && (
           <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
-            Регистрация завершена — войдите с вашими email и паролем.
+            Отдельной регистрации нет. Кабинет создаётся автоматически при
+            первом заказе (при онлайн-оплате — после оплаты), а пароль приходит
+            на указанную при оформлении почту.
           </div>
         )}
 
@@ -170,8 +141,6 @@ export default function LoginPage() {
             {loading ? "Входим…" : "Войти"}
           </button>
         </form>
-
-        <OAuthButtons action="login" />
       </div>
     </div>
   );

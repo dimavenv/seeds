@@ -29,7 +29,6 @@ export const GOALS = {
   purchase: "purchase",
   paymentFailed: "payment_failed",
   promoApplied: "promo_applied",
-  signup: "signup",
   login: "login",
   supportRequest: "support_request",
   reviewSubmit: "review_submit",
@@ -49,7 +48,6 @@ export const GOAL_DESCRIPTIONS: Record<Goal, string> = {
   purchase: "Заказ оформлен (главная цель, с ценностью в ₽)",
   payment_failed: "Оплата не прошла",
   promo_applied: "Применён промокод",
-  signup: "Регистрация подтверждена",
   login: "Вход в аккаунт",
   support_request: "Отправлена заявка в поддержку",
   review_submit: "Отправлен отзыв о магазине",
@@ -79,7 +77,7 @@ export function reachGoal(goal: Goal, params?: Record<string, unknown>): void {
 }
 
 // Цель + переход на другую страницу. Жёсткий переход (window.location.assign)
-// обрывает незавершённые запросы, поэтому вход и регистрация ждут ответа
+// обрывает незавершённые запросы, поэтому вход ждёт ответа
 // счётчика — но не дольше MAX_GOAL_WAIT_MS: подвиснуть на аналитике страница
 // входа не имеет права. Продолжение вызывается ровно один раз (что бы ни
 // сработало первым — колбэк Метрики или таймаут).

@@ -2,7 +2,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
-// Отправка писем магазина (код подтверждения почты, статусы заказов).
+// Отправка писем магазина (доступ к кабинету, коды сброса, статусы заказов).
 // Настройки — в .env.production (см. SETUP-MAIL-RU.md):
 //   SMTP_HOST     — smtp.yandex.ru / smtp.mail.ru / свой
 //   SMTP_PORT     — 465 (SSL, по умолчанию) или 587 (STARTTLS)
@@ -10,7 +10,7 @@ import type { Transporter } from "nodemailer";
 //   SMTP_PASSWORD — пароль приложения (НЕ пароль от почты)
 //   MAIL_FROM     — «Томат Семена <info@tomatsemena.ru>» (по умолчанию SMTP_USER)
 // Пока переменные не заданы — письма просто не отправляются (isMailConfigured()
-// === false), сайт работает как раньше: регистрация без кода, заказы без писем.
+// === false), заказы оформляются без писем, а гостевой кабинет не создаётся.
 
 export function isMailConfigured(): boolean {
   return Boolean(
@@ -51,7 +51,7 @@ function addressOf(from: string): string {
 }
 
 // Отправить письмо. Никогда не бросает: ошибки уходят в лог (pm2 logs seeds,
-// строки [mail]) — почта не должна ломать оформление заказа или регистрацию.
+// строки [mail]) — почта не должна ломать оформление заказа.
 // opts.auth — отправить с ДРУГОГО ящика того же SMTP-хоста (свой логин/пароль);
 // opts.from — заголовок «От кого» (адрес должен принадлежать ящику отправки);
 // opts.replyTo — куда пойдёт «Ответить».

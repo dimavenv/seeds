@@ -496,6 +496,10 @@ export default function CheckoutPage() {
                   onChange={update("email")}
                   className="input"
                 />
+                <span className="mt-1 block text-xs text-brand-500">
+                  После первого заказа на эту почту придут данные для входа в
+                  личный кабинет.
+                </span>
               </label>
             </div>
           </fieldset>

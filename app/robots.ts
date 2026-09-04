@@ -26,7 +26,6 @@ export default function robots(): MetadataRoute.Robots {
         "/payment/success",
         "/payment/fail",
         "/login",
-        "/register",
         "/password-reset",
         "/*?sort=",
         "/*?min=",

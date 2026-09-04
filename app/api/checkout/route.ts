@@ -25,6 +25,7 @@ import {
 } from "@/lib/order-flow";
 import { normalizePromoCode } from "@/lib/promo";
 import { consentError, recordConsent } from "@/lib/consent";
+import { ensureAccountForOrder } from "@/lib/auto-account";
 import {
   attachPromoUseToOrder,
   checkPromo,
@@ -450,6 +451,20 @@ export async function POST(request: Request) {
       purpose: "order",
       userId,
       reference: `заказ №${order.number}`,
+    });
+
+    // При оплате при получении заказ уже принят окончательно — это и есть
+    // первый заказ покупателя. Создаём кабинет сейчас. Для онлайн-оплаты тот
+    // же вызов делается только после подтверждения платежа в markOrderPaid,
+    // чтобы брошенная платёжная попытка не создавала аккаунт.
+    void ensureAccountForOrder(pb, {
+      orderId: order.id,
+      email: email.trim(),
+      customerName: customer_name.trim(),
+      phone: phone.trim(),
+      alreadyLinked: Boolean(userId),
+    }).catch((e) => {
+      console.error(`[account] аккаунт по заказу №${order.number} не создан:`, e);
     });
 
     // Шлём «заказ принят».

@@ -15,7 +15,7 @@ import Spinner from "@/components/spinner";
 //
 // Проверяет код СЕРВЕР (POST /api/promo): здесь ни списка кодов, ни правил
 // скидки нет. Гостю сервер отвечает «войдите в аккаунт» — эту подсказку и
-// показываем, со ссылками на вход и регистрацию.
+// показываем со ссылкой на вход.
 
 type ApplyState = { error: string | null; needAuth: boolean };
 
@@ -162,10 +162,6 @@ export default function PromoField() {
               {" "}
               <Link href="/login" className="font-semibold underline">
                 Войти
-              </Link>{" "}
-              ·{" "}
-              <Link href="/register" className="font-semibold underline">
-                Зарегистрироваться
               </Link>
             </>
           )}

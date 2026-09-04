@@ -13,7 +13,7 @@ import { clientIpFromHeaders } from "@/lib/client-ip";
 //
 // Сама галочка при этом обязана быть снятой по умолчанию и проверяться на
 // сервере — иначе её легко «не заметить» в клиенте (см. /api/checkout,
-// /api/support, /api/register).
+// /api/support).
 
 // Версия политики. Меняется ВМЕСТЕ с текстом на /privacy — по ней потом видно,
 // на что именно соглашался покупатель. Формат — дата редакции.
@@ -21,7 +21,7 @@ export const PRIVACY_POLICY_VERSION = "2026-08-05";
 
 // Для чего собрано согласие. Пригодится при запросе на удаление данных:
 // видно, где именно человек оставил след.
-export type ConsentPurpose = "order" | "support" | "register";
+export type ConsentPurpose = "order" | "support";
 
 export function hasConsent(value: unknown): boolean {
   // Принимаем только явное «да». Отсутствие поля — это отсутствие согласия,

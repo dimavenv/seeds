@@ -100,7 +100,7 @@ export default async function AdminAccount({
               : "задан покупателем"
           )}
           {row(
-            "Регистрация",
+            "Аккаунт создан",
             account.createdAt ? formatDate(account.createdAt) : "—"
           )}
           {row(

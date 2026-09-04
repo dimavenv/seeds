@@ -30,6 +30,3 @@ export function isRussianEmail(email: string): boolean {
   if (RU_MAIL_DOMAINS.has(domain)) return true;
   return RU_TLDS.some((tld) => domain === tld.slice(1) || domain.endsWith(tld));
 }
-
-export const RU_EMAIL_HINT =
-  "Регистрация доступна только с российской почты (например, на Яндекс, Mail.ru, Rambler или в доменах .ru / .рф).";
