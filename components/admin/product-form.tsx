@@ -136,7 +136,14 @@ export default function ProductForm({
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-brand-700">Остаток, шт.</span>
-          <input name="stock" type="number" min={0} defaultValue={product?.stock ?? 0} className="input" />
+          <input
+            name="stock"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            defaultValue={product?.stock ?? 0}
+            className="input"
+          />
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-brand-700">Семян в пакетике</span>
@@ -163,7 +170,11 @@ export default function ProductForm({
 
       <label className="block">
         <span className="mb-1 block text-sm font-semibold text-brand-700">Описание</span>
-        <textarea name="description" defaultValue={product?.description ?? ""} className="input min-h-28" />
+        <textarea
+          name="description"
+          defaultValue={product?.description ?? ""}
+          className="input min-h-64"
+        />
       </label>
 
       <div>
