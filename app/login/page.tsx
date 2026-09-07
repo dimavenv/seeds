@@ -18,16 +18,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
   const captchaRef = useRef<SmartCaptchaHandle>(null);
-  const [orderOnly, setOrderOnly] = useState(false);
-
-  // Старые ссылки на удалённую страницу регистрации приводят сюда. Объясняем,
-  // где теперь появляется аккаунт, вместо молчаливого редиректа.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    setOrderOnly(params.has("first-order"));
-  }, []);
-
   // Проверка доступности базы при загрузке страницы.
   useEffect(() => {
     fetch("/api/health")
@@ -86,13 +76,11 @@ export default function LoginPage() {
           Войдите, чтобы видеть свои заказы, избранное и данные для оформления.
         </p>
 
-        {orderOnly && (
-          <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
-            Регистрация происходит при оформлении первого заказа. Кабинет
-            создаётся автоматически (при онлайн-оплате — после оплаты), а пароль
-            приходит на указанную при оформлении почту.
-          </div>
-        )}
+        <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
+          Регистрация происходит автоматически при первом заказе. При
+          онлайн-оплате кабинет создаётся после оплаты, а пароль приходит на
+          указанную при оформлении почту.
+        </div>
 
         {dbDown && (
           <div className="mt-4 rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-700">

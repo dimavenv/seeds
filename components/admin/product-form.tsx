@@ -132,7 +132,15 @@ export default function ProductForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-brand-700">Цена, ₽ *</span>
-          <input name="price" type="number" min={0} step="0.01" required defaultValue={product?.price} className="input" />
+          <input
+            name="price"
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]+([.,][0-9]{1,2})?"
+            required
+            defaultValue={product?.price}
+            className="input"
+          />
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-brand-700">Остаток, шт.</span>
@@ -147,7 +155,14 @@ export default function ProductForm({
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-brand-700">Семян в пакетике</span>
-          <input name="seeds_per_pack" type="number" min={0} defaultValue={product?.seeds_per_pack ?? ""} className="input" />
+          <input
+            name="seeds_per_pack"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            defaultValue={product?.seeds_per_pack ?? ""}
+            className="input"
+          />
         </label>
       </div>
 
