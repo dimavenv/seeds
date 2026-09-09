@@ -73,14 +73,11 @@ export default function LoginPage() {
       <div className="card mx-auto max-w-md p-6 sm:p-8">
         <h1 className="text-2xl font-bold text-brand-800">Вход в кабинет</h1>
         <p className="mt-1 text-sm text-brand-500">
-          Войдите, чтобы видеть свои заказы, избранное и данные для оформления.
-        </p>
-
-        <div className="mt-4 rounded-xl bg-brand-100 px-4 py-3 text-sm text-brand-700">
           Регистрация происходит автоматически при первом заказе. При
           онлайн-оплате кабинет создаётся после оплаты, а пароль приходит на
           указанную при оформлении почту.
-        </div>
+        </p>
+
 
         {dbDown && (
           <div className="mt-4 rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-700">
