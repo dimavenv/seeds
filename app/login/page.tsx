@@ -72,10 +72,9 @@ export default function LoginPage() {
     <div className="container-page py-16">
       <div className="card mx-auto max-w-md p-6 sm:p-8">
         <h1 className="text-2xl font-bold text-brand-800">Вход в кабинет</h1>
-        <p className="mt-1 text-sm text-brand-500">
+        <p className="mt-3 rounded-xl bg-brand-100 px-4 py-3 text-base font-bold leading-relaxed text-brand-800 sm:text-lg">
           Регистрация происходит автоматически при первом заказе
         </p>
-
 
         {dbDown && (
           <div className="mt-4 rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-700">

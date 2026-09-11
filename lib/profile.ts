@@ -80,10 +80,15 @@ export function formatPhone(raw: string): string {
 
 // Цифры российского номера без кода страны.
 export function localPhoneDigits(value: string): string {
-  let d = String(value ?? "").replace(/\D/g, "");
-  // «+7…», «7…», «8…» — всё это код страны, в поле его не показываем. Пока
-  // цифр не больше десяти, первая восьмёрка — часть номера, а не код.
-  if (d.length > 10 && (d.startsWith("7") || d.startsWith("8"))) d = d.slice(1);
+  const raw = String(value ?? "");
+  let d = raw.replace(/\D/g, "");
+  // Значение, которое PhoneInput уже передал наружу, начинается с явного +7.
+  // Срезаем этот код сразу даже у неполного номера: иначе при следующем
+  // рендере семёрка попадала внутрь поля и не давала себя стереть. В коротком
+  // ручном вводе без плюса 7 или 8 всё ещё считаются цифрой самого номера.
+  if (/^\s*\+7/.test(raw)) d = d.slice(1);
+  else if (d.length > 10 && (d.startsWith("7") || d.startsWith("8")))
+    d = d.slice(1);
   return d.slice(0, 10);
 }
 

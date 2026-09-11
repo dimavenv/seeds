@@ -97,6 +97,13 @@ describe("поле ввода с готовым +7", () => {
     expect(localPhoneDigits("8912345")).toBe("8912345");
   });
 
+  it("не показывает код +7 внутри поля у неполного номера", () => {
+    expect(localPhoneDigits("+7")).toBe("");
+    expect(localPhoneDigits("+79")).toBe("9");
+    expect(localPhoneDigits("+7 999 12")).toBe("99912");
+    expect(formatLocalPhone("+79991")).toBe("999 1");
+  });
+
   it("лишние цифры отбрасывает", () => {
     expect(localPhoneDigits("999123456789")).toBe("9991234567");
     expect(localPhoneDigits("899912345671234")).toBe("9991234567");
