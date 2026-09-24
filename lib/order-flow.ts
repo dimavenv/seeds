@@ -5,6 +5,7 @@ import { releaseStock, reserveStock } from "@/lib/stock";
 import { mailOrderPlaced, mailPayment } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 import { ensureAccountForOrder } from "@/lib/auto-account";
+import { deliverAccountWelcome } from "@/lib/account-welcome";
 import type { PaymentStatus } from "@/lib/types";
 import { normalizeCart } from "@/lib/user-store";
 import { removePurchasedItems } from "@/lib/cart-store";
@@ -264,9 +265,22 @@ export type PaidResult = {
   alreadyPaid: boolean;
 };
 
+async function finishPaidAccount(pb: PocketBase, order: OrderRecord): Promise<void> {
+  if (order.user) {
+    await deliverAccountWelcome(pb, order.user);
+    return;
+  }
+  await ensureAccountForOrder(pb, {
+    orderId: order.id, email: decryptField(order.email) ?? "",
+    customerName: order.customerName, phone: decryptField(order.phone) ?? "",
+    alreadyLinked: false,
+  });
+}
+
 // Подтверждение оплаты по номеру счёта. Идемпотентно: уведомление Robokassa,
 // возврат покупателя и уборка вызывают его наперегонки, и все три должны
-// отработать без дублей писем.
+// отработать без повторного списания и уведомлений об оплате. Письмо доступа
+// при неоднозначном результате SMTP может доставляться повторно.
 export async function markOrderPaid(
   pb: PocketBase,
   invId: number
@@ -276,6 +290,7 @@ export async function markOrderPaid(
 
   const done = { id: order.id, number: order.number };
   if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
+    if (order.paymentStatus === "paid") await finishPaidAccount(pb, order);
     return { order: done, alreadyPaid: true };
   }
 
@@ -330,15 +345,7 @@ export async function markOrderPaid(
 
   // Только подтверждённая оплата создаёт кабинет гостя онлайн-заказа.
   // Дожидаемся создания и попытки отправки письма до ответа обработчика.
-  await ensureAccountForOrder(pb, {
-    orderId: order.id,
-    email: to,
-    customerName: order.customerName,
-    phone: decryptField(order.phone) ?? "",
-    alreadyLinked: Boolean(order.user),
-  }).catch((e) => {
-    console.error(`[account] аккаунт по заказу №${order.number} не создан:`, e);
-  });
+  // Уведомления об оплате не зависят от результата доставки доступа.
 
   void mailPayment(
     { to, number: order.number, name: order.customerName },
@@ -366,6 +373,7 @@ export async function markOrderPaid(
     items,
   }).catch(() => {});
 
+  await finishPaidAccount(pb, order);
   return { order: done, alreadyPaid: false };
 }
 

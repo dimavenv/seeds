@@ -4,7 +4,7 @@
     "listRule": "id = @request.auth.id || @request.auth.role = \"admin\"",
     "viewRule": "id = @request.auth.id || @request.auth.role = \"admin\"",
     "createRule": null,
-    "updateRule": "(id = @request.auth.id && @request.body.role:isset = false && @request.body.blocked:isset = false && @request.body.blocked_reason:isset = false) || @request.auth.role = \"admin\"",
+    "updateRule": "((id = @request.auth.id && @request.body.role:isset = false && @request.body.blocked:isset = false && @request.body.blocked_reason:isset = false) || @request.auth.role = \"admin\") && @request.body.welcome_credentials:isset = false",
     "deleteRule": "@request.auth.role = \"admin\"",
     "name": "users",
     "type": "auth",
@@ -150,7 +150,7 @@
         "help": "",
         "hidden": false,
         "id": "text_phone",
-        "max": 32,
+        "max": 256,
         "min": 0,
         "name": "phone",
         "pattern": "",
@@ -168,6 +168,20 @@
         "required": false,
         "system": false,
         "type": "bool"
+      },
+      {
+        "hidden": true,
+        "id": "text_welcome_credentials",
+        "name": "welcome_credentials",
+        "type": "text",
+        "required": false,
+        "system": false,
+        "presentable": false,
+        "primaryKey": false,
+        "min": 0,
+        "max": 512,
+        "pattern": "",
+        "autogeneratePattern": ""
       },
       {
         "hidden": false,

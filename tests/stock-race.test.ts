@@ -12,6 +12,16 @@ import PocketBase from "pocketbase";
 import { releaseStock, reserveStock } from "@/lib/stock";
 import { createOrderWithItems, markOrderPaid } from "@/lib/order-flow";
 import { applyNewPassword, createPasswordLink, inspectPasswordToken } from "@/lib/password-reset";
+import { encryptField } from "@/lib/crypto";
+import { sendMail } from "@/lib/email";
+import { repairPaidAccounts } from "@/lib/auto-account";
+import { retryAccountWelcomes } from "@/lib/account-welcome";
+
+vi.mock("@/lib/email", async (original) => ({
+  ...await original<typeof import("@/lib/email")>(),
+  isMailConfigured: () => true,
+  sendMail: vi.fn(async () => true),
+}));
 
 const ROOT = path.resolve(__dirname, "..");
 const EMAIL = "admin@test.local";
@@ -245,9 +255,10 @@ describe.skipIf(!BIN)("гонка остатков: живой PocketBase", () =
   });
 
   it("гость получает аккаунт после оплаты, повторная покупка сохраняет пароль", async () => {
+    vi.stubEnv("DATA_ENCRYPTION_KEY", "ab".repeat(32));
     const email = `guest-${Date.now()}@test.local`;
     const payload = {
-      customer_name: "Покупатель", phone: "+79991112233", email,
+      customer_name: "Покупатель", phone: encryptField("+79991112233")!, email: encryptField(email)!,
       address: "Адрес", comment: "", delivery_method: "ozon", delivery_cost: 0,
       promo_code: "", discount: 0, total: 100, user: "",
       items: [{ product: await createProduct(10), name: "Томат", price: 100, qty: 1 }],
@@ -258,13 +269,53 @@ describe.skipIf(!BIN)("гонка остатков: живой PocketBase", () =
     await markOrderPaid(pb, 100002);
     const [user] = await users();
     expect(user).toBeDefined();
+    const welcome = vi.mocked(sendMail).mock.calls.find(([to, subject]) => to === email && subject.includes("логин и пароль"));
+    expect(welcome).toBeDefined();
+    const password = welcome![2].match(/Пароль: <b>([^<]+)<\/b>/)![1];
+    const buyer = new PocketBase(URL);
+    await buyer.collection("users").authWithPassword(email, password);
+    expect((await buyer.collection("users").getOne(user.id)).welcome_credentials).toBeUndefined();
+    await buyer.collection("users").update(user.id, { welcome_credentials: "injected" }).catch(() => {});
+    expect((await pb.collection("users").getOne(user.id)).welcome_credentials).toBe("");
+    await buyer.collection("users").update(user.id, {
+      oldPassword: password, password: "my-password", passwordConfirm: "my-password", auto_password: false,
+    });
     expect((await pb.collection("orders").getOne(order.id)).user).toBe(user.id);
-    await pb.collection("users").update(user.id, { password: "my-password", passwordConfirm: "my-password" });
     await createOrderWithItems(pb, payload, { invoiceId: 100003, paymentStatus: "pending" });
     await markOrderPaid(pb, 100003);
     await markOrderPaid(pb, 100003);
     expect(await users()).toHaveLength(1);
+    expect(vi.mocked(sendMail).mock.calls.filter(([to, subject]) => to === email && subject.includes("логин и пароль"))).toHaveLength(1);
     await expect(new PocketBase(URL).collection("users").authWithPassword(email, "my-password")).resolves.toBeDefined();
+  });
+
+  it("восстанавливает старый оплаченный заказ и повторяет письмо после отказа SMTP", async () => {
+    vi.stubEnv("DATA_ENCRYPTION_KEY", "ab".repeat(32));
+    const email = `repair-${Date.now()}@test.local`;
+    const order = await createOrderWithItems(pb, {
+      customer_name: "Покупатель", phone: encryptField("+79991112233")!, email: encryptField(email)!,
+      address: "Адрес", comment: "", delivery_method: "ozon", delivery_cost: 0,
+      promo_code: "", discount: 0, total: 100, user: "",
+      items: [{ product: await createProduct(10), name: "Томат", price: 100, qty: 1 }],
+    }, { invoiceId: 100004, paymentStatus: "paid" });
+    vi.mocked(sendMail).mockResolvedValue(false);
+    try {
+      expect((await repairPaidAccounts(pb)).failed).toBe(1);
+      const linked = await pb.collection("orders").getOne(order.id);
+      expect(linked.user).toBeTruthy();
+      const user = await pb.collection("users").getOne(linked.user);
+      expect(user.welcome_credentials).toBeTruthy();
+      vi.mocked(sendMail).mockResolvedValue(true);
+      await markOrderPaid(pb, 100004); // Повторное уведомление должно доставить доступ.
+      const welcome = vi.mocked(sendMail).mock.calls.filter(([to]) => to === email).at(-1)!;
+      const password = welcome[2].match(/Пароль: <b>([^<]+)<\/b>/)![1];
+      expect(user.welcome_credentials).not.toContain(password);
+      await expect(new PocketBase(URL).collection("users").authWithPassword(email, password)).resolves.toBeDefined();
+      expect((await pb.collection("users").getOne(user.id)).welcome_credentials).toBe("");
+      expect(await retryAccountWelcomes(pb)).toEqual({ sent: 0, failed: 0 });
+    } finally {
+      vi.mocked(sendMail).mockResolvedValue(true);
+    }
   });
 
   it("сбой смены пароля не расходует ссылку; новая ссылка отменяет старую", async () => {

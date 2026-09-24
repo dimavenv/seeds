@@ -85,5 +85,6 @@ if (settingsRes.ok) {
     await settingsRes.text()
   );
   console.error("Включите вручную: админка PocketBase → Settings → Application → Batch API.");
+  process.exit(1);
 }
 console.log("Готово. Откройте админку PocketBase и убедитесь, что коллекции на месте.");

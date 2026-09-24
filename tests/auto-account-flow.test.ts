@@ -1,6 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type PocketBase from "pocketbase";
 import { ensureAccountForOrder } from "@/lib/auto-account";
+
+vi.mock("@/lib/account-welcome", () => ({
+  sealWelcomePassword: () => "encrypted-password",
+  deliverAccountWelcome: vi.fn(async () => {}),
+}));
 
 type Call = { collection: string; method: string; id?: string; data?: Record<string, unknown> };
 

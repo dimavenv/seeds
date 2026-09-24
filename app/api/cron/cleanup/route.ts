@@ -4,6 +4,8 @@ import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
 import { cleanupExpiredPasswordTokens } from "@/lib/password-reset";
+import { repairPaidAccounts } from "@/lib/auto-account";
+import { retryAccountWelcomes } from "@/lib/account-welcome";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +46,10 @@ async function run(req: Request): Promise<NextResponse> {
   try {
     const pb = await pbAdmin();
     const { released, rescued } = await cleanupStalePendingOrders(pb);
+    const accounts = await repairPaidAccounts(pb);
+    const welcome = await retryAccountWelcomes(pb);
     const expiredPasswordTokens = await cleanupExpiredPasswordTokens(pb);
-    return NextResponse.json({ ok: true, released, rescued, expiredPasswordTokens });
+    return NextResponse.json({ ok: true, released, rescued, expiredPasswordTokens, accounts, welcome });
   } catch {
     return NextResponse.json({ error: "cleanup failed" }, { status: 500 });
   }

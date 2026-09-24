@@ -133,6 +133,7 @@ export async function applyNewPassword(
       passwordConfirm: password,
       verified: true,
       auto_password: false,
+      welcome_credentials: "",
     });
     await batch.send();
     await removeTokensForUser(pb, token.userId).catch(() => {});

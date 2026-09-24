@@ -40,6 +40,7 @@ function fakePb(product = PRODUCT) {
       };
     },
     collection: (name: string) => ({
+      getOne: async () => ({ id: "user-id" }),
       getFirstListItem: async () => name === "orders" ? order : store,
       getFullList: async () => name === "order_items"
         ? [{ product, name: "Томат", price: 100, qty: 2 }]

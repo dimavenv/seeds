@@ -69,12 +69,6 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
     return text("order not found", 404);
   }
 
-  // Оплата уже подтверждена (повторное уведомление или покупатель успел
-  // вернуться на Success URL) — повторять нечего.
-  if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") {
-    return text(`OK${invId}`);
-  }
-
   // Сумма обязана совпасть до копейки: подпись подтверждает подлинность
   // уведомления, а эта проверка — что оплачено именно то, что мы выставили.
   if (Math.abs(outSum - order.total) > 0.005) {
@@ -82,6 +76,16 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
       `[robokassa] счёт ${invId}: сумма уведомления ${outSum} ₽ не совпадает с суммой заказа №${order.number} (${order.total} ₽) — оплата не подтверждена`
     );
     return text("amount mismatch", 400);
+  }
+
+  if (order.paymentStatus === "refunded") return text(`OK${invId}`);
+  if (order.paymentStatus === "paid") {
+    try {
+      await markOrderPaid(pb, invId);
+      return text(`OK${invId}`);
+    } catch {
+      return text("account delivery pending", 503);
+    }
   }
 
   // Дополнительная сверка с Robokassa напрямую (XML OpStateExt). Если сервис

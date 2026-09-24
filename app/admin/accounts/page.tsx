@@ -4,6 +4,7 @@ import { fetchAccounts, accountHaystack, type Account } from "@/lib/accounts";
 import { normalizeSearch } from "@/lib/search";
 import { formatPrice, formatDate } from "@/lib/format";
 import { formatPhone } from "@/lib/profile";
+import RepairAccounts from "@/components/admin/repair-accounts";
 
 export const metadata = { title: "Аккаунты" };
 export const dynamic = "force-dynamic";
@@ -68,6 +69,7 @@ export default async function AdminAccounts({
         </form>
       </div>
 
+      <RepairAccounts />
       <div className="mb-4 flex flex-wrap gap-2">
         <Link href={withFilter("")} className={chip(!filter)}>
           Все · {accounts.length}

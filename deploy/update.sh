@@ -13,10 +13,10 @@ npm ci
 npm run build
 
 # Схема PocketBase: докатываем новые поля/коллекции из pocketbase/pb_schema.json.
-# Скрипт идемпотентный (данные не трогает); если PB_ADMIN_EMAIL/PASSWORD не
-# заданы или PocketBase лежит — предупреждаем, но деплой не валим.
+# Новая версия зависит от схемы: при ошибке оставляем работающий процесс,
+# а не запускаем код без нужных полей.
 echo "==> Обновляю схему PocketBase..."
-node scripts/pb-import-schema.mjs || echo "ВНИМАНИЕ: схема PocketBase не обновилась — проверьте PB_ADMIN_EMAIL/PB_ADMIN_PASSWORD в .env.production и запустите вручную: node scripts/pb-import-schema.mjs"
+node scripts/pb-import-schema.mjs
 
 # standalone-сборка не включает статику и public — докопируем
 cp -r .next/static .next/standalone/.next/

@@ -70,8 +70,8 @@ async function handle(params: Record<string, string>): Promise<NextResponse> {
         );
         return redirectTo("/cart");
       }
-      await markOrderPaid(pb, invoice);
     }
+    if (existing && existing.paymentStatus !== "refunded") await markOrderPaid(pb, invoice);
 
     if (number === null) {
       // Заказ по счёту не нашёлся (например, его удалили из админки) — деньги
