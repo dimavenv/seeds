@@ -250,7 +250,8 @@
     ],
     "indexes": [
       "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
-      "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+      "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''",
+      "CREATE UNIQUE INDEX `idx_users_email_normalized` ON `users` (lower(`email`)) WHERE `email` != ''"
     ],
     "created": "2026-07-12 21:28:26.910Z",
     "updated": "2026-07-12 21:44:05.165Z",
@@ -2341,6 +2342,96 @@
     ],
     "indexes": [
       "CREATE INDEX `idx_consents_created` ON `consents` (`created`)"
+    ],
+    "system": false
+  },
+  {
+    "id": "pbc_password_reset_tokens",
+    "listRule": null,
+    "viewRule": null,
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "name": "password_reset_tokens",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text_reset_token_id",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": true,
+        "collectionId": "_pb_users_auth_",
+        "hidden": false,
+        "id": "rel_reset_token_user",
+        "maxSelect": 1,
+        "minSelect": 1,
+        "name": "user",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": true,
+        "id": "text_reset_token_hash",
+        "max": 64,
+        "min": 64,
+        "name": "token_hash",
+        "pattern": "^[a-f0-9]{64}$",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "select_reset_token_purpose",
+        "maxSelect": 1,
+        "name": "purpose",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": ["reset", "setup"]
+      },
+      {
+        "hidden": false,
+        "id": "date_reset_token_expires",
+        "max": "",
+        "min": "",
+        "name": "expires_at",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "date"
+      },
+      {
+        "hidden": false,
+        "id": "autodate_reset_token_created",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_password_reset_token_hash` ON `password_reset_tokens` (`token_hash`)",
+      "CREATE INDEX `idx_password_reset_token_user` ON `password_reset_tokens` (`user`)"
     ],
     "system": false
   }

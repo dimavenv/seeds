@@ -6,6 +6,8 @@ import { mailOrderPlaced, mailPayment } from "@/lib/order-mail";
 import { notifyNewOrder } from "@/lib/admin-mail";
 import { ensureAccountForOrder } from "@/lib/auto-account";
 import type { PaymentStatus } from "@/lib/types";
+import { normalizeCart } from "@/lib/user-store";
+import { removePurchasedItems } from "@/lib/cart-store";
 
 // Жизненный цикл заказа с онлайн-оплатой.
 //
@@ -116,6 +118,9 @@ export async function createOrderWithItems(
     }
   }
   if (!order) throw lastError ?? new Error("order create failed");
+  console.log(
+    `[order] создан заказ №${order.number}, оплата ${extra.paymentStatus}`
+  );
 
   try {
     for (const l of payload.items) {
@@ -211,29 +216,51 @@ export async function orderLines(
 // (номер счёта + дата) и остаются как след подтверждённых оплат.
 const CLAIMS_COLLECTION = "payment_claims";
 
-async function claimPaidNotifications(
+async function commitPaidOrder(
   pb: PocketBase,
+  order: OrderRecord,
+  lines: OrderLine[],
   invId: number
 ): Promise<boolean> {
+  const commit = async (reserve: boolean) => {
+    const batch = pb.createBatch();
+    // Уникальная запись и изменение оплаты коммитятся ВМЕСТЕ. Дублирующий
+    // запрос откатывается целиком, включая повторный резерв просроченного заказа.
+    batch.collection(CLAIMS_COLLECTION).create({ inv_id: invId });
+    if (reserve) {
+      for (const line of lines.filter((item) => item.product)) {
+        batch.collection("products").update(line.product, { "stock-": line.qty });
+      }
+    }
+    batch.collection("orders").update(order.id, {
+      payment_status: "paid",
+      pay_started_at: "",
+    });
+    await batch.send();
+  };
   try {
-    await pb.collection(CLAIMS_COLLECTION).create({ inv_id: invId });
+    await commit(order.paymentStatus === "failed");
     return true;
-  } catch (e) {
-    // 400 — индекс отбил дубль: письма уже отправляет кто-то другой.
-    if ((e as { status?: number })?.status === 400) return false;
-    // Всё остальное (нет коллекции — схему не импортировали, база не
-    // ответила) — не повод молча проглотить письма об оплате: шлём.
-    console.error(
-      `[robokassa] счёт ${invId}: заявку на письма поставить не удалось (проверьте «npm run db:schema»):`,
-      e
-    );
-    return true;
+  } catch (error) {
+    const current = await findOrderByInvoice(pb, invId);
+    if (current?.paymentStatus === "paid" || current?.paymentStatus === "refunded") return false;
+    if ((error as { status?: number })?.status === 400 && order.paymentStatus === "failed") {
+      // Деньги уже получены, но товар после снятия резерва мог закончиться.
+      // Не теряем финансовое подтверждение: фиксируем paid без резерва, а
+      // нехватку передаём на ручную проверку. Уникальная отметка остаётся атомарной.
+      console.error(`[robokassa] счёт ${invId}: повторный резерв не записан — заказ №${order.number} требует ручной проверки`);
+      await commit(false);
+      return true;
+    }
+    // При отключённом Batch API не используем неатомарный фолбэк. Robokassa
+    // повторит уведомление после восстановления базы/импорта схемы.
+    throw error;
   }
 }
 
 export type PaidResult = {
   order: CreatedOrder;
-  // true — оплату подтвердил именно этот вызов (значит, письма шлём здесь).
+  // true — платёж уже обработан другим вызовом.
   alreadyPaid: boolean;
 };
 
@@ -263,45 +290,47 @@ export async function markOrderPaid(
     );
   }
 
-  // Попытка успела протухнуть (уборка сняла резерв), а деньги всё-таки
-  // пришли — возвращаем товар в резерв. Не получилось (успели раскупить) —
-  // громко в лог: разбираться придётся продавцу, деньги уже у него.
-  if (order.paymentStatus === "failed") {
-    const reserve = lines
-      .filter((l) => l.product)
-      .map((l) => ({ productId: l.product, qty: l.qty }));
-    if (reserve.length > 0 && (await reserveStock(pb, reserve)) === "conflict") {
-      console.error(
-        `[robokassa] счёт ${invId}: оплата пришла после отмены резерва, товара на складе не хватает — заказ №${order.number} требует ручной проверки`
-      );
-    }
-  }
-
   try {
-    await pb.collection("orders").update(order.id, {
-      payment_status: "paid",
-      pay_started_at: "",
-    });
+    if (!(await commitPaidOrder(pb, order, lines, invId))) {
+      return { order: done, alreadyPaid: true };
+    }
+    console.log(`[robokassa] счёт ${invId}: заказ №${order.number} помечен оплаченным`);
   } catch (e) {
     console.error(`[robokassa] счёт ${invId}: не удалось пометить оплату:`, e);
     throw e;
   }
 
-  // Ровно одни письма на счёт. Уведомление Robokassa, возврат покупателя и
-  // уборка приходят наперегонки и могут прочитать «ещё не оплачен» все трое —
-  // статус от этого не портится, а вот «оплата получена» продавцу и особенно
-  // письмо с паролем от нового кабинета дублировать нельзя. Заявку ставим
-  // ПОСЛЕ смены статуса: если заявка займётся, а запись статуса упадёт, заказ
-  // навсегда остался бы «ожидающим оплаты».
-  if (!(await claimPaidNotifications(pb, invId))) {
-    return { order: done, alreadyPaid: true };
+  // Корзина аккаунта хранится отдельно от заказа. После достоверного
+  // server-to-server подтверждения вычитаем только оплаченные количества.
+  // Сбой синхронизации корзины не откатывает уже подтверждённую оплату.
+  if (order.user) {
+    try {
+      const store = await pb
+        .collection("user_store")
+        .getFirstListItem(pb.filter("user = {:user}", { user: order.user }));
+      const cart = normalizeCart(store.cart);
+      const next = removePurchasedItems(
+        cart,
+        lines.map((line) => ({ id: line.product, qty: line.qty }))
+      );
+      if (next.length !== cart.length || next.some((item, i) => item.qty !== cart[i]?.qty)) {
+        await pb.collection("user_store").update(store.id, { cart: next });
+      }
+      console.log(`[cart] корзина по заказу №${order.number} очищена после оплаты`);
+    } catch (error) {
+      const status = (error as { status?: number })?.status;
+      if (status !== 404) {
+        console.error(`[cart] корзина по заказу №${order.number} не синхронизирована:`, error);
+      }
+    }
   }
 
   const to = decryptField(order.email) ?? "";
   const items = lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty }));
 
-  // Аккаунт покупателю — только здесь, после подтверждённой оплаты.
-  void ensureAccountForOrder(pb, {
+  // Только подтверждённая оплата создаёт кабинет гостя онлайн-заказа.
+  // Дожидаемся создания и попытки отправки письма до ответа обработчика.
+  await ensureAccountForOrder(pb, {
     orderId: order.id,
     email: to,
     customerName: order.customerName,

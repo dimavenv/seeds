@@ -382,6 +382,9 @@ export async function POST(request: Request) {
           reference: `заказ №${order.number}`,
         });
 
+        // Кабинет гостя создаётся только после подтверждения оплаты
+        // в markOrderPaid. Брошенная платёжная форма не создаёт аккаунт.
+
         const ttl = invoiceTtlMinutes();
         const payment = buildRobokassaPayment({
           invId: invoiceId,
@@ -453,18 +456,15 @@ export async function POST(request: Request) {
       reference: `заказ №${order.number}`,
     });
 
-    // При оплате при получении заказ уже принят окончательно — это и есть
-    // первый заказ покупателя. Создаём кабинет сейчас. Для онлайн-оплаты тот
-    // же вызов делается только после подтверждения платежа в markOrderPaid,
-    // чтобы брошенная платёжная попытка не создавала аккаунт.
-    void ensureAccountForOrder(pb, {
+    // Аккаунт и связь заказа должны быть записаны до успешного ответа API.
+    await ensureAccountForOrder(pb, {
       orderId: order.id,
       email: email.trim(),
       customerName: customer_name.trim(),
       phone: phone.trim(),
       alreadyLinked: Boolean(userId),
-    }).catch((e) => {
-      console.error(`[account] аккаунт по заказу №${order.number} не создан:`, e);
+    }).catch((error) => {
+      console.error(`[account] заказ №${order.number} не связан с аккаунтом:`, error);
     });
 
     // Шлём «заказ принят».

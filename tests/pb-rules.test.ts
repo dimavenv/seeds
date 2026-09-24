@@ -122,6 +122,15 @@ describe("правила доступа PocketBase", () => {
     expect(c.deleteRule).toBeNull();
   });
 
+  it("reset-токены полностью закрыты от браузера", () => {
+    const c = collection("password_reset_tokens");
+    expect(c.listRule).toBeNull();
+    expect(c.viewRule).toBeNull();
+    expect(c.createRule).toBeNull();
+    expect(c.updateRule).toBeNull();
+    expect(c.deleteRule).toBeNull();
+  });
+
   it("в аватары нельзя загрузить SVG", () => {
     // SVG — это документ со скриптами внутри, а файлы отдаются с того же
     // origin, что и API базы.

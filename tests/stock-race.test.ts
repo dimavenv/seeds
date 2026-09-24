@@ -3,13 +3,15 @@
 // Нужен бинарник: node scripts/fetch-pocketbase.mjs (кладётся в .pb/, в git
 // не попадает). Без бинарника весь набор пропускается с предупреждением —
 // остальные тесты это не блокирует.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import PocketBase from "pocketbase";
 import { releaseStock, reserveStock } from "@/lib/stock";
+import { createOrderWithItems, markOrderPaid } from "@/lib/order-flow";
+import { applyNewPassword, createPasswordLink, inspectPasswordToken } from "@/lib/password-reset";
 
 const ROOT = path.resolve(__dirname, "..");
 const EMAIL = "admin@test.local";
@@ -75,6 +77,7 @@ describe.skipIf(!BIN)("гонка остатков: живой PocketBase", () =
   let pb: PocketBase;
 
   beforeAll(async () => {
+    vi.stubEnv("SMTP_HOST", ""); // изолированные тесты не отправляют реальные письма
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pb-race-"));
     const up = spawnSync(BIN!, ["superuser", "upsert", EMAIL, PASS, "--dir", dataDir]);
     if (up.status !== 0) {
@@ -108,6 +111,7 @@ describe.skipIf(!BIN)("гонка остатков: живой PocketBase", () =
   afterAll(() => {
     proc?.kill();
     if (dataDir) fs.rmSync(dataDir, { recursive: true, force: true });
+    vi.unstubAllEnvs();
   });
 
   // Отдельный клиент на «покупателя» — как отдельный запрос оформления.
@@ -186,5 +190,93 @@ describe.skipIf(!BIN)("гонка остатков: живой PocketBase", () =
     } finally {
       await setBatchEnabled(pb.authStore.token, true);
     }
+  });
+
+  it("reset-ссылка одноразовая, новый пароль входит, старый больше не работает", async () => {
+    const email = `reset-${Date.now()}@test.local`;
+    const user = await pb.collection("users").create({
+      email, password: "old-password", passwordConfirm: "old-password", role: "customer",
+    });
+    const link = await createPasswordLink(pb, user.id, "reset");
+    const raw = new globalThis.URL(link.url).searchParams.get("token")!;
+    const results = await Promise.all([
+      applyNewPassword(raw, "new-password", client()),
+      applyNewPassword(raw, "new-password", client()),
+    ]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(await inspectPasswordToken(raw, pb)).toBeNull();
+    const buyer = new PocketBase(URL);
+    await expect(buyer.collection("users").authWithPassword(email, "new-password")).resolves.toBeDefined();
+    await expect(buyer.collection("users").authWithPassword(email, "old-password")).rejects.toBeDefined();
+    const expired = await createPasswordLink(pb, user.id, "reset");
+    await pb.collection("password_reset_tokens").update(expired.recordId, {
+      expires_at: new Date(Date.now() - 60_000).toISOString(),
+    });
+    expect(await inspectPasswordToken(new globalThis.URL(expired.url).searchParams.get("token")!, pb)).toBeNull();
+  });
+
+  it("конкурентные оплаты атомарно фиксируют paid и резерв только один раз", async () => {
+    const productId = await createProduct(10);
+    const user = await pb.collection("users").create({
+      email: `paid-${Date.now()}@test.local`,
+      password: "test-password", passwordConfirm: "test-password", role: "customer",
+    });
+    const invId = 100001;
+    const order = await createOrderWithItems(pb, {
+      customer_name: "Тестовый покупатель", phone: "+79991112233", email: "test@test.local",
+      address: "Тестовый адрес", comment: "", delivery_method: "ozon", delivery_cost: 0,
+      promo_code: "", discount: 0, total: 200, user: user.id,
+      items: [{ product: productId, name: "Томат", price: 100, qty: 2 }],
+    }, { invoiceId: invId, paymentStatus: "failed" });
+    const store = await pb.collection("user_store").create({
+      user: user.id, cart: [{ id: productId, qty: 2, price: 100, name: "Томат" }], wishlist: [],
+    });
+    const results = await Promise.all([markOrderPaid(client(), invId), markOrderPaid(client(), invId)]);
+    expect(results.filter((result) => result?.alreadyPaid === false)).toHaveLength(1);
+    expect((await pb.collection("orders").getOne(order.id)).payment_status).toBe("paid");
+    expect(await stockOf(productId)).toBe(8);
+    expect((await pb.collection("user_store").getOne(store.id)).cart).toEqual([]);
+    await pb.collection("user_store").update(store.id, {
+      cart: [{ id: productId, qty: 1, price: 100, name: "Новый товар" }],
+    });
+    await markOrderPaid(pb, invId);
+    expect(await stockOf(productId)).toBe(8);
+    expect((await pb.collection("user_store").getOne(store.id)).cart).toHaveLength(1);
+  });
+
+  it("гость получает аккаунт после оплаты, повторная покупка сохраняет пароль", async () => {
+    const email = `guest-${Date.now()}@test.local`;
+    const payload = {
+      customer_name: "Покупатель", phone: "+79991112233", email,
+      address: "Адрес", comment: "", delivery_method: "ozon", delivery_cost: 0,
+      promo_code: "", discount: 0, total: 100, user: "",
+      items: [{ product: await createProduct(10), name: "Томат", price: 100, qty: 1 }],
+    };
+    const order = await createOrderWithItems(pb, payload, { invoiceId: 100002, paymentStatus: "pending" });
+    const users = () => pb.collection("users").getFullList({ filter: pb.filter("email = {:email}", { email }) });
+    expect(await users()).toHaveLength(0);
+    await markOrderPaid(pb, 100002);
+    const [user] = await users();
+    expect(user).toBeDefined();
+    expect((await pb.collection("orders").getOne(order.id)).user).toBe(user.id);
+    await pb.collection("users").update(user.id, { password: "my-password", passwordConfirm: "my-password" });
+    await createOrderWithItems(pb, payload, { invoiceId: 100003, paymentStatus: "pending" });
+    await markOrderPaid(pb, 100003);
+    await markOrderPaid(pb, 100003);
+    expect(await users()).toHaveLength(1);
+    await expect(new PocketBase(URL).collection("users").authWithPassword(email, "my-password")).resolves.toBeDefined();
+  });
+
+  it("сбой смены пароля не расходует ссылку; новая ссылка отменяет старую", async () => {
+    const user = await pb.collection("users").create({
+      email: `rollback-${Date.now()}@test.local`, password: "old-password", passwordConfirm: "old-password",
+    });
+    const first = await createPasswordLink(pb, user.id, "reset");
+    const second = await createPasswordLink(pb, user.id, "reset");
+    const tokenOf = (url: string) => new globalThis.URL(url).searchParams.get("token")!;
+    expect(await inspectPasswordToken(tokenOf(first.url), pb)).toBeNull();
+    expect(await applyNewPassword(tokenOf(second.url), "short", pb)).toMatchObject({ ok: false });
+    expect(await inspectPasswordToken(tokenOf(second.url), pb)).not.toBeNull();
+    expect(await applyNewPassword(tokenOf(second.url), "valid-password", pb)).toMatchObject({ ok: true });
   });
 });

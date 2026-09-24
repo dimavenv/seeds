@@ -18,7 +18,7 @@ export type Account = {
   verified: boolean;
   blocked: boolean;
   blockedReason: string | null;
-  // Пароль придуман сайтом после оплаты и покупателем ещё не менялся.
+  // У аккаунта пока только неизвестный покупателю системный пароль.
   autoPassword: boolean;
   createdAt: string;
   // Сводка по заказам — считается по коллекции orders (см. attachOrderStats).

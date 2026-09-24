@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       oldPassword: current,
       password: next,
       passwordConfirm: next,
-      // Пароль теперь свой, а не присланный сайтом после оплаты — подсказку
+      // Пароль теперь задан покупателем, временную подсказку
       // в кабинете больше не показываем.
       auto_password: false,
     });

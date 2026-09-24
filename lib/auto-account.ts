@@ -1,30 +1,26 @@
 import "server-only";
-import { encryptField } from "@/lib/crypto";
+import { decryptField, encryptField } from "@/lib/crypto";
 import crypto from "node:crypto";
 import type PocketBase from "pocketbase";
 import { sendMail, mailLayout, escapeHtml, isMailConfigured } from "@/lib/email";
-import { isRussianEmail } from "@/lib/ru-email";
 import { joinFullName, normalizePhone, splitFullName } from "@/lib/profile";
+import { createPasswordLink, findAccountByEmail, revokePasswordLink } from "@/lib/password-reset";
 
-// Аккаунт покупателю по первому принятому заказу.
+// Аккаунт покупателю после подтверждения оплаты (для оплаты при получении —
+// после принятия заказа).
 //
-// Зачем: человек оформил заказ гостем — а после оплаты у него уже есть история
-// заказов, кнопка «заказать ещё раз» и адрес с телефоном, которые не надо
-// вводить заново. Пароль сайт придумывает сам и присылает на ту же почту, куда
-// уходит чек, — покупателю остаётся только войти и, если хочет, сменить его в
-// кабинете.
+// Зачем: человек оформил заказ гостем — после первого заказа у него уже есть история
+// заказов, кнопка «заказать ещё раз» и адрес с телефоном. Случайный внутренний
+// пароль никогда не показывается и не отправляется: покупатель получает
+// одноразовую ссылку и сам задаёт пароль.
 //
 // Правила, за которые не выходим:
-//   • при оплате при получении — после принятия заказа; при онлайн-оплате —
-//     после подтверждения платежа, чтобы брошенные попытки не плодили аккаунты;
-//   • только если почта настроена: пароль, который некуда отправить, делает
-//     аккаунт недоступным;
-//   • только российская почта (см. lib/ru-email);
+//   • онлайн-заказ должен быть оплачен до вызова этой функции;
 //   • почта уже занята — аккаунт не трогаем, просто привязываем к нему заказ,
 //     чтобы он появился в истории.
 
-// Пароль без похожих друг на друга символов (0/O, 1/l/I): его будут
-// перепечатывать с экрана, а не копировать.
+// Случайный внутренний пароль нужен только PocketBase при создании auth-записи.
+// Он нигде не сохраняется приложением и никогда не отправляется покупателю.
 const ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PASSWORD_LENGTH = 14;
 
@@ -56,32 +52,19 @@ export async function ensureAccountForOrder(
 
   const email = o.email.trim().toLowerCase();
   if (!email) return { status: "skipped", reason: "в заказе нет почты" };
-  if (!isMailConfigured()) {
-    return { status: "skipped", reason: "почта не настроена — пароль отправить некуда" };
-  }
-  if (!isRussianEmail(email)) {
-    return { status: "skipped", reason: "почта не российская" };
-  }
 
   // Занят ли адрес. Читаем суперпользователем: обычным пользователям список
   // закрыт правилами.
-  const existing = await pb
-    .collection("users")
-    .getList(1, 1, {
-      filter: pb.filter("email = {:e}", { e: email }),
-      fields: "id",
-    })
-    .catch(() => null);
-  if (existing === null) {
+  let existing;
+  try {
+    existing = await findAccountByEmail(email, pb);
+  } catch {
     return { status: "skipped", reason: "база не ответила" };
   }
 
-  if (existing.items.length > 0) {
-    // Аккаунт есть — просто показываем заказ в его истории.
-    await pb
-      .collection("orders")
-      .update(o.orderId, { user: existing.items[0].id })
-      .catch(() => {});
+  if (existing) {
+    await linkOrdersByEmail(pb, existing.id, email, o.orderId);
+    console.log(`[account] заказ ${o.orderId} связан с существующим user ${existing.id}`);
     return { status: "linked" };
   }
 
@@ -97,64 +80,91 @@ export async function ensureAccountForOrder(
       ...fio,
       // Хранится зашифрованным — как и телефон в самом заказе.
       phone: encryptField(normalizePhone(o.phone)) ?? "",
-      // Почта подтверждена делом: на неё ушла оплата и уходит пароль.
-      verified: true,
-      // Пароль придуман сайтом — в кабинете подскажем заменить его на свой.
+      // Адрес станет подтверждённым после использования ссылки из письма.
+      verified: false,
+      // Внутренний пароль неизвестен покупателю; войти он сможет после ссылки.
       auto_password: true,
-      role: "", // покупатель
+      role: "customer",
     });
     userId = rec.id;
   } catch (e) {
-    // Не создали (например, кто-то зарегистрировался этой же почтой секунду
-    // назад) — заказ останется гостевым, деньги и письма это не затрагивает.
-    console.error(`[account] не удалось создать аккаунт для ${email}:`, e);
-    return { status: "skipped", reason: "создать не удалось" };
+    // Два заказа с одним email могли прийти одновременно. После конфликта
+    // уникального индекса повторно ищем победивший аккаунт и привязываем его.
+    const raced = await findAccountByEmail(email, pb).catch(() => null);
+    if (!raced) {
+      console.error(`[account] не удалось создать аккаунт для ${email}:`, e);
+      return { status: "skipped", reason: "создать не удалось" };
+    }
+    await linkOrdersByEmail(pb, raced.id, email, o.orderId);
+    return { status: "linked" };
   }
 
-  await pb.collection("orders").update(o.orderId, { user: userId }).catch(() => {});
+  await linkOrdersByEmail(pb, userId, email, o.orderId);
+  console.log(`[account] создан user ${userId}, заказ ${o.orderId} связан`);
 
-  const sent = await sendNewAccountEmail(email, o.customerName, password);
-  if (!sent) {
-    // Письмо не ушло — аккаунт есть, а пароля покупатель не знает. Оставляем
-    // аккаунт (в нём заказ) и пишем в лог: восстановление пароля со страницы
-    // входа всё равно работает.
-    console.error(
-      `[account] аккаунт ${email} создан, но письмо с паролем не отправилось — покупателю нужно восстановление пароля`
-    );
-  }
+  // Почта не участвует в транзакции заказа. Ошибка попадёт в лог, а аккаунт и
+  // связь заказа уже останутся сохранены.
+  await sendNewAccountEmail(pb, userId, email, o.customerName).catch((error) => {
+    console.error(`[account] письмо установки пароля для ${email} не отправлено:`, error);
+  });
   return { status: "created" };
 }
 
-// Письмо с доступом в кабинет.
-async function sendNewAccountEmail(
+async function linkOrdersByEmail(
+  pb: PocketBase,
+  userId: string,
   email: string,
-  name: string,
-  password: string
+  currentOrderId: string
+): Promise<void> {
+  // Текущий заказ связываем обязательно, затем подбираем старые гостевые
+  // заказы с тем же расшифрованным email, чтобы они появились в кабинете.
+  await pb.collection("orders").update(currentOrderId, { user: userId });
+  const guests = await pb.collection("orders").getFullList({
+    filter: 'user = ""',
+    fields: "id,email",
+  }).catch((error) => {
+    console.error(`[account] старые заказы для ${email} не проверены:`, error);
+    return [];
+  });
+  const normalized = email.toLowerCase();
+  await Promise.all(
+    guests
+      .filter((order) => (decryptField(String(order.email ?? "")) ?? "").trim().toLowerCase() === normalized)
+      .map((order) => pb.collection("orders").update(order.id, { user: userId }).catch((error) => {
+        console.error(`[account] заказ ${order.id} не привязан к ${email}:`, error);
+      }))
+  );
+}
+
+// Приветственное письмо с одноразовой установкой пароля.
+async function sendNewAccountEmail(
+  pb: PocketBase,
+  userId: string,
+  email: string,
+  name: string
 ): Promise<boolean> {
+  if (!isMailConfigured()) {
+    console.error(`[account] аккаунт ${email} создан, но SMTP не настроен`);
+    return false;
+  }
+  const link = await createPasswordLink(pb, userId, "setup");
   const hello = name ? `${escapeHtml(name.split(/\s+/)[1] || name)}, здравствуйте!` : "Здравствуйте!";
-  return sendMail(
+  const sent = await sendMail(
     email,
     "Ваш личный кабинет — Томат Семена",
     mailLayout(`
       <h1 style="margin:0 0 12px;font-size:20px;color:#1d4220;">Мы создали вам личный кабинет</h1>
-      <p style="margin:0 0 14px;">${hello} Заказ оплачен — спасибо! Чтобы вы могли
+      <p style="margin:0 0 14px;">${hello} Спасибо за заказ! Чтобы вы могли
       следить за ним и не вводить данные заново, мы завели вам кабинет на
       <b>tomatsemena.ru</b>.</p>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;background:#f1f7f1;border-radius:12px;">
-        <tr><td style="padding:16px 18px;font-size:15px;color:#26332a;">
-          Логин: <b>${escapeHtml(email)}</b><br>
-          Пароль: <b style="font-family:Consolas,Menlo,monospace;font-size:17px;letter-spacing:1px;">${escapeHtml(password)}</b>
-        </td></tr>
-      </table>
       <p style="margin:0 0 14px;">
-        <a href="https://tomatsemena.ru/login" style="display:inline-block;background:#2e7d32;color:#ffffff;border-radius:10px;padding:11px 22px;font-weight:bold;text-decoration:none;">Войти в кабинет</a>
+        <a href="${escapeHtml(link.url)}" style="display:inline-block;background:#2e7d32;color:#ffffff;border-radius:10px;padding:11px 22px;font-weight:bold;text-decoration:none;">Создать пароль</a>
       </p>
-      <p style="margin:0;color:#5c6b5c;font-size:13px;">Пароль можно поменять на
-      свой в кабинете, раздел «Безопасность». Никому не пересылайте это письмо —
-      по этим данным входят в ваш аккаунт.</p>
-      <p style="margin:14px 0 0;color:#5c6b5c;font-size:13px;">Письмо потерялось?
-      Пароль всегда можно
-      <a href="https://tomatsemena.ru/password-reset" style="color:#2e7d32;">сменить по коду с почты</a>.</p>
+      <p style="margin:0;color:#5c6b5c;font-size:13px;">Логин: <b>${escapeHtml(email)}</b>.
+      Ссылка одноразовая и действует ограниченное время. Пароль в письме и адресе ссылки
+      не передаётся — вы зададите его на защищённой странице.</p>
     `)
   );
+  if (!sent) await revokePasswordLink(pb, link.recordId);
+  return sent;
 }

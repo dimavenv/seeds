@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { cleanupStalePendingOrders } from "@/lib/order-cleanup";
+import { cleanupExpiredPasswordTokens } from "@/lib/password-reset";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,8 @@ async function run(req: Request): Promise<NextResponse> {
   try {
     const pb = await pbAdmin();
     const { released, rescued } = await cleanupStalePendingOrders(pb);
-    return NextResponse.json({ ok: true, released, rescued });
+    const expiredPasswordTokens = await cleanupExpiredPasswordTokens(pb);
+    return NextResponse.json({ ok: true, released, rescued, expiredPasswordTokens });
   } catch {
     return NextResponse.json({ error: "cleanup failed" }, { status: 500 });
   }

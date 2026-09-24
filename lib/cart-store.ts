@@ -13,7 +13,26 @@ export type CartAction =
   | { type: "add"; product: Product; qty?: number }
   | { type: "set-qty"; id: string; qty: number }
   | { type: "remove"; id: string }
+  | { type: "remove-purchased"; items: { id: string; qty: number }[] }
   | { type: "clear" };
+
+// Убирает только то количество, которое вошло в оплаченный заказ. Это важно,
+// если во время оплаты покупатель успел добавить в другой вкладке новые товары
+// или ещё несколько единиц той же позиции.
+export function removePurchasedItems(
+  cart: CartItem[],
+  purchased: { id: string; qty: number }[]
+): CartItem[] {
+  const quantities = new Map<string, number>();
+  for (const item of purchased) {
+    if (!item.id || !Number.isFinite(item.qty) || item.qty <= 0) continue;
+    quantities.set(item.id, (quantities.get(item.id) ?? 0) + Math.floor(item.qty));
+  }
+  return cart.flatMap((item) => {
+    const left = item.qty - (quantities.get(item.id) ?? 0);
+    return left > 0 ? [{ ...item, qty: left }] : [];
+  });
+}
 
 export function cartReducer(cart: CartItem[], action: CartAction): CartItem[] {
   switch (action.type) {
@@ -47,6 +66,8 @@ export function cartReducer(cart: CartItem[], action: CartAction): CartItem[] {
         },
       ];
     }
+    case "remove-purchased":
+      return removePurchasedItems(cart, action.items);
     // Количество зажато снизу единицей — до нуля позиция не опускается,
     // для удаления есть действие remove.
     case "set-qty":

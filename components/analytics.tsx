@@ -1,6 +1,7 @@
 "use client";
 
 import Script from "next/script";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { COOKIE_CONSENT_EVENT, hasCookieConsent } from "@/lib/cookie-consent";
 
@@ -25,6 +26,7 @@ import { COOKIE_CONSENT_EVENT, hasCookieConsent } from "@/lib/cookie-consent";
 // заменяет такие обращения на значения при сборке, динамический доступ не
 // сработает.
 export default function Analytics() {
+  const pathname = usePathname();
   const metrikaId = process.env.NEXT_PUBLIC_YANDEX_METRIKA_ID?.trim();
   // На сервере согласие неизвестно, поэтому стартуем с false: в первый HTML
   // скрипты не попадают никогда, и гидратация проходит без расхождений.
@@ -39,7 +41,8 @@ export default function Analytics() {
     return () => window.removeEventListener(COOKIE_CONSENT_EVENT, onConsent);
   }, []);
 
-  if (!allowed) return null;
+  // Ссылки доступа к аккаунту не должны попадать в аналитику/Вебвизор.
+  if (!allowed || pathname === "/password-reset") return null;
 
   return (
     <>

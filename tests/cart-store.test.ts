@@ -84,6 +84,28 @@ describe("cartReducer: set-qty / remove / clear", () => {
     expect(cartReducer(base, { type: "remove", id: "a1" }).map((i) => i.id)).toEqual(["b2"]);
     expect(cartReducer(base, { type: "clear" })).toEqual([]);
   });
+
+  it("после оплаты вычитает только позиции заказа", () => {
+    const next = cartReducer(base, {
+      type: "remove-purchased",
+      items: [{ id: "a1", qty: 1 }],
+    });
+    expect(next.map((item) => [item.id, item.qty])).toEqual([
+      ["a1", 1],
+      ["b2", 1],
+    ]);
+  });
+
+  it("после оплаты удаляет купленные позиции, но сохраняет добавленные позже", () => {
+    const next = cartReducer(base, {
+      type: "remove-purchased",
+      items: [
+        { id: "a1", qty: 2 },
+        { id: "a1", qty: 1 },
+      ],
+    });
+    expect(next.map((item) => item.id)).toEqual(["b2"]);
+  });
 });
 
 describe("регрессия: несколько действий подряд не теряют друг друга", () => {

@@ -1,83 +1,63 @@
 import { NextResponse } from "next/server";
 import { csrfGuard } from "@/lib/csrf";
 import { clientIp } from "@/lib/client-ip";
-import {
-  readTicket,
-  codeMatches,
-  allowAttempt,
-  allowForEmail,
-  CODE_ATTEMPTS_PER_EMAIL,
-  CODE_ATTEMPT_WINDOW_MS,
-} from "@/lib/email-code";
+import { allowAttempt } from "@/lib/email-code";
 import { isDbConfigured } from "@/lib/pb/shared";
 import { hasAdminCredentials } from "@/lib/pb/server";
-import { applyNewPassword, sendPasswordChangedEmail } from "@/lib/password-reset";
+import {
+  applyNewPassword,
+  inspectPasswordToken,
+  sendPasswordChangedEmail,
+} from "@/lib/password-reset";
+import { INVALID_RESET_LINK } from "@/lib/password-reset-token";
 
 export const dynamic = "force-dynamic";
 
-// Шаг 2 сброса пароля: код из письма + новый пароль.
-//
-// Капча не нужна: билет доказывает, что шаг 1 с капчей уже пройден. Почта
-// берётся ИЗ БИЛЕТА (подделать его нельзя) — подставить чужой адрес после
-// получения кода не выйдет. Назначение билета тоже внутри: код от регистрации
-// здесь не примут.
-function bad(error: string, status = 400) {
-  return NextResponse.json({ error }, { status });
+function response(body: Record<string, unknown>, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" },
+  });
+}
+
+export async function GET(request: Request) {
+  if (!isDbConfigured() || !hasAdminCredentials()) {
+    return response({ error: "Восстановление пароля временно недоступно" }, 503);
+  }
+  const token = new URL(request.url).searchParams.get("token") ?? "";
+  const valid = await inspectPasswordToken(token).catch(() => null);
+  if (!valid) return response({ error: INVALID_RESET_LINK }, 400);
+  return response({ ok: true, purpose: valid.purpose });
 }
 
 export async function POST(request: Request) {
-  // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
   const csrf = csrfGuard(request);
   if (csrf) return csrf;
+  const ip = clientIp(request);
+  if (!allowAttempt(`reset-confirm:${ip ?? "?"}`, 10, 10 * 60 * 1000)) {
+    return response({ error: "Слишком много попыток — подождите несколько минут" }, 429);
+  }
 
-  let body: { ticket?: unknown; code?: unknown; password?: unknown };
+  let body: { token?: unknown; password?: unknown; passwordConfirm?: unknown };
   try {
     body = await request.json();
   } catch {
-    return bad("Некорректный запрос");
+    return response({ error: "Некорректный запрос" }, 400);
   }
-
-  const ip = clientIp(request);
-  // От перебора шестизначного кода: 10 попыток за 10 минут с IP.
-  if (!allowAttempt(`reset-confirm:${ip ?? "?"}`, 10, 10 * 60 * 1000)) {
-    return bad("Слишком много попыток — подождите несколько минут", 429);
-  }
-
-  const ticket = readTicket(String(body.ticket ?? ""), "reset");
-  if (!ticket) return bad("Сессия сброса не найдена — начните заново");
-  if (ticket.expired) return bad("Код устарел — запросите новый");
-  // Попытки ввода считаем и на сам ящик — здесь ставкой уже пароль от
-  // аккаунта, и смена IP защиту обнулять не должна.
-  if (
-    !allowForEmail(
-      "reset-confirm",
-      ticket.email,
-      CODE_ATTEMPTS_PER_EMAIL,
-      CODE_ATTEMPT_WINDOW_MS
-    )
-  ) {
-    return bad(
-      "Слишком много неверных кодов — запросите новый код через несколько минут",
-      429
-    );
-  }
-  if (!codeMatches(ticket, String(body.code ?? ""))) {
-    return bad("Неверный код, проверьте письмо");
-  }
-
   const password = String(body.password ?? "");
-  // Минимум как в схеме PocketBase (поле password, min 8).
-  if (password.length < 8) return bad("Пароль минимум 8 символов");
-
+  if (password.length < 8) return response({ error: "Пароль минимум 8 символов" }, 400);
+  if (password.length > 72) return response({ error: "Пароль не должен быть длиннее 72 символов" }, 400);
+  if (password !== String(body.passwordConfirm ?? "")) {
+    return response({ error: "Пароли не совпадают" }, 400);
+  }
   if (!isDbConfigured() || !hasAdminCredentials()) {
-    return bad("Восстановление пароля временно недоступно", 503);
+    return response({ error: "Восстановление пароля временно недоступно" }, 503);
   }
 
-  const res = await applyNewPassword(ticket.email, password);
-  if (!res.ok) return bad(res.error, res.status);
-
-  // Владельцу — уведомление о смене: если это был не он, он об этом узнает.
-  void sendPasswordChangedEmail(ticket.email).catch(() => {});
-
-  return NextResponse.json({ ok: true, email: ticket.email });
+  const result = await applyNewPassword(String(body.token ?? ""), password);
+  if (!result.ok) return response({ error: result.error }, result.status);
+  void sendPasswordChangedEmail(result.email).catch((error) => {
+    console.error("[password-reset] уведомление о смене пароля не отправлено:", error);
+  });
+  return response({ ok: true });
 }

@@ -2,7 +2,7 @@ import "server-only";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 
-// Отправка писем магазина (доступ к кабинету, коды сброса, статусы заказов).
+// Отправка писем магазина (доступ к кабинету, reset-ссылки, статусы заказов).
 // Настройки — в .env.production (см. SETUP-MAIL-RU.md):
 //   SMTP_HOST     — smtp.yandex.ru / smtp.mail.ru / свой
 //   SMTP_PORT     — 465 (SSL, по умолчанию) или 587 (STARTTLS)
@@ -10,7 +10,7 @@ import type { Transporter } from "nodemailer";
 //   SMTP_PASSWORD — пароль приложения (НЕ пароль от почты)
 //   MAIL_FROM     — «Томат Семена <info@tomatsemena.ru>» (по умолчанию SMTP_USER)
 // Пока переменные не заданы — письма просто не отправляются (isMailConfigured()
-// === false), заказы оформляются без писем, а гостевой кабинет не создаётся.
+// === false), заказы и гостевой кабинет сохраняются без отправки писем.
 
 export function isMailConfigured(): boolean {
   return Boolean(
@@ -50,6 +50,22 @@ function addressOf(from: string): string {
   return (from.match(/<([^>]+)>/)?.[1] ?? from).trim();
 }
 
+export function plainTextFromHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    // Ссылку на пароль нельзя потерять в plain-text версии письма.
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "$2 ($1)")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Отправить письмо. Никогда не бросает: ошибки уходят в лог (pm2 logs seeds,
 // строки [mail]) — почта не должна ломать оформление заказа.
 // opts.auth — отправить с ДРУГОГО ящика того же SMTP-хоста (свой логин/пароль);
@@ -72,8 +88,14 @@ export async function sendMail(
       ? `"Томат Семена" <${auth.user}>`
       : process.env.MAIL_FROM || `"Томат Семена" <${process.env.SMTP_USER}>`);
   const startedAt = Date.now();
-  try {
-    await transport(auth).sendMail({
+  const attemptsRaw = Number(process.env.MAIL_SEND_ATTEMPTS || 2);
+  const attempts = Number.isFinite(attemptsRaw)
+    ? Math.min(3, Math.max(1, Math.floor(attemptsRaw)))
+    : 2;
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await transport(auth).sendMail({
       from,
       to,
       // Обратный адрес конверта (Return-Path) — ЯЩИК, ИЗ КОТОРОГО реально
@@ -83,28 +105,33 @@ export async function sendMail(
       // его на несколько минут (серые списки). Заголовок «От кого» при этом
       // остаётся прежним — покупатель видит адрес магазина.
       envelope: { from: addressOf(auth.user || from), to },
-      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+      replyTo: opts.replyTo || process.env.MAIL_REPLY_TO || addressOf(auth.user || from),
       subject,
       html,
       // Текстовая версия письма: почтовые фильтры хуже относятся к письмам,
       // где есть только HTML.
-      text: html
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&nbsp;/g, " ")
-        .replace(/\s+/g, " ")
-        .trim(),
-    });
-    // Время сдачи письма на SMTP-сервер. Нужно, чтобы отличать «тормозим мы»
-    // от «тормозит получатель»: если здесь сотни миллисекунд, а письмо дошло
-    // до Mail.ru через десять минут — задержка на их стороне (серые списки,
-    // отсутствие SPF/DKIM), и лечится она DNS-записями, а не кодом.
-    console.log(`[mail] «${subject}» → ${to} за ${Date.now() - startedAt} мс`);
-    return true;
-  } catch (e) {
-    console.error(`[mail] не отправилось «${subject}» → ${to}: ${(e as Error).message}`);
-    return false;
+      text: plainTextFromHtml(html),
+      });
+      // Время сдачи письма на SMTP-сервер. Нужно, чтобы отличать «тормозим мы»
+      // от «тормозит получатель»: если здесь сотни миллисекунд, а письмо дошло
+      // позже — задержка на стороне принимающего сервиса/DNS.
+      console.log(
+        `[mail] «${subject}» → ${to} за ${Date.now() - startedAt} мс` +
+          (attempt > 1 ? ` (попытка ${attempt})` : "")
+      );
+      return true;
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `[mail] попытка ${attempt}/${attempts} не удалась «${subject}» → ${to}: ${(error as Error).message}`
+      );
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      }
+    }
   }
+  console.error(`[mail] письмо окончательно не отправлено «${subject}» → ${to}: ${(lastError as Error)?.message ?? "unknown error"}`);
+  return false;
 }
 
 // Фирменная обёртка письма: шапка, белая карточка, подвал с контактами.
