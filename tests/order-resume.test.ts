@@ -3,6 +3,7 @@ import { createOrderResumeToken, verifyOrderResumeToken } from "@/lib/order-resu
 import { emailOrderKey, hasEmailOrder, randomOrderNumber } from "@/lib/order-identity";
 import { encryptField } from "@/lib/crypto";
 import type PocketBase from "pocketbase";
+import crypto from "node:crypto";
 
 beforeEach(() => vi.stubEnv("DATA_ENCRYPTION_KEY", "ab".repeat(32)));
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
@@ -15,10 +16,23 @@ describe("ссылка продолжения заказа", () => {
     expect(verifyOrderResumeToken(token.replace(id, "b".repeat(15)))).toBeNull();
     expect(verifyOrderResumeToken("12345")).toBeNull();
   });
-  it("перестаёт действовать через 30 дней", () => {
+  it("действует до 24 часов и истекает ровно на границе", () => {
     vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-25T12:00:00Z"));
     const token = createOrderResumeToken("a".repeat(15));
-    vi.advanceTimersByTime(31 * 86400000);
+    vi.advanceTimersByTime(86400000 - 1);
+    expect(verifyOrderResumeToken(token)).toBe("a".repeat(15));
+    vi.advanceTimersByTime(1);
+    expect(verifyOrderResumeToken(token)).toBeNull();
+  });
+  it("ограничивает ранее отправленные ссылки 24 часами от выпуска", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-25T12:00:00Z"));
+    const id = "a".repeat(15);
+    const body = `${id}.${Math.floor(Date.now() / 1000) + 30 * 86400}`;
+    const token = `${body}.${crypto.createHmac("sha256", process.env.DATA_ENCRYPTION_KEY!).update(`order-resume:${body}`).digest("base64url")}`;
+    expect(verifyOrderResumeToken(token)).toBe(id);
+    vi.advanceTimersByTime(86400000);
     expect(verifyOrderResumeToken(token)).toBeNull();
   });
   it("номер всегда пятизначный без ведущих нулей", () => {

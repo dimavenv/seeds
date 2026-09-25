@@ -76,9 +76,9 @@ export async function mailOrderPlaced(
     `${orderTitle(o.number, totals.awaitingPayment ? "ожидает оплаты" : "принят")}
     <p style="margin:0 0 16px;">${hello(o.name)} ${
       totals.awaitingPayment
-        ? `Заказ сохранён, но ещё не оплачен. Регистрация не требуется.
+        ? `Заказ сохранён, но ещё не оплачен.
            <a href="${escapeHtml(totals.resumeUrl ?? "")}" style="display:inline-block;background:#2e7d32;color:#fff;border-radius:10px;padding:12px 20px;text-decoration:none;">Продолжить оформление</a>
-           После окончания резерва наличие товаров проверяется повторно. Ссылка действует 30 дней.`
+           Ссылка действует 24 часа.`
         : "Спасибо за заказ — мы получили его и скоро свяжемся с вами для подтверждения."
     }</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">

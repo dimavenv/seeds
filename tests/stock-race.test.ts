@@ -392,6 +392,9 @@ describe.skipIf(!BIN)("гонка остатков: живой PocketBase", () =
     const token = mail[2].match(/\/order\/continue\/([^"<]+)/)![1];
     expect(verifyOrderResumeToken(token)).toBe(order.id);
     expect(mail[2]).toContain("Продолжить оформление");
+    expect(mail[2]).toContain("Ссылка действует 24 часа.");
+    expect(mail[2]).not.toContain("Регистрация не требуется");
+    expect(mail[2]).not.toContain("После окончания резерва");
     await pb.collection("user_store").update(store.id, { cart: [{ id: product, qty: 2 }] });
     await markOrderPaid(pb, 300001);
     expect((await pb.collection("user_store").getOne(store.id)).cart).toEqual([{ id: product, qty: 2 }]);

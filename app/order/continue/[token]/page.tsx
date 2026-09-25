@@ -10,13 +10,13 @@ export default async function ContinueOrder({ params }: { params: { token: strin
   const id = verifyOrderResumeToken(params.token);
   const pb = id ? await pbAdmin() : null;
   const order = id && pb ? await pb.collection("orders").getOne(id).catch(() => null) : null;
-  if (!order) return <div className="container py-12">Ссылка недействительна или срок её действия истёк. Обратитесь в поддержку.</div>;
+  if (!order) return <div className="mx-auto w-full max-w-lg px-4 py-12 text-center">Ссылка недействительна или срок её действия истёк. Обратитесь в поддержку.</div>;
   const finished = order.payment_status === "paid" || order.payment_status === "refunded";
-  return <div className="container max-w-lg py-12">
+  return <div className="mx-auto w-full max-w-lg px-4 py-12">
     <div className="card p-6 text-center">
       <h1 className="mb-4 text-xl font-bold">Заказ №{order.number}</h1>
       {finished ? <p>Этот заказ уже оплачен.</p> : order.status === "cancelled" ? <p>Заказ отменён. Обратитесь в поддержку.</p> : <>
-        <p className="mb-6">Заказ сохранён и ожидает оплаты. Регистрация не требуется.</p>
+        <p className="mb-6">Заказ сохранён и ожидает оплаты.</p>
         <PayOrderButton resumeToken={params.token} label="Продолжить оформление" />
       </>}
     </div>
