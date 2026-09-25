@@ -85,6 +85,7 @@ export default function CheckoutPage() {
   // Что-то подставилось из личного кабинета — говорим об этом покупателю,
   // чтобы чужие на вид данные в форме не пугали.
   const [fromProfile, setFromProfile] = useState(false);
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
   // Покупатель уже начал заполнять форму сам — тогда подстановка из кабинета
   // (она приезжает запросом и может опоздать) в его текст не лезет.
   const formTouched = useRef(false);
@@ -145,7 +146,10 @@ export default function CheckoutPage() {
           authorized?: boolean;
           email?: string | null;
         };
-        if (cancelled || !p.authorized || formTouched.current) return;
+        if (cancelled || !p.authorized) return;
+        setAccountEmail(p.email ?? "");
+        setForm((current) => ({ ...current, email: p.email ?? "" }));
+        if (formTouched.current) return;
         // База — то, что уже лежит в форме: сохранённый профиль устройства или
         // пустые поля. Считаем её здесь, а не в updater'е setForm, чтобы
         // сравнение «что подставилось» осталось чистым.
@@ -156,7 +160,7 @@ export default function CheckoutPage() {
           first_name: base.first_name || (p.first_name ?? ""),
           middle_name: base.middle_name || (p.middle_name ?? ""),
           phone: base.phone || normalizePhone(p.phone ?? ""),
-          email: base.email || (p.email ?? ""),
+          email: p.email ?? "",
         };
         setForm(merged);
         setFromProfile(
@@ -297,7 +301,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           customer_name,
           phone: form.phone,
-          email: form.email,
+          email: accountEmail ?? form.email,
           address: addressStr,
           comment: form.comment,
           delivery_method: deliveryMethod,
@@ -354,17 +358,16 @@ export default function CheckoutPage() {
         secureClear(PROFILE_KEY);
       }
 
+      await clearCart();
+      clearPromo();
       // Онлайн-оплата подключена — уходим на платёжную страницу Robokassa.
-      // Корзину НЕ чистим: если оплата не пройдёт, товары останутся у
-      // покупателя (очистка — на странице заказа при возврате с ?paid=1).
+      // Заказ уже сохранён: корзина очищена, неоплаченный заказ продолжат по ссылке.
       if (data.payment?.url && data.payment?.fields) {
         submitPaymentForm(data.payment.url, data.payment.fields);
         return;
       }
 
       // Заказ без онлайн-оплаты оформлен окончательно — корзину можно чистить.
-      clearCart();
-      clearPromo(); // код уже потрачен на этом заказе
       const qs = new URLSearchParams({
         total: String(data.total),
         name: form.first_name || customer_name,
@@ -492,13 +495,13 @@ export default function CheckoutPage() {
                 <input
                   required
                   type="email"
-                  value={form.email}
+                  readOnly={accountEmail !== null}
+                  value={accountEmail ?? form.email}
                   onChange={update("email")}
                   className="input"
                 />
                 <span className="mt-1 block text-xs text-brand-500">
-                  После оплаты первого заказа на эту почту придут данные для входа в
-                  личный кабинет.
+                  {accountEmail !== null ? "Используется email вашего аккаунта. Изменить его при оформлении нельзя." : "После оплаты первого заказа на эту почту придут данные для входа в личный кабинет."}
                 </span>
               </label>
             </div>

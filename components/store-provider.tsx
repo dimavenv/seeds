@@ -44,7 +44,8 @@ type StoreContextValue = {
   addToCart: (product: Product, qty?: number) => void;
   setQty: (id: string, qty: number) => void;
   removeFromCart: (id: string) => void;
-  clearCart: () => void;
+  clearCart: () => Promise<void>;
+  removePurchasedFromCart: (items: { id: string; qty: number }[]) => void;
   wishlist: string[];
   isWished: (id: string) => boolean;
   toggleWish: (id: string) => void;
@@ -140,6 +141,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // из замыкания — иначе React сбатчил бы setState и выжил бы только последний
   // добавленный товар.
   const cartRef = useRef<CartItem[]>([]);
+  const cartRevisionRef = useRef(0);
   const wishRef = useRef<string[]>([]);
   // Синхронизацию с сервером запускаем один раз за загрузку страницы.
   const syncStartedRef = useRef(false);
@@ -253,8 +255,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     syncStartedRef.current = true;
     let active = true;
     const sync = async () => {
+      const revision = cartRevisionRef.current;
       const data = await loadUserStore().catch(() => null);
       if (!active) return;
+      // Даже уже подтверждённая запись корзины новее снимка, чтение которого
+      // началось до оформления заказа. Не возвращаем из него старые товары.
+      if (revision !== cartRevisionRef.current) {
+        desiredRef.current = { cart: cartRef.current, wishlist: wishRef.current };
+      }
       if (!data || !data.signedIn || !data.userId) {
         // Гость (или сервер недоступен): серверную корзину не трогаем, а метку
         // слияния снимаем — чтобы следующий вход снова слил локальное с серверным.
@@ -405,6 +413,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (e.newValue === null) return; // ключ удалили — не наш случай
       try {
         if (e.key === CART_KEY) {
+          cartRevisionRef.current++;
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) setCartSync(onlyStringIds(parsed));
         } else if (e.key === WISH_KEY) {
@@ -437,6 +446,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Надгробия удалённых товаров (переживают перезагрузку): если запись на
       // сервер не дойдёт, при следующей загрузке удалённое вычтется из
       // устаревшей серверной копии, а не воскреснет. См. lib/cart-sync.
+      cartRevisionRef.current++;
       writeRemovedPending(nextRemovedPending(readRemovedPending(), prev, next));
       setCartSync(next);
       persist(next, wishRef.current);
@@ -450,7 +460,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addToCart: (product, qty = 1) => dispatch({ type: "add", product, qty }),
       setQty: (id, qty) => dispatch({ type: "set-qty", id, qty }),
       removeFromCart: (id) => dispatch({ type: "remove", id }),
-      clearCart: () => dispatch({ type: "clear" }),
+      clearCart: async () => {
+        dispatch({ type: "clear" });
+        // Переход к банку может произойти до React-эффекта сохранения.
+        try { localStorage.setItem(CART_KEY, "[]"); } catch {}
+        await writeQueueRef.current;
+      },
+      removePurchasedFromCart: (items) =>
+        dispatch({ type: "remove-purchased", items }),
       wishlist,
       isWished: (id) => wishlist.includes(id),
       toggleWish: (id) => {

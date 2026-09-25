@@ -13,6 +13,7 @@ import {
   toOrderRecord,
 } from "@/lib/order-flow";
 import { decryptField } from "@/lib/crypto";
+import { verifyOrderResumeToken } from "@/lib/order-resume";
 import {
   buildRobokassaPayment,
   invoiceTtlMinutes,
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   const csrf = csrfGuard(request);
   if (csrf) return csrf;
 
-  let body: { orderId?: unknown; invoice?: unknown; captchaToken?: unknown };
+  let body: { orderId?: unknown; invoice?: unknown; captchaToken?: unknown; resumeToken?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -58,8 +59,10 @@ export async function POST(request: Request) {
   if (!allowAttempt(`pay:${ip ?? "?"}`, 10, 5 * 60 * 1000)) {
     return bad("Слишком много попыток оплаты — подождите пару минут", 429);
   }
+  const resumedOrderId = typeof body.resumeToken === "string" ? verifyOrderResumeToken(body.resumeToken) : null;
+  if (body.resumeToken && !resumedOrderId) return bad("Ссылка недействительна или срок её действия истёк", 403);
   if (
-    !(await verifyCaptcha(
+    !resumedOrderId && !(await verifyCaptcha(
       typeof body.captchaToken === "string" ? body.captchaToken : "",
       ip,
       { failClosed: true }
@@ -73,7 +76,9 @@ export async function POST(request: Request) {
 
   // ===== Чей это заказ =====
   let orderId: string | null = null;
-  if (typeof body.orderId === "string" && isValidRecordId(body.orderId)) {
+  if (resumedOrderId) {
+    orderId = resumedOrderId;
+  } else if (typeof body.orderId === "string" && isValidRecordId(body.orderId)) {
     const session = await getSession().catch(() => null);
     if (!session?.userId) return bad("Войдите, чтобы оплатить заказ", 401);
     const rec = await pb.collection("orders").getOne(body.orderId).catch(() => null);

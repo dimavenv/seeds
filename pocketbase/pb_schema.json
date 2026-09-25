@@ -737,6 +737,24 @@
         "type": "number"
       },
       {
+        "id": "text_order_first_email",
+        "name": "first_order_email_key",
+        "type": "text",
+        "hidden": true,
+        "required": false,
+        "min": 0,
+        "max": 64,
+        "pattern": "",
+        "autogeneratePattern": ""
+      },
+      {
+        "id": "bool_order_cart_cleared",
+        "name": "cart_cleared",
+        "type": "bool",
+        "hidden": false,
+        "required": false
+      },
+      {
         "name": "invoice_id",
         "type": "number",
         "onlyInt": true,
@@ -995,6 +1013,7 @@
     ],
     "indexes": [
       "CREATE UNIQUE INDEX idx_orders_number ON orders (number)",
+      "CREATE UNIQUE INDEX idx_orders_first_email ON orders (first_order_email_key) WHERE first_order_email_key != ''",
       "CREATE UNIQUE INDEX idx_orders_invoice_id ON orders (invoice_id) WHERE invoice_id > 0"
     ],
     "created": "2026-07-12 21:44:05.184Z",

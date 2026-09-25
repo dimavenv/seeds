@@ -19,6 +19,7 @@ import Spinner from "@/components/spinner";
 export default function PayOrderButton({
   orderId,
   invoice,
+  resumeToken,
   className = "btn-accent",
   label = "Оплатить",
 }: {
@@ -26,6 +27,7 @@ export default function PayOrderButton({
   orderId?: string;
   // … либо номер счёта — для гостя, вернувшегося с неудачной оплаты.
   invoice?: number;
+  resumeToken?: string;
   className?: string;
   label?: string;
 }) {
@@ -39,7 +41,7 @@ export default function PayOrderButton({
       const res = await fetch("/api/payment/retry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, invoice, captchaToken }),
+        body: JSON.stringify({ orderId, invoice, captchaToken, resumeToken }),
       });
       const data = (await res.json().catch(() => ({}))) as PaymentResponse;
       if (!res.ok || !data.payment?.url || !data.payment?.fields) {
@@ -59,7 +61,7 @@ export default function PayOrderButton({
   function startPayment() {
     setError(null);
     setLoading(true);
-    if (!captchaEnabled) {
+    if (resumeToken || !captchaEnabled) {
       void pay("");
     } else if (open) {
       captchaRef.current?.execute();

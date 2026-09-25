@@ -1,5 +1,9 @@
 import { isValidRecordId } from "@/lib/pb/shared";
 
+export function checkoutEmail(submitted: unknown, session: { userId: string | null; email: string | null }): string {
+  return String(session.userId ? session.email ?? "" : submitted ?? "").trim().toLowerCase();
+}
+
 // Нормализация состава заказа из запроса оформления. Чистая функция — легко
 // тестировать и переиспользовать. Правила:
 //  - id должен быть валидным id записи PocketBase;

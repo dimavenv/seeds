@@ -9,6 +9,9 @@ import { deliverAccountWelcome } from "@/lib/account-welcome";
 import type { PaymentStatus } from "@/lib/types";
 import { normalizeCart } from "@/lib/user-store";
 import { removePurchasedItems } from "@/lib/cart-store";
+import { emailOrderKey, FIRST_ORDER_ERROR, hasEmailOrder, randomOrderNumber } from "@/lib/order-identity";
+import { orderResumeUrl } from "@/lib/order-resume";
+import { promoCodesMatch } from "@/lib/promo";
 
 // Жизненный цикл заказа с онлайн-оплатой.
 //
@@ -67,14 +70,15 @@ export async function nextInvoiceId(pb: PocketBase): Promise<number> {
   return (Number(page?.items[0]?.invoice_id ?? 0) || 0) + 1;
 }
 
-// Следующий человекочитаемый номер заказа (продолжает нумерацию, перенесённую
-// из Supabase). При гонке двух заказов уникальный индекс отобьёт дубль —
-// пробуем ещё раз со следующим номером.
+// Случайный пятизначный номер. Уникальный индекс защищает и от гонки
+// после проверки свободного номера; в таком случае пробуем новый.
 async function nextOrderNumber(pb: PocketBase): Promise<number> {
-  const page = await pb
-    .collection("orders")
-    .getList(1, 1, { sort: "-number", fields: "number" });
-  return (Number(page.items[0]?.number ?? 0) || 0) + 1;
+  for (let i = 0; i < 100; i++) {
+    const number = randomOrderNumber();
+    const found = await pb.collection("orders").getList(1, 1, { filter: pb.filter("number = {:number}", { number }), fields: "id" });
+    if (!found.items.length) return number;
+  }
+  throw new Error("Не удалось подобрать свободный номер заказа");
 }
 
 export type CreatedOrder = { id: string; number: number };
@@ -89,11 +93,16 @@ export async function createOrderWithItems(
   const now = new Date().toISOString();
   let order: CreatedOrder | null = null;
   let lastError: unknown = null;
-  for (let attempt = 0; attempt < 3 && !order; attempt++) {
+  const email = decryptField(payload.email) ?? "";
+  const harvest = promoCodesMatch(payload.promo_code, "УРОЖАЙ");
+  let first = !(await hasEmailOrder(pb, email));
+  if (harvest && !first) throw new Error(FIRST_ORDER_ERROR);
+  for (let attempt = 0; attempt < 30 && !order; attempt++) {
     try {
-      const number = (await nextOrderNumber(pb)) + attempt;
+      const number = await nextOrderNumber(pb);
       const rec = await pb.collection("orders").create({
         number,
+        first_order_email_key: first ? emailOrderKey(email) : "",
         ...(extra.invoiceId ? { invoice_id: extra.invoiceId } : {}),
         customer_name: payload.customer_name,
         phone: payload.phone,
@@ -116,6 +125,11 @@ export async function createOrderWithItems(
       order = { id: rec.id, number: Number(rec.number) };
     } catch (e) {
       lastError = e;
+      if ((e as { status?: number }).status !== 400) throw e;
+      if (await hasEmailOrder(pb, email)) {
+        if (harvest) throw new Error(FIRST_ORDER_ERROR);
+        first = false;
+      }
     }
   }
   if (!order) throw lastError ?? new Error("order create failed");
@@ -160,6 +174,7 @@ export type OrderRecord = {
   discount: number;
   user: string;
   payStartedAt: string;
+  cartCleared?: boolean;
 };
 
 export function toOrderRecord(rec: Record<string, unknown>): OrderRecord {
@@ -182,6 +197,7 @@ export function toOrderRecord(rec: Record<string, unknown>): OrderRecord {
     discount: Number(rec.discount ?? 0),
     user: s(rec.user),
     payStartedAt: s(rec.pay_started_at),
+    cartCleared: rec.cart_cleared === true,
   };
 }
 
@@ -318,7 +334,7 @@ export async function markOrderPaid(
   // Корзина аккаунта хранится отдельно от заказа. После достоверного
   // server-to-server подтверждения вычитаем только оплаченные количества.
   // Сбой синхронизации корзины не откатывает уже подтверждённую оплату.
-  if (order.user) {
+  if (order.user && !order.cartCleared) {
     try {
       const store = await pb
         .collection("user_store")
@@ -507,6 +523,17 @@ export async function mailOrderAccepted(
       discount: payload.discount,
       promoCode: payload.discount > 0 ? payload.promo_code || null : null,
       awaitingPayment: opts.awaitingPayment,
+      resumeUrl: opts.awaitingPayment ? orderResumeUrl(order.id) : undefined,
     }
   );
+}
+
+export async function clearCheckoutCart(pb: PocketBase, orderId: string, userId: string | null): Promise<void> {
+  const batch = pb.createBatch();
+  if (userId) {
+    const stores = await pb.collection("user_store").getList(1, 1, { filter: pb.filter("user = {:userId}", { userId }) });
+    if (stores.items[0]) batch.collection("user_store").update(stores.items[0].id, { cart: [] });
+  }
+  batch.collection("orders").update(orderId, { cart_cleared: true });
+  await batch.send();
 }

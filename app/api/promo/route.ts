@@ -4,7 +4,7 @@ import { clientIp } from "@/lib/client-ip";
 import { getSession } from "@/lib/auth";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { isDbConfigured } from "@/lib/pb/shared";
-import { normalizePromoCode } from "@/lib/promo";
+import { normalizePromoCode, promoCodesMatch } from "@/lib/promo";
 import { checkPromo } from "@/lib/promo-server";
 import { allowAttempt } from "@/lib/email-code";
 
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const csrf = csrfGuard(request);
   if (csrf) return csrf;
 
-  let body: { code?: unknown };
+  let body: { code?: unknown; email?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -69,11 +69,11 @@ export async function POST(request: Request) {
       { status: 503 }
     );
   }
-  if (!session.userId) {
+  if (!session.userId && !promoCodesMatch(code, "УРОЖАЙ")) {
     return NextResponse.json({ error: NEED_AUTH, needAuth: true }, { status: 401 });
   }
 
-  if (!allowAttempt(`promo:user:${session.userId}`, 20, 5 * 60 * 1000)) {
+  if (session.userId && !allowAttempt(`promo:user:${session.userId}`, 20, 5 * 60 * 1000)) {
     return NextResponse.json(
       { error: "Слишком много попыток — подождите пару минут" },
       { status: 429 }
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
   let check;
   try {
     const pb = await pbAdmin();
-    check = await checkPromo(pb, { code, userId: session.userId });
+    check = await checkPromo(pb, { code, userId: session.userId, email: session.userId ? session.email ?? undefined : typeof body.email === "string" ? body.email : undefined });
   } catch {
     return NextResponse.json(
       { error: "База не отвечает — попробуйте ещё раз" },

@@ -4,7 +4,7 @@ import { clientIp } from "@/lib/client-ip";
 import { pbAdmin, hasAdminCredentials } from "@/lib/pb/server";
 import { getSession } from "@/lib/auth";
 import { isDbConfigured, mapProduct } from "@/lib/pb/shared";
-import { normalizeCheckoutItems, findStockIssues, stockShortageMessage } from "@/lib/checkout";
+import { normalizeCheckoutItems, findStockIssues, stockShortageMessage, checkoutEmail } from "@/lib/checkout";
 import { reserveStock, releaseStock } from "@/lib/stock";
 import { deliveryCostFor, normalizeDeliveryMethod, ozonRestriction } from "@/lib/delivery";
 import { encryptField } from "@/lib/crypto";
@@ -22,6 +22,7 @@ import {
   createOrderWithItems,
   mailOrderAccepted,
   nextInvoiceId,
+  clearCheckoutCart,
 } from "@/lib/order-flow";
 import { normalizePromoCode } from "@/lib/promo";
 import { consentError, recordConsent } from "@/lib/consent";
@@ -36,20 +37,7 @@ import {
 
 type IncomingItem = { id: string; qty: number };
 
-// Привязка заказа к аккаунту — «по возможности»: если проверка сессии долго
-// не отвечает, не блокируем оформление (заказ просто будет без user).
-async function bestEffortUserId(): Promise<string | null> {
-  try {
-    const result = await Promise.race([
-      getSession(),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-    ]);
-    return result?.userId ?? null;
-  } catch {
-    return null;
-  }
-}
-
+// Email вошедшего покупателя берётся из проверенной серверной сессии.
 export async function POST(request: Request) {
   // Запрос обязан прийти с нашей же страницы (см. lib/csrf.ts).
   const csrf = csrfGuard(request);
@@ -74,7 +62,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
   }
 
-  const { customer_name, phone, address, email, comment } = body;
+  const { customer_name, phone, address, comment } = body;
+  let session;
+  try { session = await getSession(); }
+  catch { return NextResponse.json({ error: "Не удалось проверить аккаунт" }, { status: 503 }); }
+  const email = checkoutEmail(body.email, session);
   const delivery_method = normalizeDeliveryMethod(body.delivery_method);
   // Целые количества, потолок на позицию и на число позиций, дубли слиты.
   const items = normalizeCheckoutItems(body.items);
@@ -158,11 +150,7 @@ export async function POST(request: Request) {
         { status: 503 }
       );
     }
-    return NextResponse.json({
-      id: Math.floor(Date.now() / 1000) % 1000000,
-      total: 0,
-      demo: true,
-    });
+    return NextResponse.json({ error: "Оформление временно недоступно. Корзина сохранена." }, { status: 503 });
   }
 
   const isTimeout = (e: unknown) => {
@@ -180,11 +168,8 @@ export async function POST(request: Request) {
       params[`id${i}`] = it.id;
       return `id = {:id${i}}`;
     });
-    const [productRecords, bestEffortUser] = await Promise.all([
-      pb.collection("products").getFullList({ filter: pb.filter(or.join(" || "), params) }),
-      bestEffortUserId(),
-    ]);
-    let userId = bestEffortUser;
+    const productRecords = await pb.collection("products").getFullList({ filter: pb.filter(or.join(" || "), params) });
+    const userId = session.userId;
 
     const priceList = productRecords.map(mapProduct);
 
@@ -216,27 +201,10 @@ export async function POST(request: Request) {
     // собой ни списанных остатков, ни «сгоревшего» промокода.
     let promo: PromoCheck | null = null;
     if (promoCode) {
-      // Привязка к аккаунту здесь обязана быть достоверной: bestEffortUserId
-      // отдаёт null и при медленной проверке сессии, а «не смогли проверить»
-      // не должно превращаться ни в «гость» (обидно), ни тем более в скидку
-      // без учёта использования. Поэтому — строгая проверка.
-      if (!userId) {
-        try {
-          userId = (await getSession()).userId;
-        } catch {
-          return NextResponse.json(
-            {
-              error: "Не удалось проверить аккаунт — попробуйте ещё раз",
-              promoError: true,
-            },
-            { status: 503 }
-          );
-        }
-      }
       // Условия кода (срок, порог, лимиты, «только первый заказ») проверяет та
       // же функция, что и корзина, — расходиться им нельзя. Сумма здесь уже
       // авторитетная: посчитана по ценам из базы.
-      promo = await checkPromo(pb, { code: promoCode, userId, subtotal });
+      promo = await checkPromo(pb, { code: promoCode, userId, subtotal, email });
       if (!promo.ok) {
         return NextResponse.json(
           {
@@ -405,7 +373,8 @@ export async function POST(request: Request) {
 
         // «Заказ принят, ожидает оплаты» — сразу: номер у покупателя на руках
         // ещё до банка, и в письме написано, где продолжить оплату.
-        void mailOrderAccepted(order, payload, { awaitingPayment: true }).catch(
+        await clearCheckoutCart(pb, order.id, userId);
+        await mailOrderAccepted(order, payload, { awaitingPayment: true }).catch(
           () => {}
         );
 
@@ -421,6 +390,9 @@ export async function POST(request: Request) {
         }
         await releaseStock(pb, reserveLines);
         if (promoUseId) await releasePromoUse(pb, promoUseId);
+        if (e instanceof Error && e.message.includes("УРОЖАЙ")) {
+          return NextResponse.json({ error: e.message, promoError: true }, { status: 409 });
+        }
         return NextResponse.json(
           {
             error:
@@ -502,6 +474,7 @@ export async function POST(request: Request) {
       items: lines.map((l) => ({ name: l.name, price: l.price, qty: l.qty })),
     }).catch(() => {});
 
+    await clearCheckoutCart(pb, order.id, userId);
     return NextResponse.json({ id: order.number, total });
   } catch (e) {
     return NextResponse.json(

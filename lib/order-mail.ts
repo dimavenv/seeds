@@ -46,6 +46,7 @@ export async function mailOrderPlaced(
     // при оформлении, поэтому честно пишем, что ждём оплату, и говорим, где
     // её продолжить.
     awaitingPayment?: boolean;
+    resumeUrl?: string;
   }
 ): Promise<void> {
   const rows = items
@@ -75,11 +76,9 @@ export async function mailOrderPlaced(
     `${orderTitle(o.number, totals.awaitingPayment ? "ожидает оплаты" : "принят")}
     <p style="margin:0 0 16px;">${hello(o.name)} ${
       totals.awaitingPayment
-        ? `Заказ оформлен и ждёт оплаты. Если оплата не прошла или вы закрыли
-           страницу банка — продолжить можно кнопкой «Оплатить» в
-           <a href="https://tomatsemena.ru/account" style="color:#2e7d32;font-weight:bold;">личном кабинете</a>.
-           Товар придержан за вами на 20 минут, дальше он вернётся в продажу,
-           но заказ останется — оплатить его можно и позже, если товар в наличии.`
+        ? `Заказ сохранён, но ещё не оплачен. Регистрация не требуется.
+           <a href="${escapeHtml(totals.resumeUrl ?? "")}" style="display:inline-block;background:#2e7d32;color:#fff;border-radius:10px;padding:12px 20px;text-decoration:none;">Продолжить оформление</a>
+           После окончания резерва наличие товаров проверяется повторно. Ссылка действует 30 дней.`
         : "Спасибо за заказ — мы получили его и скоро свяжемся с вами для подтверждения."
     }</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">

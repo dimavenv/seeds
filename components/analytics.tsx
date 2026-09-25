@@ -42,7 +42,7 @@ export default function Analytics() {
   }, []);
 
   // Ссылки доступа к аккаунту не должны попадать в аналитику/Вебвизор.
-  if (!allowed || pathname === "/password-reset") return null;
+  if (!allowed || pathname === "/password-reset" || pathname.startsWith("/order/continue/")) return null;
 
   return (
     <>

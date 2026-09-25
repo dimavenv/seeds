@@ -26,6 +26,7 @@ export default function MetrikaPurchase({
   orderId,
   matchId,
   failed,
+  confirmed = true,
 }: {
   orderId: string;
   // Запасной идентификатор для сверки: при онлайн-оплате состав заказа
@@ -33,8 +34,11 @@ export default function MetrikaPurchase({
   // Robokassa. На странице подтверждения он приходит параметром inv.
   matchId?: string | null;
   failed?: boolean;
+  // false — в URL подставили paid=1, но сервер не подтвердил этот платёж.
+  confirmed?: boolean;
 }) {
   useEffect(() => {
+    if (!confirmed) return;
     if (failed) {
       // При неудачной оплате заказа не существует — в цель уходит номер счёта.
       reachGoal(GOALS.paymentFailed, { order_id: matchId ?? orderId });
@@ -64,7 +68,7 @@ export default function MetrikaPurchase({
       order_price: purchase.revenue,
       currency: "RUB",
     });
-  }, [orderId, matchId, failed]);
+  }, [orderId, matchId, failed, confirmed]);
 
   return null;
 }

@@ -4,6 +4,10 @@ import ClearCartOnPaid from "@/components/clear-cart-on-paid";
 import MetrikaPurchase from "@/components/metrika-purchase";
 import PayOrderButton from "@/components/pay-order-button";
 import { servicePageMetadata } from "@/lib/seo";
+import { hasAdminCredentials, pbAdmin } from "@/lib/pb/server";
+import { isDbConfigured } from "@/lib/pb/shared";
+import { findOrderByInvoice, orderLines } from "@/lib/order-flow";
+import { isVerifiedPaidReturn } from "@/lib/payment-return";
 
 // canonical свой у каждого заказа: страница подтверждения существует по своему
 // адресу, и объявлять её копией главной (как было по умолчанию из layout)
@@ -18,7 +22,7 @@ export function generateMetadata({ params }: { params: { id: string } }) {
   );
 }
 
-export default function OrderConfirmationPage({
+export default async function OrderConfirmationPage({
   params,
   searchParams,
 }: {
@@ -35,11 +39,27 @@ export default function OrderConfirmationPage({
   };
 }) {
   const total = searchParams.total ? Number(searchParams.total) : null;
-  const paid = searchParams.paid === "1";
+  const paidRequested = searchParams.paid === "1";
   const failed = searchParams.failed === "1";
   const pending = searchParams.pending === "1";
   const numbered = /^\d+$/.test(params.id);
   const invoice = searchParams.inv && /^\d+$/.test(searchParams.inv) ? searchParams.inv : null;
+  const invoiceId = invoice ? Number(invoice) : null;
+  let paidOrder = null;
+  let paidItems: { id: string; qty: number }[] = [];
+  if (paidRequested && invoiceId && isDbConfigured() && hasAdminCredentials()) {
+    const pb = await pbAdmin().catch(() => null);
+    if (pb) {
+      paidOrder = await findOrderByInvoice(pb, invoiceId).catch(() => null);
+      if (isVerifiedPaidReturn(paidOrder, params.id, invoiceId)) {
+        paidItems = paidOrder!.cartCleared ? [] : (await orderLines(pb, paidOrder!.id)).map((item) => ({
+          id: item.product,
+          qty: item.qty,
+        }));
+      }
+    }
+  }
+  const paid = isVerifiedPaidReturn(paidOrder, params.id, invoiceId);
 
   // Оформление внешнего вида по результату оплаты.
   const icon = paid ? "✅" : failed ? "⚠️" : "✅";
@@ -56,7 +76,12 @@ export default function OrderConfirmationPage({
       {/* Цель «покупка» (или «оплата не прошла») в Яндекс.Метрике.
           При онлайн-оплате состав заказа складывался под номером счёта —
           сверять можно и по нему (matchId). */}
-      <MetrikaPurchase orderId={params.id} matchId={invoice} failed={failed} />
+      <MetrikaPurchase
+        orderId={params.id}
+        matchId={invoice}
+        failed={failed}
+        confirmed={!paidRequested || paid}
+      />
       <div className="card mx-auto max-w-lg p-8 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-3xl">
           {icon}
@@ -66,12 +91,12 @@ export default function OrderConfirmationPage({
         {paid && (
           <>
             {/* Оплата прошла — корзину можно очистить. */}
-            <ClearCartOnPaid />
+            {!paidOrder?.cartCleared && <ClearCartOnPaid items={paidItems} paymentId={invoice!} />}
             <p className="mt-3 text-brand-600">
               {searchParams.name ? `${searchParams.name}, спасибо! ` : ""}
               {pending || !numbered
                 ? "Оплата получена. Номер заказа придёт письмом в ближайшие минуты."
-                : "Оплата получена, заказ принят в работу."}{" "}
+                : "Оплата получена, заказ принят в работу. Корзина очищена."}{" "}
               Чек придёт на указанную почту, о смене статуса заказа сообщим
               письмом.
             </p>

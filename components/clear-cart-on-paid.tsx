@@ -1,16 +1,34 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useStore } from "@/components/store-provider";
 
-// Очистка корзины после успешной оплаты. Корзина не чистится перед уходом на
-// платёжную форму (чтобы при неудачной оплате товары остались у покупателя),
-// поэтому чистим при возвращении с ?paid=1.
-export default function ClearCartOnPaid() {
-  const { clearCart } = useStore();
+// Серверная страница монтирует компонент только после проверки счёта и статуса
+// заказа в БД. Вычитаем позиции заказа; при отмене/ошибке компонент не попадёт
+// в HTML и корзина останется нетронутой.
+export default function ClearCartOnPaid({
+  items,
+  paymentId,
+}: {
+  items: { id: string; qty: number }[];
+  paymentId: string;
+}) {
+  const { removePurchasedFromCart, clearPromo, ready } = useStore();
+  const applied = useRef(false);
   useEffect(() => {
-    clearCart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Дождаться загрузки localStorage: дочерний эффект может выполниться до
+    // эффекта провайдера, иначе очистится пустой начальный снимок.
+    if (!ready || applied.current) return;
+    const marker = `sc_cart_cleared_payment_${paymentId}`;
+    try {
+      if (localStorage.getItem(marker) === "1") return;
+    } catch {}
+    applied.current = true;
+    removePurchasedFromCart(items);
+    clearPromo();
+    try {
+      localStorage.setItem(marker, "1");
+    } catch {}
+  }, [ready, items, paymentId, removePurchasedFromCart, clearPromo]);
   return null;
 }

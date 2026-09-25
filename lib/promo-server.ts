@@ -1,4 +1,5 @@
 import "server-only";
+import { FIRST_ORDER_ERROR, hasEmailOrder } from "@/lib/order-identity";
 import type PocketBase from "pocketbase";
 import {
   normalizePromoCode,
@@ -230,6 +231,7 @@ export async function checkPromo(
   opts: {
     code: unknown;
     userId: string | null;
+    email?: string;
     // Сумма товаров. undefined — проверяем всё, кроме порога и размера скидки
     // (корзина спрашивает до того, как сумма стала окончательной).
     subtotal?: number;
@@ -246,7 +248,12 @@ export async function checkPromo(
     };
   }
 
-  if (record.authOnly && !opts.userId) {
+  const harvest = promoCodesMatch(record.code, "УРОЖАЙ");
+  if (harvest && opts.email && await hasEmailOrder(pb, opts.email)) {
+    return { ok: false, status: 409, error: FIRST_ORDER_ERROR };
+  }
+
+  if (record.authOnly && !opts.userId && !harvest) {
     return {
       ok: false,
       status: 401,

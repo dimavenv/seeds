@@ -4,10 +4,20 @@ import {
   MAX_QTY_PER_ITEM,
   findStockIssues,
   normalizeCheckoutItems,
+  checkoutEmail,
 } from "@/lib/checkout";
 
 const ID_A = "a".repeat(15);
 const ID_B = "b".repeat(15);
+
+describe("email заказа", () => {
+  it("подмена email в запросе вошедшего покупателя игнорируется", () => {
+    expect(checkoutEmail("other@example.com", { userId: ID_A, email: "Owner@Example.com" })).toBe("owner@example.com");
+  });
+  it("гость вводит собственную почту", () => {
+    expect(checkoutEmail(" Guest@Example.com ", { userId: null, email: null })).toBe("guest@example.com");
+  });
+});
 
 describe("normalizeCheckoutItems", () => {
   it("пропускает корректные позиции", () => {

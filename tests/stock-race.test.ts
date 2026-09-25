@@ -10,7 +10,9 @@ import os from "node:os";
 import path from "node:path";
 import PocketBase from "pocketbase";
 import { releaseStock, reserveStock } from "@/lib/stock";
-import { createOrderWithItems, markOrderPaid } from "@/lib/order-flow";
+import { createOrderWithItems, markOrderPaid, clearCheckoutCart, mailOrderAccepted, startPaymentAttempt } from "@/lib/order-flow";
+import * as orderIdentity from "@/lib/order-identity";
+import { verifyOrderResumeToken } from "@/lib/order-resume";
 import { applyNewPassword, createPasswordLink, inspectPasswordToken } from "@/lib/password-reset";
 import { encryptField } from "@/lib/crypto";
 import { sendMail } from "@/lib/email";
@@ -329,5 +331,69 @@ describe.skipIf(!BIN)("гонка остатков: живой PocketBase", () =
     expect(await applyNewPassword(tokenOf(second.url), "short", pb)).toMatchObject({ ok: false });
     expect(await inspectPasswordToken(tokenOf(second.url), pb)).not.toBeNull();
     expect(await applyNewPassword(tokenOf(second.url), "valid-password", pb)).toMatchObject({ ok: true });
+  });
+
+  it("УРОЖАЙ: только один первый заказ на email, включая конкурентных гостей", async () => {
+    vi.stubEnv("DATA_ENCRYPTION_KEY", "ab".repeat(32));
+    const email = `harvest-${Date.now()}@test.local`;
+    const payload = {
+      customer_name: "Покупатель", phone: encryptField("+79991112233")!, email: encryptField(email)!,
+      address: "Адрес", comment: "", delivery_method: "ozon", delivery_cost: 0,
+      promo_code: "УРОЖАЙ", discount: 10, total: 90, user: "",
+      items: [{ product: await createProduct(10), name: "Томат", price: 100, qty: 1 }],
+    };
+    const results = await Promise.allSettled([
+      createOrderWithItems(client(), payload, { invoiceId: 200001, paymentStatus: "pending" }),
+      createOrderWithItems(client(), { ...payload, email: encryptField(email.toUpperCase())! }, { invoiceId: 200002, paymentStatus: "pending" }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    await expect(createOrderWithItems(pb, payload, { invoiceId: 200003, paymentStatus: "pending" })).rejects.toThrow("первый заказ");
+    const orders = await pb.collection("orders").getFullList({ filter: 'promo_code = "УРОЖАЙ"' });
+    expect(orders).toHaveLength(1);
+    expect(orders[0].number).toBeGreaterThanOrEqual(10000);
+    await pb.collection("orders").update(orders[0].id, { payment_status: "failed" });
+    const resumed = await startPaymentAttempt(pb, orders[0].id);
+    expect(resumed.ok).toBe(true);
+    expect((await pb.collection("orders").getOne(orders[0].id)).discount).toBe(10);
+    expect((await pb.collection("users").getList(1, 1, { filter: pb.filter("email = {:email}", { email }) })).items).toHaveLength(0);
+  });
+
+  it("коллизия случайного номера обрабатывается без дубля", async () => {
+    const taken = (await pb.collection("orders").getList(1, 1)).items[0].number;
+    const spy = vi.spyOn(orderIdentity, "randomOrderNumber").mockReturnValueOnce(taken);
+    try {
+      const order = await createOrderWithItems(pb, {
+        customer_name: "Покупатель", phone: "+79991112233", email: "unique@test.local",
+        address: "Адрес", comment: "", delivery_method: "ozon", delivery_cost: 0,
+        promo_code: "", discount: 0, total: 100, user: "", items: [],
+      }, { paymentStatus: "pending" });
+      expect(order.number).not.toBe(taken);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally { spy.mockRestore(); }
+  });
+
+  it("корзина очищается до оплаты; новые товары после оплаты сохраняются", async () => {
+    const email = `cart-${Date.now()}@test.local`;
+    const user = await pb.collection("users").create({ email, password: "test-password", passwordConfirm: "test-password" });
+    const product = await createProduct(10);
+    const payload = {
+      customer_name: "Покупатель", phone: "+79991112233", email,
+      address: "Адрес", comment: "", delivery_method: "ozon", delivery_cost: 0,
+      promo_code: "", discount: 0, total: 100, user: user.id,
+      items: [{ product, name: "Томат", price: 100, qty: 1 }],
+    };
+    const store = await pb.collection("user_store").create({ user: user.id, cart: [{ id: product, qty: 1 }], wishlist: [product] });
+    const order = await createOrderWithItems(pb, payload, { invoiceId: 300001, paymentStatus: "pending" });
+    await clearCheckoutCart(pb, order.id, user.id);
+    expect((await pb.collection("user_store").getOne(store.id)).cart).toEqual([]);
+    expect((await pb.collection("user_store").getOne(store.id)).wishlist).toEqual([product]);
+    await mailOrderAccepted(order, payload, { awaitingPayment: true });
+    const mail = vi.mocked(sendMail).mock.calls.filter(([to, subject]) => to === email && subject.includes("Ожидает оплаты")).at(-1)!;
+    const token = mail[2].match(/\/order\/continue\/([^"<]+)/)![1];
+    expect(verifyOrderResumeToken(token)).toBe(order.id);
+    expect(mail[2]).toContain("Продолжить оформление");
+    await pb.collection("user_store").update(store.id, { cart: [{ id: product, qty: 2 }] });
+    await markOrderPaid(pb, 300001);
+    expect((await pb.collection("user_store").getOne(store.id)).cart).toEqual([{ id: product, qty: 2 }]);
   });
 });
