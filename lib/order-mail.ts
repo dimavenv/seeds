@@ -73,14 +73,24 @@ export async function mailOrderPlaced(
   await send(
     o,
     totals.awaitingPayment ? "Ожидает оплаты" : "Принят",
-    `${orderTitle(o.number, totals.awaitingPayment ? "ожидает оплаты" : "принят")}
-    <p style="margin:0 0 16px;">${hello(o.name)} ${
+    `${
       totals.awaitingPayment
-        ? `Заказ сохранён, но ещё не оплачен.
-           <a href="${escapeHtml(totals.resumeUrl ?? "")}" style="display:inline-block;background:#2e7d32;color:#fff;border-radius:10px;padding:12px 20px;text-decoration:none;">Продолжить оформление</a>
-           Ссылка действует 24 часа.`
-        : "Спасибо за заказ — мы получили его и скоро свяжемся с вами для подтверждения."
-    }</p>
+        ? `<div style="text-align:center;">
+             ${orderTitle(o.number, "ожидает оплаты")}
+             <p style="margin:20px 0 8px;font-size:17px;">${hello(o.name)}</p>
+             <p style="margin:0 0 24px;">Заказ сохранён, но ещё не оплачен.</p>
+             <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:0 auto;border-collapse:collapse;">
+               <tr>
+                 <td align="center" bgcolor="#2e7d32" style="border-radius:10px;">
+                   <a href="${escapeHtml(totals.resumeUrl ?? "")}" style="display:inline-block;border:1px solid #2e7d32;background:#2e7d32;color:#ffffff;border-radius:10px;padding:14px 24px;font-size:15px;font-weight:bold;line-height:1.4;text-decoration:none;">Продолжить оформление</a>
+                 </td>
+               </tr>
+             </table>
+             <p style="margin:12px 0 28px;color:#5c6b5c;font-size:13px;">Ссылка действует 24 часа.</p>
+           </div>`
+        : `${orderTitle(o.number, "принят")}
+           <p style="margin:0 0 16px;">${hello(o.name)} Спасибо за заказ — мы получили его и скоро свяжемся с вами для подтверждения.</p>`
+    }
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;color:#26332a;">
       ${rows}
       ${discountRow}
