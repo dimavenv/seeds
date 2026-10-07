@@ -28,5 +28,6 @@ export function setCookieConsent(): void {
   } catch {
     // некуда сохранить — согласие действует до конца текущей страницы
   }
+  document.cookie = `tracking_consent=yes; Path=/; Max-Age=31536000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
   window.dispatchEvent(new Event(COOKIE_CONSENT_EVENT));
 }

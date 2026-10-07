@@ -2438,7 +2438,10 @@
         "required": true,
         "system": false,
         "type": "select",
-        "values": ["reset", "setup"]
+        "values": [
+          "reset",
+          "setup"
+        ]
       },
       {
         "hidden": false,
@@ -2467,5 +2470,123 @@
       "CREATE INDEX `idx_password_reset_token_user` ON `password_reset_tokens` (`user`)"
     ],
     "system": false
+  },
+  {
+    "id": "tracklinks00001",
+    "name": "tracking_links",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.role = \"admin\"",
+    "viewRule": "@request.auth.role = \"admin\"",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "max": 100
+      },
+      {
+        "name": "platform",
+        "type": "text",
+        "required": true,
+        "max": 60
+      },
+      {
+        "name": "target",
+        "type": "text",
+        "required": true,
+        "max": 1500
+      },
+      {
+        "name": "active",
+        "type": "bool"
+      },
+      {
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      }
+    ],
+    "indexes": []
+  },
+  {
+    "id": "trackvisits0001",
+    "name": "tracking_visits",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.role = \"admin\"",
+    "viewRule": "@request.auth.role = \"admin\"",
+    "createRule": null,
+    "updateRule": null,
+    "deleteRule": null,
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "help": "",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "name": "link",
+        "type": "relation",
+        "collectionId": "tracklinks00001",
+        "required": true,
+        "maxSelect": 1,
+        "cascadeDelete": false
+      },
+      {
+        "name": "visitor",
+        "type": "text",
+        "max": 36
+      },
+      {
+        "name": "channel",
+        "type": "select",
+        "required": true,
+        "maxSelect": 1,
+        "values": [
+          "link",
+          "qr"
+        ]
+      },
+      {
+        "name": "created",
+        "type": "autodate",
+        "onCreate": true,
+        "onUpdate": false
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX idx_tracking_visits_created ON tracking_visits (created)",
+      "CREATE INDEX idx_tracking_visits_link_created ON tracking_visits (link, created)"
+    ]
   }
 ]

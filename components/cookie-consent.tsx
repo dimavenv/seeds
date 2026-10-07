@@ -36,7 +36,7 @@ export default function CookieConsent() {
       <div className="card pointer-events-auto mx-auto flex max-w-3xl animate-fade-up flex-col items-start gap-3 p-4 shadow-xl sm:flex-row sm:items-center">
         <p className="text-sm leading-relaxed text-brand-700">
           Мы используем cookies, чтобы работали вход в аккаунт и корзина, а
-          после вашего согласия — сервис Яндекс Метрика, который помогает нам
+          после вашего согласия — статистика рекламных ссылок и сервис Яндекс Метрика, которые помогают нам
           понимать, как пользуются сайтом. Нажимая «Хорошо», вы соглашаетесь с
           этим и с{" "}
           <Link

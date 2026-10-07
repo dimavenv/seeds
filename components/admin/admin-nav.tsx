@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 const LINKS: { href: string; label: string; exact?: boolean }[] = [
   { href: "/admin", label: "Дашборд", exact: true },
   { href: "/admin/analytics", label: "Аналитика" },
+  { href: "/admin/links", label: "Ссылки и QR" },
   { href: "/admin/products", label: "Товары" },
   { href: "/admin/orders", label: "Заказы" },
   { href: "/admin/promos", label: "Промокоды" },
