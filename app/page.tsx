@@ -1,6 +1,5 @@
 import Link from "next/link";
 import ProductGrid from "@/components/product-grid";
-import SeasonalSaleBanner from "@/components/seasonal-sale-banner";
 import HeroBanner from "@/components/hero-banner";
 import { getBanners } from "@/lib/banners";
 import { getProducts } from "@/lib/data";
@@ -22,7 +21,7 @@ export default async function HomePage() {
     <div className="container-page py-6">
       {/* Баннеры: список файлов public/banners/ собирается на сервере при
           рендере страницы (ISR, revalidate 60) — без клиентского пробинга. */}
-      <SeasonalSaleBanner />
+      <HeroBanner banners={banners} />
 
       {/* Хиты */}
       {featured.length > 0 && (
@@ -48,10 +47,6 @@ export default async function HomePage() {
           </div>
           <ProductGrid products={fresh} />
         </section>
-      )}
-
-      {banners.length > 0 && (
-        <div className="mt-12"><HeroBanner banners={banners} /></div>
       )}
 
       {/* Преимущества */}

@@ -3,13 +3,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
-import { LeafIcon } from "@/components/icons";
+import SeasonalSaleBanner from "@/components/seasonal-sale-banner";
 import type { Banner } from "@/lib/banners";
 
 // Карусель баннеров главной. Список картинок приходит с сервера
 // (lib/banners.ts читает public/banners при рендере страницы) — браузер больше
 // не пробует по одному ~12 кандидатов на каждый визит. Если файлов нет —
-// показывается запасной зелёный баннер с текстом.
+// остаётся первый слайд сезонной распродажи.
 //
 // ===== Размер и пропорции =====
 //
@@ -34,7 +34,8 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
   // фокус стоит на одной из кнопок (клавиатурная навигация).
   const [paused, setPaused] = useState(false);
 
-  const count = banners.length;
+  const slides = [{ src: "/images/seasonal-sale.webp", width: 1536, height: 1024 }, ...banners];
+  const count = slides.length;
   const go = useCallback(
     (delta: number) => setIndex((i) => (i + delta + count) % count),
     [count]
@@ -60,8 +61,6 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
     }
   }
 
-  if (count === 0) return <FallbackHero />;
-
   const current = index % count;
 
   return (
@@ -79,7 +78,11 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
       onKeyDown={onKeyDown}
     >
       <div className="hero-banner-frame relative w-full">
-        {banners.map(({ src, width, height }, i) => (
+        {slides.map(({ src, width, height }, i) => i === 0 ? (
+          <div key={src} aria-hidden={i !== current} className={`absolute inset-0 transition-opacity duration-700 ${i === current ? "opacity-100" : "pointer-events-none opacity-0"}`}>
+            <SeasonalSaleBanner active={i === current} />
+          </div>
+        ) : (
           <Link
             key={src}
             href="/catalog"
@@ -89,7 +92,7 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
             // уходил бы на невидимые ссылки.
             tabIndex={i === current ? undefined : -1}
             className={`absolute inset-0 transition-opacity duration-700 ${
-              i === current ? "opacity-100" : "opacity-0"
+              i === current ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
           >
             {/* Первый баннер грузим приоритетно: это самый крупный элемент
@@ -121,13 +124,13 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
       </div>
 
       {count > 1 && (
-        <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 sm:bottom-3">
+        <div className="absolute bottom-2.5 left-1/2 z-20 -translate-x-1/2 sm:bottom-3">
           {/* Точки: показывают, сколько всего баннеров и где мы сейчас, и
               переключают слайд. Стрелок по краям нет намеренно — они лезли
               под палец поверх самой картинки; листать можно точками, а с
               клавиатуры — стрелками (см. onKeyDown выше). */}
-          <div className="flex gap-2">
-            {banners.map(({ src }, i) => (
+          <div className="flex gap-2 rounded-full bg-black/25 px-3 py-2 backdrop-blur-sm">
+            {slides.map(({ src }, i) => (
               <button
                 key={src}
                 type="button"
@@ -144,29 +147,6 @@ export default function HeroBanner({ banners }: { banners: Banner[] }) {
           </div>
         </div>
       )}
-    </section>
-  );
-}
-
-function FallbackHero() {
-  return (
-    <section className="hero-banner mx-auto w-full overflow-hidden rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 p-6 text-white sm:rounded-3xl sm:p-10">
-      <div className="max-w-2xl">
-        <span className="badge bg-white/15 text-white">
-          <LeafIcon className="mr-1 h-4 w-4" /> Сезон посадки открыт
-        </span>
-        <h2 className="mt-3 text-2xl font-extrabold leading-tight sm:text-4xl">
-          Семена для богатого урожая
-        </h2>
-        <p className="mt-3 text-base text-brand-50/90 sm:text-lg">
-          Проверенные сорта с доставкой почтой по всей России.
-        </p>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <Link href="/catalog" className="btn-accent">
-            Перейти в каталог
-          </Link>
-        </div>
-      </div>
     </section>
   );
 }

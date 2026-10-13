@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
+import { createTrackingEvent } from "@/lib/tracking-event";
 import { pbAdmin } from "@/lib/pb/server";
 import { siteUrl } from "@/lib/seo";
 import { safeTarget, shouldCount } from "@/lib/tracking-links";
@@ -24,41 +24,18 @@ async function resolve(request: NextRequest, id: string, count: boolean) {
         headers: responseHeaders,
       });
     const destination = new URL(safeTarget(link.target, siteUrl()), siteUrl());
-    const response = NextResponse.redirect(destination, {
-      status: 302,
-      headers: responseHeaders,
-    });
     if (count && shouldCount(request.headers)) {
-      // Без согласия считаем только анонимный переход, без IP и идентификатора браузера.
-      const consent = request.cookies.get("tracking_consent")?.value === "yes";
-      const previous = request.cookies.get("tracking_visitor")?.value || "";
-      const visitor = consent
-        ? /^[a-f0-9-]{36}$/.test(previous)
-          ? previous
-          : randomUUID()
-        : "";
+      // Запрос редиректа может быть предпросмотром, а не посещением страницы.
+      // Событие подтверждает браузер после открытия; id защищает от повторов.
       try {
-        await pb
-          .collection("tracking_visits")
-          .create({
-            link: id,
-            visitor,
-            channel:
-              request.nextUrl.searchParams.get("via") === "qr" ? "qr" : "link",
-          });
-        if (consent)
-          response.cookies.set("tracking_visitor", visitor, {
-            httpOnly: true,
-            sameSite: "lax",
-            secure: destination.protocol === "https:",
-            path: "/",
-            maxAge: 60 * 60 * 24 * 90,
-          });
+        destination.searchParams.set("__visit", createTrackingEvent(
+          id, request.nextUrl.searchParams.get("via") === "qr" ? "qr" : "link",
+        ));
       } catch {
-        console.error("[tracking] Не удалось записать переход");
+        console.error("[tracking] Не удалось подготовить событие перехода");
       }
     }
-    return response;
+    return NextResponse.redirect(destination, { status: 302, headers: responseHeaders });
   } catch (e) {
     const status = (e as { status?: number }).status === 404 ? 404 : 503;
     return new NextResponse(

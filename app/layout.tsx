@@ -7,6 +7,7 @@ import Footer from "@/components/footer";
 import VacationBanner from "@/components/vacation-banner";
 import CookieConsent from "@/components/cookie-consent";
 import Analytics from "@/components/analytics";
+import TrackingArrival from "@/components/tracking-arrival";
 import NavigationProgress from "@/components/navigation-progress";
 import JsonLd from "@/components/json-ld";
 import { getCategories, getVacationUntil } from "@/lib/data";
@@ -154,6 +155,7 @@ export default async function RootLayout({
             статической генерации вообще все страницы сайта. */}
         <Suspense fallback={null}>
           <NavigationProgress />
+          <TrackingArrival />
         </Suspense>
         <StoreProvider>
           {/* Для клавиатуры/скринридеров: перепрыгнуть шапку сразу к содержимому. */}

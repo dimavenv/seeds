@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/pb/server", () => ({ pbAdmin: mocks.admin }));
 vi.mock("@/lib/auth", () => ({ getSession: mocks.session }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+import { verifyTrackingEvent } from "@/lib/tracking-event";
 import { GET, HEAD } from "@/app/r/[id]/route";
 import {
   createTrackingLink,
@@ -35,6 +36,7 @@ const links: TrackingLink[] = [
 ];
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.PB_ADMIN_PASSWORD = "test-only-tracking-key";
   process.env.NEXT_PUBLIC_SITE_URL = "https://example.com";
   mocks.getOne.mockResolvedValue(links[0]);
   mocks.create.mockResolvedValue({ id });
@@ -110,28 +112,25 @@ describe("адреса и статистика ссылок", () => {
 describe("публичный переход", () => {
   const request = (headers?: Record<string, string>) =>
     new NextRequest(`https://example.com/r/${id}?via=qr`, { headers });
-  it("пишет анонимный QR переход и отправляет на страницу без кеширования", async () => {
+  it("редирект выдаёт одноразовую отметку, но сам не увеличивает счётчик", async () => {
     const res = await GET(request(), { params: { id } });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("https://example.com/catalog");
+    const destination = new URL(res.headers.get("location")!);
+    expect(destination.pathname).toBe("/catalog");
+    expect(verifyTrackingEvent(destination.searchParams.get("__visit")!)).toMatchObject({ link: id, channel: "qr" });
     expect(res.headers.get("cache-control")).toContain("no-store");
     expect(res.cookies.get("tracking_visitor")).toBeUndefined();
-    expect(mocks.create).toHaveBeenCalledWith({
-      link: id,
-      visitor: "",
-      channel: "qr",
-    });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
-  it("повторно использует идентификатор только с согласием", async () => {
-    const visitor = "8a7735ce-604f-4056-a3f8-15d6a41122ea";
-    const res = await GET(
-      request({ cookie: `tracking_consent=yes; tracking_visitor=${visitor}` }),
-      { params: { id } },
-    );
-    expect(mocks.create).toHaveBeenCalledWith(
-      expect.objectContaining({ visitor }),
-    );
-    expect(res.cookies.get("tracking_visitor")?.value).toBe(visitor);
+  it("повторные запросы редиректа без открытия страницы не считаются", async () => {
+    await Promise.all([GET(request(), { params: { id } }), GET(request(), { params: { id } })]);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it.each([
+    { "sec-purpose": "prefetch" }, { rsc: "1" }, { "sec-fetch-dest": "image" },
+  ])("не выдаёт событие для служебных запросов %o", async (headers) => {
+    const res = await GET(request(headers), { params: { id } });
+    expect(res.headers.get("location")).toBe("https://example.com/catalog");
   });
   it("HEAD и боты не увеличивают статистику", async () => {
     await HEAD(request(), { params: { id } });
@@ -144,12 +143,6 @@ describe("публичный переход", () => {
     mocks.getOne.mockResolvedValue({ ...links[0], active: false });
     expect((await GET(request(), { params: { id } })).status).toBe(410);
     expect(mocks.create).not.toHaveBeenCalled();
-  });
-  it("ошибка записи аналитики не мешает переходу", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    mocks.create.mockRejectedValueOnce(new Error("offline"));
-    expect((await GET(request(), { params: { id } })).status).toBe(302);
-    log.mockRestore();
   });
   it("различает неизвестную ссылку и недоступность БД", async () => {
     mocks.getOne.mockRejectedValueOnce({ status: 404 });

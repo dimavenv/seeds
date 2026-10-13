@@ -58,7 +58,10 @@ export function shouldCount(headers: Headers): boolean {
     !/prefetch|prerender/i.test(
       `${headers.get("purpose") || ""} ${headers.get("sec-purpose") || ""}`,
     ) &&
-    !headers.has("next-router-prefetch")
+    !headers.has("next-router-prefetch") &&
+    !headers.has("x-moz") &&
+    !headers.has("rsc") &&
+    !["empty", "image", "script", "style"].includes(headers.get("sec-fetch-dest") || "")
   );
 }
 export function dayKey(value: string | Date): string {
