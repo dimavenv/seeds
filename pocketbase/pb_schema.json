@@ -562,6 +562,19 @@
         "type": "number"
       },
       {
+        "help": "",
+        "hidden": false,
+        "id": "numberdiscount1",
+        "max": 90,
+        "min": 0,
+        "name": "discount_percent",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
         "cascadeDelete": false,
         "collectionId": "pbc_3292755704",
         "help": "",
@@ -1524,6 +1537,15 @@
         "presentable": false,
         "system": false,
         "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "boolsale202610",
+        "name": "seasonal_sale_202610_applied",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
       }
     ],
     "indexes": [],

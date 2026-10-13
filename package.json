@@ -19,7 +19,8 @@
     "db:strip-prefix": "node scripts/pb-strip-slug-prefix.mjs",
     "audit:check": "node scripts/audit-check.mjs",
     "scan:secrets": "node scripts/scan-secrets.mjs",
-    "img:og": "node scripts/make-og-image.mjs"
+    "img:og": "node scripts/make-og-image.mjs",
+    "db:seasonal-sale": "node scripts/pb-seasonal-sale.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

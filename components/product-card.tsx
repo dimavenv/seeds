@@ -6,7 +6,8 @@ import { variantsFor } from "@/lib/image-variants";
 import { useStore } from "@/components/store-provider";
 import { HeartIcon } from "@/components/icons";
 import AddToCartButton from "@/components/add-to-cart-button";
-import { formatPrice, seedsLabel } from "@/lib/format";
+import ProductPrice from "@/components/product-price";
+import { seedsLabel } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
 export default function ProductCard({ product }: { product: Product }) {
@@ -73,10 +74,8 @@ export default function ProductCard({ product }: { product: Product }) {
             🌱 {seedsLabel(product.seeds_per_pack)} в пакетике
           </span>
         ) : null}
-        <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-          <span className="text-lg font-extrabold text-brand-700">
-            {formatPrice(product.price)}
-          </span>
+        <div className="mt-auto flex flex-wrap items-end justify-between gap-2 pt-3">
+          <ProductPrice price={product.price} discountPercent={product.discount_percent} />
           {product.stock > 0 ? (
             <AddToCartButton
               onAdd={() => addToCart(product)}

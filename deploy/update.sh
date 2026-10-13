@@ -18,6 +18,9 @@ npm run build
 echo "==> Обновляю схему PocketBase..."
 node scripts/pb-import-schema.mjs
 
+# Однократная акция; повторный деплой не сбрасывает ручные скидки.
+node scripts/pb-seasonal-sale.mjs
+
 # standalone-сборка не включает статику и public — докопируем
 cp -r .next/static .next/standalone/.next/
 cp -r public .next/standalone/

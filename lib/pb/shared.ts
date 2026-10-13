@@ -80,6 +80,7 @@ export function mapProduct(r: R): Product {
     name: s(r.name),
     description: s(r.description) || null,
     price: n(r.price),
+    discount_percent: n(r.discount_percent),
     category_id: s(r.category) || null,
     image_url: s(r.image_url) || images[0] || null,
     images,

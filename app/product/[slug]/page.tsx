@@ -12,6 +12,7 @@ import {
   getProductBySlug,
   getProducts,
 } from "@/lib/data";
+import ProductPrice from "@/components/product-price";
 import { formatPrice, seedsLabel } from "@/lib/format";
 import { descriptionParagraphs, truncateForMeta } from "@/lib/product-text";
 import {
@@ -275,9 +276,9 @@ export default async function ProductPage({
           {product.category?.name && (
             <p className="mt-1 text-sm text-brand-500">{product.category.name}</p>
           )}
-          <p className="mt-4 text-4xl font-extrabold text-brand-700">
-            {formatPrice(product.price)}
-          </p>
+          <div className="mt-4">
+            <ProductPrice price={product.price} discountPercent={product.discount_percent} large />
+          </div>
           {product.seeds_per_pack ? (
             <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700">
               🌱 В пакетике {seedsLabel(product.seeds_per_pack)}

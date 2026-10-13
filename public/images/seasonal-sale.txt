@@ -1,0 +1,7 @@
+Seasonal sale banner artwork
+Generated with the built-in image_gen tool; optimized to WebP with sharp.
+Asset: public/images/seasonal-sale.webp
+Text and responsive composition: components/seasonal-sale-banner.tsx
+
+Prompt:
+Use case: ads-marketing. Create a refined editorial still-life photograph for the right half of a Russian heirloom seed shop seasonal sale banner, landscape 3:2. A small artfully loose arrangement of real irregular heirloom tomatoes: one large ribbed oxheart crimson tomato, one cut tomato showing beautiful natural seed chambers, two small golden tomatoes, a folded unprinted kraft paper seed packet and a tiny scattering of dry tomato seeds, on warm pale oatmeal linen and matte cream plaster tabletop. Natural window light from upper left, gentle shadows, restrained warm film grain, tactile skin imperfections, subtle analog food magazine photography. Mostly ivory/cream background, vegetables clustered at center-right and bottom, top-left mostly empty cream space. Close still-life composition with room around objects, plausible scale and botany. Quiet premium independent garden shop art direction. No words, no logos, no lettering, no labels, no sale badges, no gradient, no neon, no glossy CGI, no fantasy oversized vegetation, no floating objects, no excessive foliage or props. This is the photographic panel of a responsive web banner; headline is rendered separately in HTML.

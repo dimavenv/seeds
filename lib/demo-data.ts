@@ -56,6 +56,7 @@ export const demoProducts: Product[] = raw.map((r, i) => {
     name: r[1],
     description: r[2],
     price: r[3],
+    discount_percent: 20,
     category_id: cat.id,
     image_url: `https://picsum.photos/seed/${r[0]}/600/600`,
     stock: r[5],

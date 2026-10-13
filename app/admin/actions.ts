@@ -61,6 +61,7 @@ export async function saveProduct(
   const id = isValidRecordId(rawId) ? rawId : null;
   const name = String(formData.get("name") ?? "").trim();
   const price = Number(String(formData.get("price") ?? "").replace(",", "."));
+  const discountPercent = Number(String(formData.get("discount_percent") ?? "0").trim());
   const rawCategory = String(formData.get("category_id") ?? "");
   const categoryId = isValidRecordId(rawCategory) ? rawCategory : "";
   const description = String(formData.get("description") ?? "").trim();
@@ -99,6 +100,9 @@ export async function saveProduct(
   if (!Number.isFinite(price) || price < 0) {
     return { error: "Укажите корректную цену (число не меньше 0)" };
   }
+  if (!Number.isInteger(discountPercent) || discountPercent < 0 || discountPercent > 90) {
+    return { error: "Скидка должна быть целым числом от 0 до 90%" };
+  }
   if (!Number.isFinite(stock) || stock < 0) {
     return { error: "Некорректный остаток" };
   }
@@ -111,6 +115,7 @@ export async function saveProduct(
     name,
     slug,
     price,
+    discount_percent: discountPercent,
     category: categoryId,
     description,
     image_url: imageUrl,
@@ -148,6 +153,7 @@ export async function saveProduct(
       {
         name: "название",
         price: "цена",
+        discount_percent: "скидка, %",
         stock: "остаток",
         slug: "адрес",
         is_new: "новинка",
@@ -158,6 +164,7 @@ export async function saveProduct(
 
   // Набор URL товаров изменился — сбрасываем кэш карты сайта (tag "products").
   revalidateTag("products");
+  revalidatePath("/product/[slug]", "page");
   revalidatePath("/admin/products");
   revalidatePath("/catalog");
   revalidatePath("/");

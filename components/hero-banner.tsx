@@ -155,9 +155,9 @@ function FallbackHero() {
         <span className="badge bg-white/15 text-white">
           <LeafIcon className="mr-1 h-4 w-4" /> Сезон посадки открыт
         </span>
-        <h1 className="mt-3 text-2xl font-extrabold leading-tight sm:text-4xl">
+        <h2 className="mt-3 text-2xl font-extrabold leading-tight sm:text-4xl">
           Семена для богатого урожая
-        </h1>
+        </h2>
         <p className="mt-3 text-base text-brand-50/90 sm:text-lg">
           Проверенные сорта с доставкой почтой по всей России.
         </p>

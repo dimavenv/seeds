@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import ProductPrice from "@/components/product-price";
 import { saveProduct } from "@/app/admin/actions";
 import type { ImageVariantMap } from "@/lib/image-variants";
 import type { Category, Product } from "@/lib/types";
@@ -15,6 +16,9 @@ export default function ProductForm({
   categories: Category[];
 }) {
   const router = useRouter();
+  const [price, setPrice] = useState(String(product?.price ?? ""));
+  const [discount, setDiscount] = useState(String(product?.discount_percent || ""));
+  const previewPrice = Number(price.replace(",", "."));
   // Несколько фото: первое в списке — главное (показывается в каталоге).
   const initialImages =
     product?.images && product.images.length > 0
@@ -166,7 +170,8 @@ export default function ProductForm({
               inputMode="decimal"
               pattern="[0-9]+([.,][0-9]{1,2})?"
               required
-              defaultValue={product?.price}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
               className="input"
             />
           </label>
@@ -192,6 +197,26 @@ export default function ProductForm({
               className="input"
             />
           </label>
+        </div>
+
+        <div className="grid gap-5 rounded-2xl border border-brand-100 bg-brand-50/60 p-5 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-brand-700">Скидка на витрине, %</span>
+            <input name="discount_percent" type="number" min={0} max={90} step={1}
+              value={discount} onChange={(e) => setDiscount(e.target.value)}
+              placeholder="Например, 20" className="input" aria-describedby="discount-hint" />
+            <span id="discount-hint" className="mt-2 block text-xs leading-relaxed text-brand-500">
+              Цена продажи остаётся той, что указана выше. Прежнюю цену рассчитаем
+              по скидке и округлим до красивого числа. 0 или пустое поле — без скидки.
+            </span>
+          </label>
+          <div className="rounded-xl bg-white p-4 shadow-sm" aria-live="polite" aria-atomic="true">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-brand-400">Так увидит покупатель</p>
+            {price && Number.isFinite(previewPrice) && previewPrice >= 0 ? (
+              <ProductPrice price={previewPrice} discountPercent={Number(discount)} large />
+            ) : <p className="text-sm text-brand-400">Укажите цену товара</p>}
+            <p className="mt-2 text-xs leading-relaxed text-brand-500">Процент на значке учитывает округление прежней цены.</p>
+          </div>
         </div>
 
         <div className="grid gap-5 md:grid-cols-2">

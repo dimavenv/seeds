@@ -24,6 +24,7 @@ export type Product = {
   name: string;
   description: string | null;
   price: number;
+  discount_percent?: number;
   category_id: string | null;
   image_url: string | null;
   images?: string[] | null;
